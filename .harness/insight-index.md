@@ -9,4 +9,4 @@
 -->
 - 2026-05-16 · Windows os.Rename 不能覆盖已存在文件，需先 Remove 再 Rename；但 Remove 成功后 Rename 失败会丢失原文件，正确模式是先试 Rename 失败再 Remove+Rename · evidence: zero-config-quickstart
 - 2026-05-16 · 向导页面必须是顶层路由（非 AppLayout 子路由），否则侧边栏导航干扰向导流程 · evidence: zero-config-quickstart
-- 2026-05-16 · MSYS2 bash 中 `declare -a arr` + `set -u` 不把空数组标记为 set，`${#arr[@]}` 报 unbound variable；需用 `arr=()` 初始化 · evidence: T-001/T-002 archive-task.sh
+- 2026-05-16 · openapi.yaml 字段名应以 Go 常量为权威（直接读 .go），不以设计文档草稿为准；status 枚举值在设计阶段写错（done/error vs success/failed），Gate Review 捕获 · evidence: docs-and-api-schema
