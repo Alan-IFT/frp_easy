@@ -83,6 +83,35 @@ else
     fi
 fi
 
+# --- G. Go checks (require go.mod) ---
+if [[ ! -f go.mod ]]; then
+    step "G.1" "go vet" "SKIP"
+    step "G.2" "go test ./..." "SKIP"
+    step "G.3" "go build ./cmd/frp-easy" "SKIP"
+else
+    # G.1
+    if go vet ./... 2>/tmp/go_vet_out; then
+        step "G.1" "go vet" "PASS"
+    else
+        step "G.1" "go vet" "FAIL" "$(cat /tmp/go_vet_out)"
+    fi
+
+    # G.2
+    if go test ./... 2>/tmp/go_test_out; then
+        step "G.2" "go test ./..." "PASS"
+    else
+        step "G.2" "go test ./..." "FAIL" "$(cat /tmp/go_test_out)"
+    fi
+
+    # G.3
+    if CGO_ENABLED=0 go build -o /tmp/frp-easy-verify ./cmd/frp-easy 2>/tmp/go_build_out; then
+        step "G.3" "go build ./cmd/frp-easy" "PASS"
+        rm -f /tmp/frp-easy-verify
+    else
+        step "G.3" "go build ./cmd/frp-easy" "FAIL" "$(cat /tmp/go_build_out)"
+    fi
+fi
+
 # --- B. Build / test (require package.json) ---
 if [[ ! -f package.json ]]; then
     step "B.1" "Install / typecheck" "SKIP"

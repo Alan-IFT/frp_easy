@@ -78,6 +78,31 @@ Step "A.3" "TODO / FIXME budget (warn only)" {
     if ($count -gt 20) { return $false }
 }
 
+# --- G. Go checks (require go.mod) ---
+Step "G.1" "go vet" {
+    if (-not (Test-Path "go.mod")) { return "SKIP" }
+    $env:PATH = "C:\Program Files\Go\bin;$env:PATH"
+    $out = & go vet ./... 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "go vet failed:`n$out" }
+}
+
+Step "G.2" "go test ./..." {
+    if (-not (Test-Path "go.mod")) { return "SKIP" }
+    $env:PATH = "C:\Program Files\Go\bin;$env:PATH"
+    $out = & go test ./... 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "go test failed:`n$out" }
+}
+
+Step "G.3" "go build ./cmd/frp-easy" {
+    if (-not (Test-Path "go.mod")) { return "SKIP" }
+    $env:PATH = "C:\Program Files\Go\bin;$env:PATH"
+    $env:CGO_ENABLED = "0"
+    $out = & go build ./cmd/frp-easy 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "go build failed:`n$out" }
+    Remove-Item "frp-easy.exe" -ErrorAction SilentlyContinue
+    Remove-Item "frp-easy" -ErrorAction SilentlyContinue
+}
+
 # --- B. Build / test (require package.json) ---
 Step "B.1" "Install / typecheck" {
     if (-not (Test-Path "package.json")) { return "SKIP" }

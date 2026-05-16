@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS proxies;
+DROP TABLE IF EXISTS kv;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS admin;
+DELETE FROM schema_migrations WHERE version = 1;
