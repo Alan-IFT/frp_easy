@@ -15,6 +15,16 @@ out/
 bin/
 *.exe~
 
+# Test coverage artifacts
+coverage/
+web/coverage/
+
+# TypeScript transpile artifacts (web/src/ contains .ts source only)
+# tsc without --noEmit writes .js/.d.ts next to .ts; these are never committed
+web/src/**/*.js
+web/src/**/*.d.ts.map
+web/vite.config.js
+
 # Node
 node_modules/
 npm-debug.log*
