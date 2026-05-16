@@ -1,12 +1,12 @@
 # Code Review — T-001 · web-ui-mvp
 
-> レビュアー：code-reviewer · 日付：2026-05-16 · 対象コミット：8f0324c
+> レビュアー：code-reviewer · 日付：2026-05-16 · 対象コミット：99f7d44（C1-C3 修正済み）
 
 ## 総合評価
 
-**NEEDS REVISION**
+**APPROVED FOR QA**
 
-セキュリティ層（argon2id、CSRF、SessionAuth、ReadyGate、ログ脱敏）、DB/マイグレーション層、logtail、binloc は品質が高く設計と一致。しかし **DB→TOML→frpc パイプライン**（core 機能）と**モード永続化**の 2 点が欠落しており MVP として機能しない。
+初回レビュー（8f0324c）で 3 CRITICAL を検出。修正コミット 99f7d44 で全件解消を確認。セキュリティ層、DB/マイグレーション、プロセス管理、DB→TOML パイプライン、モード永続化すべて設計と一致。残警告 (W1-W4) は MVP リリースを阻止しない。
 
 ---
 
@@ -18,11 +18,11 @@
 | AC-2 setup + 凭据非明文 | `handlers_setup.go:47`（argon2id）| ✅ |
 | AC-3 既 setup 後/setup → 302/404 | API: 409 PASS; HTTPルートは200 SPA返却（curl検証不成立） | ⚠ MINOR |
 | AC-4 5回失敗→429+Retry-After | `ratelimit.go:61`、`handlers_auth.go:48` | ✅ |
-| AC-5 tcp rule 5秒内生効 | **RenderFrpc が本番コードから未呼び出し；frpc.toml 未更新** | ❌ CRITICAL |
-| AC-6 削除後 5秒内非持有 | 同 AC-5 | ❌ CRITICAL |
+| AC-5 tcp rule 5秒内生効 | `config_helper.go:renderAndApplyFrpc`（99f7d44）| ✅ |
+| AC-6 削除後 5秒内非持有 | 同 AC-5 | ✅ |
 | AC-7 frps running + PID | `manager.go:147`、`handlers_proc.go:56` | ✅ |
 | AC-8 stop後 stopped+PID消去 | `manager.go:282-295` | ✅ |
-| AC-9 モード跨重启保留 | `autoRestoreProcs` 存在；**mode kv 未更新 + mode スイッチ UI なし** | ❌ CRITICAL |
+| AC-9 モード跨重启保留 | `persistMode` + `applyModeToProc` + `Dashboard.vue` NSwitch（99f7d44）| ✅ |
 | AC-10 422+フィールド名 | `validate.go`、`handlers_proxies.go:177` | ✅ |
 | AC-11 ログ500行 + 2s増分 | `tail.go:24`、`LogViewer.vue:68` | ✅ |
 | AC-12 損壊→改名+setup | `store.go`（probeIntegrity）| ✅ |
