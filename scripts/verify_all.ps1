@@ -82,14 +82,18 @@ Step "A.3" "TODO / FIXME budget (warn only)" {
 Step "G.1" "go vet" {
     if (-not (Test-Path "go.mod")) { return "SKIP" }
     $env:PATH = "C:\Program Files\Go\bin;$env:PATH"
-    $out = & go vet ./... 2>&1
+    $pkgs = & go list ./... 2>&1 | Where-Object { $_ -notmatch "node_modules" }
+    if (-not $pkgs) { return "SKIP" }
+    $out = & go vet $pkgs 2>&1
     if ($LASTEXITCODE -ne 0) { throw "go vet failed:`n$out" }
 }
 
 Step "G.2" "go test ./..." {
     if (-not (Test-Path "go.mod")) { return "SKIP" }
     $env:PATH = "C:\Program Files\Go\bin;$env:PATH"
-    $out = & go test ./... 2>&1
+    $pkgs = & go list ./... 2>&1 | Where-Object { $_ -notmatch "node_modules" }
+    if (-not $pkgs) { return "SKIP" }
+    $out = & go test $pkgs 2>&1
     if ($LASTEXITCODE -ne 0) { throw "go test failed:`n$out" }
 }
 

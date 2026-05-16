@@ -30,7 +30,49 @@ frp_easy/
 │   ├── logtail/    ← TailLines + ReadFrom 增量读取子进程日志文件
 │   ├── procmgr/    ← frpc/frps 子进程生命周期（supervisor goroutine；跨平台 kill）
 │   └── storage/    ← SQLite 句柄 + 迁移引擎 + DAO（admin / sessions / kv / proxies）
-└── web/            ← 前端 Vue 3 + Vite（dev-frontend 分区；尚未创建）
+└── web/            ← 前端 Vue 3 + Vite（dev-frontend 分区）
+    ├── index.html
+    ├── package.json / vite.config.ts / tsconfig.json / vitest.config.ts / .eslintrc.cjs
+    └── src/
+        ├── main.ts         ← app 入口；Pinia・Router 組み立て・CSRF トークンゲッター登録
+        ├── App.vue         ← ルートコンポーネント（router-view のみ）
+        ├── router.ts       ← Vue Router 4 (history mode)；ナビゲーションガード
+        ├── types.ts        ← バックエンド API 契約と一致する型定義（Proxy / ProcessInfo 等）
+        ├── api/            ← axios クライアント + エンドポイント別ラッパー
+        │   ├── client.ts   ← axios インスタンス；CSRF インターセプター；401 リダイレクト
+        │   ├── auth.ts     ← /api/v1/auth/* / /api/v1/setup
+        │   ├── system.ts   ← /api/v1/system/ready
+        │   ├── proxies.ts  ← /api/v1/proxies CRUD
+        │   ├── server.ts   ← /api/v1/server (FrpsConfig)
+        │   ├── frpclient.ts← /api/v1/client (FrpcServerConn)
+        │   ├── proc.ts     ← /api/v1/proc/{kind}/start|stop|restart, /proc/status
+        │   ├── logs.ts     ← /api/v1/logs/{kind} tail / incremental
+        │   └── mode.ts     ← /api/v1/mode
+        ├── stores/         ← Pinia ストア
+        │   ├── auth.ts     ← user / csrfToken；login / logout / checkMe / fetchCsrf
+        │   ├── proc.ts     ← frpc/frps ProcessInfo；2s ポーリング
+        │   ├── proxies.ts  ← Proxy[] CRUD
+        │   ├── app.ts      ← initialized / binMissing / version
+        │   └── __tests__/  ← Vitest ストアテスト
+        ├── composables/    ← 再利用ロジック
+        │   ├── statusUtils.ts  ← getTagType / getStateLabel (ProcessState → Naive UI 色)
+        │   └── useProxyForm.ts ← ProxyForm フォームロジック (isTcpUdp / isHttpHttps 等)
+        ├── components/
+        │   ├── AppLayout.vue    ← サイドナビ + ヘッダ + コンテンツ共通レイアウト
+        │   ├── StatusBadge.vue  ← ProcessState → 色付き NTag
+        │   ├── ProxyForm.vue    ← Proxy 新規/編集フォーム（type 連動フィールド切り替え）
+        │   ├── ConfirmDialog.vue← 破壊的操作の二次確認モーダル
+        │   ├── LogViewer.vue    ← ログ表示（TailLines 初期表示 + 2s 増分ポーリング）
+        │   └── __tests__/      ← Vitest コンポーネントテスト
+        └── pages/
+            ├── Setup.vue     ← 初回セットアップ（username + password）
+            ├── Login.vue     ← ログイン（429 カウントダウン対応）
+            ├── Dashboard.vue ← frpc/frps 状態バッジ + 起動/停止/再起動ボタン
+            ├── Proxies.vue   ← Proxy 一覧 + 新規/編集/削除（ConfirmDialog 経由）
+            ├── Server.vue    ← frps 設定フォーム（bindPort / authToken / dashboard）
+            ├── Client.vue    ← frpc 接続設定フォーム（serverAddr / serverPort / authToken）
+            ├── Logs.vue      ← ログビューア（LogViewer コンポーネント利用）
+            └── Settings.vue  ← パスワード変更フォーム
 ```
 
 ## 功能在哪里

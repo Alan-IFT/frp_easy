@@ -90,14 +90,19 @@ if [[ ! -f go.mod ]]; then
     step "G.3" "go build ./cmd/frp-easy" "SKIP"
 else
     # G.1
-    if go vet ./... 2>/tmp/go_vet_out; then
+    PKGS=$(go list ./... 2>/dev/null | grep -v node_modules | tr '\n' ' ')
+    if [[ -z "$PKGS" ]]; then
+        step "G.1" "go vet" "SKIP"
+    elif go vet $PKGS 2>/tmp/go_vet_out; then
         step "G.1" "go vet" "PASS"
     else
         step "G.1" "go vet" "FAIL" "$(cat /tmp/go_vet_out)"
     fi
 
     # G.2
-    if go test ./... 2>/tmp/go_test_out; then
+    if [[ -z "$PKGS" ]]; then
+        step "G.2" "go test ./..." "SKIP"
+    elif go test $PKGS 2>/tmp/go_test_out; then
         step "G.2" "go test ./..." "PASS"
     else
         step "G.2" "go test ./..." "FAIL" "$(cat /tmp/go_test_out)"
