@@ -182,9 +182,11 @@ else
 fi
 
 # --- D. Schema (require source code) ---
-if [[ ! -d src && ! -d apps && ! -d packages ]]; then
+# 前置条件改为检测 go.mod：本项目为 Go 项目，无 src/apps/packages 目录，
+# 原条件导致 D.1 永久 SKIP（TD-3）；以 go.mod 存在作为"已有源码"判据。
+if [[ ! -f go.mod ]]; then
     step "D.1" "OpenAPI / tRPC schema present" "SKIP"
-elif [[ -f openapi.yaml || -f openapi.json || -d src/server/trpc ]]; then
+elif [[ -f openapi.yaml || -f openapi.json ]]; then
     step "D.1" "OpenAPI / tRPC schema present" "PASS"
 else
     step "D.1" "OpenAPI / tRPC schema present" "WARN" "no API schema found"

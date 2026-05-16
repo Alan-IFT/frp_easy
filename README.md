@@ -207,6 +207,11 @@ frp_easy/
 
 ## 技术债与优化建议
 
-项目当前存在若干已知技术债（TD-1 ～ TD-8）和优化建议（OPT-1 ～ OPT-9），涵盖向导路由守卫漏洞、verify_all 前端检查路径、版本注入标准化等议题。
+| 批次 | 状态 | 内容 |
+|---|---|---|
+| TD-1 ～ TD-7 | ✅ T-004 已清偿 | 向导路由守卫、verify_all 前端门禁、slog 双写、版本注入、ParseIPFromJSON 统一、/health 端点、TOML 预检 |
+| TD-8 | 保留（正确设计） | SQLite 单连接——这是 SQLite 的推荐用法，非债务 |
+| OPT-1 ～ OPT-8 | ✅ T-004 已实现 | 见上方 TD 清单 |
+| OPT-9 | ✅ T-005 已实现 | OpenAPI 3.0.3 schema（`openapi.yaml`，28 条路由） |
 
-完整清单（含影响级别和优先级）请查阅：[docs/project-status.html](docs/project-status.html)
+完整清单（含影响级别）请查阅：[docs/project-status.html](docs/project-status.html)

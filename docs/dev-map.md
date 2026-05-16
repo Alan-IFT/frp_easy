@@ -12,6 +12,7 @@
 frp_easy/
 ├── (项目根目录)
 ├── README.md       ← 用户入口文档（安装、配置、更新、开发，T-003 新增）
+├── openapi.yaml    ← REST API OpenAPI 3.0.3 规范（28 条路由，T-005 新增）
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
 ├── docs/           ← SPEC、feature 文档、本导航、任务看板
 │   └── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增）

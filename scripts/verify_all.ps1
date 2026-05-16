@@ -164,9 +164,10 @@ if (-not $Quick) {
 
 # --- D. Schema / contract (require source code) ---
 Step "D.1" "OpenAPI / tRPC schema present" {
-    # SKIP if no source code yet (empty project just initialized)
-    if (-not ((Test-Path "src") -or (Test-Path "apps") -or (Test-Path "packages"))) { return "SKIP" }
-    $found = (Test-Path "openapi.yaml") -or (Test-Path "openapi.json") -or (Test-Path "src/server/trpc")
+    # 前置条件改为检测 go.mod：本项目为 Go 项目，无 src/apps/packages 目录，
+    # 原条件导致 D.1 永久 SKIP（TD-3）；以 go.mod 存在作为"已有源码"判据。
+    if (-not (Test-Path "go.mod")) { return "SKIP" }
+    $found = (Test-Path "openapi.yaml") -or (Test-Path "openapi.json")
     if (-not $found) { return $false } # WARN, not FAIL
 }
 

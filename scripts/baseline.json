@@ -2,10 +2,10 @@
   "version": 2,
   "created": "2026-05-16",
   "updated": "2026-05-16",
-  "test_count": 162,
-  "passing_count": 162,
-  "go_tests": 117,
+  "test_count": 164,
+  "passing_count": 164,
+  "go_tests": 119,
   "frontend_tests": 45,
   "warnings_baseline": 0,
-  "notes": "T-002 zero-config-quickstart QA phase. Go: 117 tests (added 16 new: 8 downloader, 5 T-002 httpapi endpoint tests + 3 wizard coverage; T-001 baseline was 101). Frontend Vitest: 45 tests (unchanged from T-001). Baseline raised by QA Tester stage."
+  "notes": "T-005 docs-and-api-schema QA phase. Corrected baseline from T-004 (T-004 QA confirmed go tests rose from 117 to 119 but omitted baseline.json update). Go: 119 tests (+2 from T-004 health endpoint + ParseIPFromJSON unification). Frontend Vitest: 45 tests (unchanged). T-005 adds no new tests (documentation + openapi.yaml only). Baseline raised by QA Tester stage."
 }

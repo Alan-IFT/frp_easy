@@ -6,7 +6,10 @@
 
 ## 进行中
 
-（暂无）
+| ID | Slug | 阶段 | 描述 | 文档目录 |
+|---|---|---|---|---|
+| T-005 | docs-and-api-schema | req | 文档更新 + OpenAPI schema + verify_all D.1 修复 | `docs/features/docs-and-api-schema/` |
+| T-006 | e2e-smoke-tests | pending | Playwright E2E 烟雾测试 | `docs/features/e2e-smoke-tests/` |
 
 ## 已完成
 

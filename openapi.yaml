@@ -1,0 +1,1264 @@
+openapi: "3.0.3"
+info:
+  title: frp_easy REST API
+  version: "0.1.0"
+  description: |
+    frp_easy Web UI 的 REST API。
+    认证方式：Cookie（frp_easy_sid）。
+    写操作（POST/PUT/DELETE，在受保护分组中）额外需要 X-CSRF-Token 请求头，
+    该令牌由 GET /api/v1/auth/csrf 获取。
+
+servers:
+  - url: http://127.0.0.1:8080
+    description: 默认本地服务器
+
+security:
+  - cookieAuth: []
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: frp_easy_sid
+      description: 登录后由服务端写入的 session cookie
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: 由 GET /api/v1/auth/csrf 获取，写操作必须携带
+
+  schemas:
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: 错误码，见 internal/httpapi/errors.go
+          example: VALIDATION_FAILED
+        message:
+          type: string
+          description: 人类可读的错误描述
+        field:
+          type: string
+          description: 出错的字段名（可选）
+
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: "0.1.0"
+
+    SystemReady:
+      type: object
+      required: [initialized, binMissing, version]
+      properties:
+        initialized:
+          type: boolean
+          description: 管理员账号是否已设置
+        binMissing:
+          type: array
+          items:
+            type: string
+          description: 缺失的 frp 二进制列表（空表示全部就绪）
+        version:
+          type: string
+          example: "0.1.0"
+
+    SetupRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    MeResponse:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+
+    CSRFResponse:
+      type: object
+      required: [csrfToken]
+      properties:
+        csrfToken:
+          type: string
+
+    ChangePasswordRequest:
+      type: object
+      required: [oldPassword, newPassword]
+      properties:
+        oldPassword:
+          type: string
+        newPassword:
+          type: string
+
+    ModeState:
+      type: object
+      required: [frpc, frps]
+      properties:
+        frpc:
+          type: boolean
+          description: frpc 进程是否应处于运行状态
+        frps:
+          type: boolean
+          description: frps 进程是否应处于运行状态
+
+    ProxyInput:
+      type: object
+      required: [name, type, localPort]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          description: "tcp | udp | http | https"
+        localIP:
+          type: string
+          description: 本地监听 IP，默认 127.0.0.1
+        localPort:
+          type: integer
+        remotePort:
+          type: integer
+          description: tcp/udp 必填；http/https 禁填
+        customDomains:
+          type: array
+          items:
+            type: string
+          description: http/https 必填（≥1 项）；tcp/udp 禁填
+        enabled:
+          type: boolean
+          description: 默认 true
+        version:
+          type: integer
+          format: int64
+          description: PUT 时必填（乐观锁）
+
+    ProxyResponse:
+      type: object
+      required: [id, name, type, localIP, localPort, enabled, version, updatedAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        type:
+          type: string
+        localIP:
+          type: string
+        localPort:
+          type: integer
+        remotePort:
+          type: integer
+          description: tcp/udp 类型才有此字段
+        customDomains:
+          type: array
+          items:
+            type: string
+          description: http/https 类型才有此字段
+        enabled:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-05-16T10:00:00Z"
+
+    FrpsConfig:
+      type: object
+      required: [bindPort]
+      properties:
+        bindPort:
+          type: integer
+          description: frps 监听端口，默认 7000
+        authMethod:
+          type: string
+          description: "token | oidc | 空字符串"
+        authToken:
+          type: string
+          description: GET 时脱敏为 ***（除非 ?reveal=1）
+        dashboardEnabled:
+          type: boolean
+        dashboardAddr:
+          type: string
+        dashboardPort:
+          type: integer
+        dashboardUser:
+          type: string
+        dashboardPass:
+          type: string
+
+    FrpcServerConn:
+      type: object
+      required: [serverAddr, serverPort]
+      properties:
+        serverAddr:
+          type: string
+          description: frps 服务器地址
+        serverPort:
+          type: integer
+          description: frps 服务器端口
+        authMethod:
+          type: string
+        authToken:
+          type: string
+          description: GET 时脱敏为 ***（除非 ?reveal=1）
+
+    ProcessInfo:
+      type: object
+      required: [kind, state, pid, changedAt]
+      properties:
+        kind:
+          type: string
+          description: "frpc | frps"
+        state:
+          type: string
+          enum: [stopped, starting, running, stopping, error]
+        pid:
+          type: integer
+          description: 进程 PID，未运行时为 0
+        lastErr:
+          type: string
+          description: 最后一次错误信息（可选）
+        changedAt:
+          type: string
+          format: date-time
+
+    ProcStatusResponse:
+      type: object
+      required: [frpc, frps]
+      properties:
+        frpc:
+          $ref: '#/components/schemas/ProcessInfo'
+        frps:
+          $ref: '#/components/schemas/ProcessInfo'
+
+    LogsTailResponse:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          items:
+            type: string
+          description: 尾部 N 行日志（默认 500，最多 5000）
+
+    LogsIncrementalResponse:
+      type: object
+      required: [data, nextOffset]
+      properties:
+        data:
+          type: string
+          description: 自上次 offset 起的新增日志文本
+        nextOffset:
+          type: integer
+          format: int64
+          description: 下次轮询使用的 offset 值
+
+    PublicIPResponse:
+      type: object
+      properties:
+        ip:
+          type: string
+          description: 检测到的公网 IP（成功时）
+        error:
+          type: string
+          description: 错误描述（超时时）
+        advisory:
+          type: string
+          description: IPv6 使用提示（IP 为 IPv6 时）
+
+    DownloadBinRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          description: "frpc | frps"
+
+    DownloadState:
+      type: object
+      required: [status, progress]
+      properties:
+        status:
+          type: string
+          description: "idle | downloading | success | failed"
+        progress:
+          type: integer
+          description: 下载进度 0-100
+        error:
+          type: string
+          description: 错误信息（status=failed 时）
+
+    WizardStatus:
+      type: object
+      required: [handled, shouldShow]
+      properties:
+        handled:
+          type: boolean
+          description: wizard 是否已被处理（完成或跳过）
+        shouldShow:
+          type: boolean
+          description: 是否应当显示向导（!handled && !hasAnyConfig）
+
+paths:
+
+  /api/v1/health:
+    get:
+      summary: 存活探针（轻量，不经过 ReadyGate）
+      operationId: getHealth
+      security: []
+      tags: [system]
+      responses:
+        '200':
+          description: 服务存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/system/ready:
+    get:
+      summary: 就绪检查（返回初始化状态和缺失二进制列表）
+      operationId: getSystemReady
+      security: []
+      tags: [system]
+      responses:
+        '200':
+          description: 就绪状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemReady'
+        '503':
+          description: 服务未就绪（ReadyGate 拦截）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/setup:
+    post:
+      summary: 初始化管理员账号（只能调用一次）
+      operationId: setup
+      security: []
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupRequest'
+      responses:
+        '200':
+          description: 初始化成功，同时写入 session cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 已初始化（ALREADY_INITIALIZED）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 用户名或密码校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/auth/login:
+    post:
+      summary: 登录
+      operationId: login
+      security: []
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功，写入 frp_easy_sid cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 用户名或密码错误，或未初始化
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '429':
+          description: 登录尝试过多（RATE_LIMITED），响应头含 Retry-After
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/auth/logout:
+    post:
+      summary: 登出（清除 session）
+      operationId: logout
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [auth]
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/auth/password:
+    post:
+      summary: 修改密码
+      operationId: changePassword
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录或旧密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 新密码不符合规则
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/auth/me:
+    get:
+      summary: 获取当前登录用户信息
+      operationId: getMe
+      tags: [auth]
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/auth/csrf:
+    get:
+      summary: 获取 CSRF token（同时设置 X-CSRF-Token 响应头）
+      operationId: getCSRF
+      tags: [auth]
+      responses:
+        '200':
+          description: CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CSRFResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/mode:
+    get:
+      summary: 获取 frpc/frps 模式开关状态
+      operationId: getMode
+      tags: [mode]
+      responses:
+        '200':
+          description: 模式状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeState'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    put:
+      summary: 设置 frpc/frps 模式开关（变更后立即启停进程）
+      operationId: putMode
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [mode]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModeState'
+      responses:
+        '200':
+          description: 更新后的模式状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeState'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/proxies:
+    get:
+      summary: 获取全部代理规则列表
+      operationId: listProxies
+      tags: [proxies]
+      responses:
+        '200':
+          description: 代理规则数组
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProxyResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    post:
+      summary: 创建代理规则
+      operationId: createProxy
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [proxies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyInput'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProxyResponse'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 校验失败（字段不合法、达到 200 条上限等）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/proxies/{id}:
+    put:
+      summary: 更新代理规则（乐观锁，需携带 version 字段）
+      operationId: updateProxy
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [proxies]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProxyInput'
+      responses:
+        '200':
+          description: 更新后的代理规则
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProxyResponse'
+        '400':
+          description: id 非法或请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          description: 规则不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 版本冲突（CONFLICT）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    delete:
+      summary: 删除代理规则
+      operationId: deleteProxy
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [proxies]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: id 非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          description: 规则不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/server:
+    get:
+      summary: 获取 frps 服务端配置（token 默认脱敏）
+      operationId: getServer
+      tags: [config]
+      parameters:
+        - name: reveal
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["1"]
+          description: 传 reveal=1 可获取原始 token（不脱敏）
+      responses:
+        '200':
+          description: frps 配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrpsConfig'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    put:
+      summary: 保存 frps 服务端配置
+      operationId: putServer
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [config]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrpsConfig'
+      responses:
+        '200':
+          description: 保存后的配置（token 脱敏）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrpsConfig'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 端口号非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/client:
+    get:
+      summary: 获取 frpc 客户端连接配置（token 默认脱敏）
+      operationId: getClient
+      tags: [config]
+      parameters:
+        - name: reveal
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["1"]
+          description: 传 reveal=1 可获取原始 token
+      responses:
+        '200':
+          description: frpc 客户端配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrpcServerConn'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+    put:
+      summary: 保存 frpc 客户端连接配置
+      operationId: putClient
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [config]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrpcServerConn'
+      responses:
+        '200':
+          description: 保存后的配置（token 脱敏）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FrpcServerConn'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: serverAddr 为空或 serverPort 非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/proc/{kind}/start:
+    post:
+      summary: 启动 frpc 或 frps 进程
+      operationId: procStart
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [proc]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [frpc, frps]
+      responses:
+        '200':
+          description: 启动后的进程信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessInfo'
+        '400':
+          description: kind 非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 进程已在运行（PROC_BUSY）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 二进制缺失（BIN_MISSING）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/proc/{kind}/stop:
+    post:
+      summary: 停止 frpc 或 frps 进程
+      operationId: procStop
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [proc]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [frpc, frps]
+      responses:
+        '200':
+          description: 停止后的进程信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessInfo'
+        '400':
+          description: kind 非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '500':
+          description: 内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/proc/{kind}/restart:
+    post:
+      summary: 重启 frpc 或 frps 进程
+      operationId: procRestart
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [proc]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [frpc, frps]
+      responses:
+        '200':
+          description: 重启后的进程信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessInfo'
+        '400':
+          description: kind 非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 进程正在启停（PROC_BUSY）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 二进制缺失（BIN_MISSING）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/proc/status:
+    get:
+      summary: 获取 frpc 和 frps 进程状态快照
+      operationId: procStatus
+      tags: [proc]
+      responses:
+        '200':
+          description: 两个进程的状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcStatusResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/logs/{kind}:
+    get:
+      summary: 读取 frpc 或 frps 日志
+      operationId: getLogs
+      tags: [logs]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [frpc, frps]
+        - name: lines
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 500
+            minimum: 1
+            maximum: 5000
+          description: 返回末尾 N 行（不与 offset 同用）
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: 增量读取起始字节偏移；提供时忽略 lines 参数，返回增量格式响应
+      responses:
+        '200':
+          description: |
+            不携带 offset 时返回 LogsTailResponse；
+            携带 offset 时返回 LogsIncrementalResponse。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/LogsTailResponse'
+                  - $ref: '#/components/schemas/LogsIncrementalResponse'
+        '400':
+          description: kind 非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          description: 未配置日志路径
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/system/public-ip:
+    get:
+      summary: 检测当前出口公网 IP（最多等待 3 秒，始终返回 200）
+      operationId: getPublicIP
+      tags: [system]
+      responses:
+        '200':
+          description: 公网 IP 或超时错误（HTTP 状态码始终为 200）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicIPResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/system/download-bin:
+    post:
+      summary: 触发异步下载 frpc 或 frps 二进制
+      operationId: downloadBin
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [system]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadBinRequest'
+      responses:
+        '202':
+          description: 下载已开始（异步）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: 请求体非法 JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 下载已在进行中（PROC_BUSY）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: kind 非法（必须为 frpc 或 frps）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '503':
+          description: 下载器未初始化或不支持当前 OS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/system/download-status/{kind}:
+    get:
+      summary: 查询 frpc 或 frps 下载进度
+      operationId: getDownloadStatus
+      tags: [system]
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [frpc, frps]
+      responses:
+        '200':
+          description: 下载状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadState'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          description: kind 非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '503':
+          description: 下载器未初始化
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/wizard/status:
+    get:
+      summary: 查询部署向导状态
+      operationId: getWizardStatus
+      tags: [wizard]
+      responses:
+        '200':
+          description: 向导状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WizardStatus'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/wizard/complete:
+    post:
+      summary: 标记向导已完成或跳过
+      operationId: wizardComplete
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [wizard]
+      responses:
+        '200':
+          description: 标记成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '500':
+          description: 内部存储错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'

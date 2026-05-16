@@ -350,10 +350,10 @@ tbody tr:last-child td { border-bottom: none; }
     <!-- §4 测试基线 -->
     <section class="section" id="sec-4">
       <h2>§4 测试基线</h2>
-      <p>截至 T-002 交付（commit 1138694）：</p>
+      <p>截至 T-005 交付（2026-05-16）：</p>
       <div class="baseline-grid">
         <div class="baseline-card">
-          <div class="number">117</div>
+          <div class="number">119</div>
           <div class="label">Go 测试（全部 PASS）</div>
         </div>
         <div class="baseline-card">
@@ -361,7 +361,7 @@ tbody tr:last-child td { border-bottom: none; }
           <div class="label">前端测试（Vitest，PASS）</div>
         </div>
         <div class="baseline-card">
-          <div class="number">162</div>
+          <div class="number">164</div>
           <div class="label">合计测试用例</div>
         </div>
       </div>
@@ -371,8 +371,8 @@ tbody tr:last-child td { border-bottom: none; }
           <tr><th>verify_all 项</th><th>状态</th><th>说明</th></tr>
         </thead>
         <tbody>
-          <tr><td>PASS</td><td><span class="badge badge-green">12</span></td><td>Go 静态检查、测试、构建；harness 合规；配置文件检查等</td></tr>
-          <tr><td>SKIP</td><td><span class="badge badge-low">6</span></td><td>B.1–B.4（前端检查）/ C.1（E2E）/ D.1（OpenAPI）—— 见 TD-3</td></tr>
+          <tr><td>PASS</td><td><span class="badge badge-green">17</span></td><td>Go 静态检查、测试、构建；前端 typecheck/lint/tests；harness 合规；OpenAPI schema；配置文件检查等</td></tr>
+          <tr><td>SKIP</td><td><span class="badge badge-low">1</span></td><td>C.1（E2E，待 T-006 实现 Playwright 后从 SKIP 变 PASS）</td></tr>
           <tr><td>FAIL</td><td><span class="badge badge-green">0</span></td><td>无失败项</td></tr>
         </tbody>
       </table>
@@ -383,8 +383,9 @@ tbody tr:last-child td { border-bottom: none; }
         </thead>
         <tbody>
           <tr><td>T-001 结束</td><td>101</td><td>45</td><td>146</td></tr>
-          <tr><td>T-002 结束（当前）</td><td>117</td><td>45</td><td>162</td></tr>
-          <tr><td>增量</td><td>+16</td><td>0</td><td>+16</td></tr>
+          <tr><td>T-002 结束</td><td>117</td><td>45</td><td>162</td></tr>
+          <tr><td>T-004 结束（+2 Go 测试）</td><td>119</td><td>45</td><td>164</td></tr>
+          <tr><td>T-005 结束（当前）</td><td>119</td><td>45</td><td>164</td></tr>
         </tbody>
       </table>
     </section>
@@ -392,7 +393,7 @@ tbody tr:last-child td { border-bottom: none; }
     <!-- §5 技术债清单 -->
     <section class="section" id="sec-5">
       <h2>§5 技术债清单</h2>
-      <p>来源：代码审查 + T-001/T-002 交付报告。以下为已确认的 8 条技术债，本版本仅文档化，不修复。</p>
+      <p>来源：代码审查 + T-001/T-002 交付报告。TD-1～TD-7 已由 T-004 清偿；TD-8 保留（正确设计）。</p>
       <table>
         <thead>
           <tr><th>ID</th><th>描述</th><th>影响级别</th><th>来源</th></tr>
@@ -403,42 +404,49 @@ tbody tr:last-child td { border-bottom: none; }
             <td><strong>向导路由守卫漏洞</strong>：router.ts 中 wizard 守卫仅在导航到 /dashboard 时触发。向导已处理后直接访问 /wizard 不被重定向，用户可重复进入向导流程</td>
             <td><span class="badge badge-medium">中</span></td>
             <td>T-002 delivery 已知问题</td>
+            <td><span class="badge badge-green">已修复（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>TD-2</strong></td>
-            <td><strong>ParseIPFromJSON 重复</strong>：downloader.ParseIPFromJSON 已导出，但 handlers_system.go 的 fetchIPFromURL 有自己的内联 {"ip":"..."} JSON 解析，未复用</td>
+            <td><strong>IP 解析重复代码</strong>：downloader 包已导出公网 IP 解析函数，但 handlers_system.go 的 fetchIPFromURL 有自己的内联 JSON 解析，未复用</td>
             <td><span class="badge badge-low">低</span></td>
             <td>T-002 delivery 已知问题</td>
+            <td><span class="badge badge-green">已修复（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>TD-3</strong></td>
             <td><strong>verify_all 前端检查永久 SKIP</strong>：verify_all.sh 在项目根查找 package.json，但 package.json 在 web/ 目录，导致 B.1 typecheck、B.2 lint、B.3 unit tests 全部 SKIP，前端质量门禁实际上未执行</td>
             <td><span class="badge badge-medium">中</span></td>
             <td>代码审查 + scripts/verification_history.log</td>
+            <td><span class="badge badge-green">已修复（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>TD-4</strong></td>
             <td><strong>Version 字符串写死</strong>：var Version = "0.1.0" — 若构建时未注入 -ldflags "-X main.Version=..." 则版本永远为 0.1.0，无法区分构建</td>
             <td><span class="badge badge-low">低</span></td>
             <td>cmd/frp-easy/main.go</td>
+            <td><span class="badge badge-green">已修复（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>TD-5</strong></td>
             <td><strong>slog 单写模式</strong>：newLogger 在 logFile 非 nil 时仅写文件，stderr 不收 slog 输出（仅 startup banner 写 stderr）。go run 开发模式下 slog 日志写入文件，不便观察</td>
             <td><span class="badge badge-low">低</span></td>
             <td>cmd/frp-easy/main.go:newLogger</td>
+            <td><span class="badge badge-green">已修复（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>TD-6</strong></td>
             <td><strong>dist/ .gitignore 歧义</strong>：根目录 .gitignore 的 dist/ 规则递归匹配，会忽略 internal/assets/dist/（Go embed 的输入目录）。克隆后须先 npm run build 才能 go build；此依赖关系已在 README "前置条件"和"更新流程"中文档化。根本修复策略（是否提交 dist/ 到 git）见 OPT-3</td>
             <td><span class="badge badge-medium">中</span></td>
             <td>build.sh + .gitignore + internal/assets/assets.go</td>
+            <td><span class="badge badge-green">已修复（T-004，文档化方式 OPT-3 选 B）</span></td>
           </tr>
           <tr>
             <td><strong>TD-7</strong></td>
             <td><strong>auto-restore 时 TOML 缺失无预检</strong>：autoRestoreProcs 在 frpc.toml / frps.toml 不存在时直接 Start，子进程立即失败，状态标记为 error，UI 无法区分"配置未生成"与"进程崩溃"</td>
             <td><span class="badge badge-low">低</span></td>
             <td>cmd/frp-easy/main.go:autoRestoreProcs</td>
+            <td><span class="badge badge-green">已修复（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>TD-8</strong></td>
@@ -453,12 +461,12 @@ tbody tr:last-child td { border-bottom: none; }
     <!-- §6 优化建议清单 -->
     <section class="section" id="sec-6">
       <h2>§6 优化建议清单</h2>
-      <p>以下 9 条优化建议来源于代码审查，按优先级分组。本版本仅文档化，不实现。</p>
+      <p>以下 9 条优化建议来源于代码审查，按优先级分组。OPT-1～OPT-8 已由 T-004 实现，OPT-9 已由 T-005 实现。</p>
 
       <h3>高优先级（影响正确性或可观测性）</h3>
       <table>
         <thead>
-          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th></tr>
+          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th><th>状态</th></tr>
         </thead>
         <tbody>
           <tr>
@@ -466,12 +474,14 @@ tbody tr:last-child td { border-bottom: none; }
             <td><strong>修复 verify_all 前端路径</strong></td>
             <td><span class="badge badge-high">高</span></td>
             <td>修改 verify_all.sh 和 verify_all.ps1，切换到 web/ 目录执行 B.1–B.4 前端检查，使 45 个 frontend tests 真正进入质量门禁</td>
+            <td><span class="badge badge-green">已实现（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>OPT-2</strong></td>
             <td><strong>补全向导路由守卫</strong></td>
             <td><span class="badge badge-high">高</span></td>
             <td>在 router.ts 的 beforeEach 中，当 to.path === '/wizard' 且 wizard.handled === true 时重定向到 /dashboard，堵住 TD-1 漏洞</td>
+            <td><span class="badge badge-green">已实现（T-004）</span></td>
           </tr>
         </tbody>
       </table>
@@ -479,7 +489,7 @@ tbody tr:last-child td { border-bottom: none; }
       <h3>中优先级（改善开发体验和维护性）</h3>
       <table>
         <thead>
-          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th></tr>
+          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th><th>状态</th></tr>
         </thead>
         <tbody>
           <tr>
@@ -487,18 +497,21 @@ tbody tr:last-child td { border-bottom: none; }
             <td><strong>明确 dist/ git 追踪策略</strong></td>
             <td><span class="badge badge-medium">中</span></td>
             <td>方案 A：在 internal/assets/ 下加 .gitignore 内容为 !dist/（取消根规则），将构建产物提交到仓库，用户可直接 go build。方案 B：保持 dist/ 不提交，在 README 中明确"克隆后必须先 npm run build"。选一个方案并落实</td>
+            <td><span class="badge badge-green">已文档化（T-004 选 B）</span></td>
           </tr>
           <tr>
             <td><strong>OPT-4</strong></td>
             <td><strong>slog 双写（tee）</strong></td>
             <td><span class="badge badge-medium">中</span></td>
             <td>修改 newLogger 使用 io.MultiWriter 同时写文件和 stderr，使开发期 go run 和生产期 bin/frp-easy 都能在 stderr 看到日志</td>
+            <td><span class="badge badge-green">已实现（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>OPT-5</strong></td>
             <td><strong>版本注入标准化</strong></td>
             <td><span class="badge badge-medium">中</span></td>
             <td>修改 build.sh / build.ps1 读 git describe --tags --always 作为版本，注入 -ldflags "-X main.Version=..."；README 说明版本号由构建脚本管理</td>
+            <td><span class="badge badge-green">已实现（T-004）</span></td>
           </tr>
         </tbody>
       </table>
@@ -506,32 +519,36 @@ tbody tr:last-child td { border-bottom: none; }
       <h3>低优先级（代码质量和未来扩展）</h3>
       <table>
         <thead>
-          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th></tr>
+          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th><th>状态</th></tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>OPT-6</strong></td>
-            <td><strong>ParseIPFromJSON 统一</strong></td>
+            <td><strong>统一 IP 解析实现</strong></td>
             <td><span class="badge badge-low">低</span></td>
-            <td>将 handlers_system.go 内联解析改用 downloader.ParseIPFromJSON，消除 TD-2 重复代码</td>
+            <td>将 handlers_system.go 的内联 IP JSON 解析改用 downloader 包导出的函数，消除 TD-2 重复代码</td>
+            <td><span class="badge badge-green">已实现（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>OPT-7</strong></td>
             <td><strong>健康检查端点</strong></td>
             <td><span class="badge badge-low">低</span></td>
             <td>添加 GET /api/v1/health 返回 {"status":"ok","version":"..."} 供外部监控（Uptime Kuma、Nginx upstream_check 等）使用</td>
+            <td><span class="badge badge-green">已实现（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>OPT-8</strong></td>
             <td><strong>auto-restore TOML 预检</strong></td>
             <td><span class="badge badge-low">低</span></td>
             <td>autoRestoreProcs 在 Start 之前检查对应 TOML 文件是否存在，不存在时记录 warn 并跳过，而非启动后失败</td>
+            <td><span class="badge badge-green">已实现（T-004）</span></td>
           </tr>
           <tr>
             <td><strong>OPT-9</strong></td>
             <td><strong>OpenAPI Schema</strong></td>
             <td><span class="badge badge-low">低</span></td>
             <td>当前无 OpenAPI 文档（verify_all D.1 永久 SKIP）。添加 OpenAPI 3.x schema 可改善前后端契约可见性，并使 D.1 从 SKIP 变为 PASS</td>
+            <td><span class="badge badge-green">已实现（T-005）</span></td>
           </tr>
         </tbody>
       </table>
@@ -540,24 +557,7 @@ tbody tr:last-child td { border-bottom: none; }
     <!-- §7 已知后续事项 -->
     <section class="section" id="sec-7">
       <h2>§7 已知后续事项</h2>
-      <p>以下两条来自 T-002 交付报告（docs/features/_archived/zero-config-quickstart/07_DELIVERY.md）：</p>
-      <table>
-        <thead>
-          <tr><th>事项</th><th>说明</th><th>建议处理</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>[MINOR] 向导路由守卫漏洞</strong></td>
-            <td>router.ts 中 wizard 守卫仅拦截 /dashboard 导航，向导完成后直接访问 /wizard 不被重定向，用户可重复进入向导流程</td>
-            <td>参见 OPT-2：在 router.ts beforeEach 中补 /wizard 已处理重定向逻辑</td>
-          </tr>
-          <tr>
-            <td><strong>ParseIPFromJSON 重复</strong></td>
-            <td>downloader 包中 ParseIPFromJSON 已导出，但 handlers_system.go 有自己的内联 JSON 解析，代码存在重复</td>
-            <td>参见 OPT-6：统一使用 downloader.ParseIPFromJSON</td>
-          </tr>
-        </tbody>
-      </table>
+      <p>T-004 已清偿全部已知后续事项（OPT-2 向导路由守卫已修复，OPT-6 IP 解析重复代码已统一）。当前无待处理后续事项。</p>
     </section>
 
     <!-- §8 更新流程说明 -->
