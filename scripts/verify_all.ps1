@@ -107,33 +107,48 @@ Step "G.3" "go build ./cmd/frp-easy" {
     Remove-Item "frp-easy" -ErrorAction SilentlyContinue
 }
 
-# --- B. Build / test (require package.json) ---
+# --- B. Build / test (require web/package.json) ---
 Step "B.1" "Install / typecheck" {
-    if (-not (Test-Path "package.json")) { return "SKIP" }
-    $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
-    & $pkgMgr install --frozen-lockfile 2>&1 | Out-Null
-    if (Test-Path "tsconfig.json") { & $pkgMgr exec tsc --noEmit }
+    if (-not (Test-Path "web/package.json")) { return "SKIP" }
+    Push-Location (Join-Path $root "web")
+    try {
+        $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
+        & $pkgMgr install --frozen-lockfile 2>&1 | Out-Null
+        if (Test-Path "tsconfig.json") { & $pkgMgr exec tsc --noEmit }
+    } finally {
+        Pop-Location
+    }
 }
 
 Step "B.2" "Lint" {
-    if (-not (Test-Path "package.json")) { return "SKIP" }
-    $hasEslint = (Test-Path ".eslintrc") -or (Test-Path ".eslintrc.js") -or (Test-Path ".eslintrc.cjs") -or (Test-Path ".eslintrc.json") -or (Test-Path "eslint.config.js") -or (Test-Path "eslint.config.mjs")
-    if (-not $hasEslint) { return "SKIP" }
-    $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
-    & $pkgMgr exec eslint . 2>&1 | Out-Null
+    if (-not (Test-Path "web/package.json")) { return "SKIP" }
+    Push-Location (Join-Path $root "web")
+    try {
+        $hasEslint = (Test-Path ".eslintrc") -or (Test-Path ".eslintrc.js") -or (Test-Path ".eslintrc.cjs") -or (Test-Path ".eslintrc.json") -or (Test-Path "eslint.config.js") -or (Test-Path "eslint.config.mjs")
+        if (-not $hasEslint) { return "SKIP" }
+        $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
+        & $pkgMgr exec eslint . 2>&1 | Out-Null
+    } finally {
+        Pop-Location
+    }
 }
 
 Step "B.3" "Unit tests pass" {
-    if (-not (Test-Path "package.json")) { return "SKIP" }
-    $pkgJson = Get-Content "package.json" -Raw | ConvertFrom-Json
-    if (-not $pkgJson.scripts.test) { return "SKIP" }
-    $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
-    & $pkgMgr test 2>&1 | Out-Null
+    if (-not (Test-Path "web/package.json")) { return "SKIP" }
+    Push-Location (Join-Path $root "web")
+    try {
+        $pkgJson = Get-Content "package.json" -Raw | ConvertFrom-Json
+        if (-not $pkgJson.scripts.test) { return "SKIP" }
+        $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
+        & $pkgMgr test 2>&1 | Out-Null
+    } finally {
+        Pop-Location
+    }
 }
 
 Step "B.4" "Test count >= baseline" {
-    if (-not (Test-Path "scripts/baseline.json")) { return "SKIP" }
-    $baseline = Get-Content "scripts/baseline.json" | ConvertFrom-Json
+    if (-not (Test-Path (Join-Path $root "scripts/baseline.json"))) { return "SKIP" }
+    $baseline = Get-Content (Join-Path $root "scripts/baseline.json") | ConvertFrom-Json
     if ($baseline.test_count -eq 0) { return "SKIP" }
     # CUSTOMIZE: read your test runner output to get actual count vs baseline.
 }

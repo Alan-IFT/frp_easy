@@ -805,3 +805,34 @@ func TestPublicIP_Always200(t *testing.T) {
 		t.Errorf("expected ip or error field in response, got empty; body=%s", body)
 	}
 }
+
+// --- GET /api/v1/health → 200 + status=ok（OPT-7）---
+
+func TestHealth_ReturnsOK(t *testing.T) {
+	// newTestServer(t, nil, nil) → ready=true；health 端点不经过 ReadyGate。
+	srv, _ := newTestServer(t, nil, nil)
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/health", nil, nil, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d body=%s", resp.StatusCode, body)
+	}
+	var got map[string]string
+	if err := json.NewDecoder(strings.NewReader(string(body))).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got["status"] != "ok" {
+		t.Errorf("want status=ok, got %q; body=%s", got["status"], body)
+	}
+}
+
+// TestHealth_BypassesReadyGate 验证 ready=false 时 health 端点依然可访问。
+func TestHealth_BypassesReadyGate(t *testing.T) {
+	ready := &atomic.Bool{}
+	ready.Store(false)
+	srv, _ := newTestServer(t, ready, nil)
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/health", nil, nil, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("health should bypass ReadyGate: want 200, got %d body=%s", resp.StatusCode, body)
+	}
+}

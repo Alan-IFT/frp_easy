@@ -55,59 +55,66 @@ type FrpcAdminCreds struct {
 //	→ SessionAuth(受保护) → Handler
 //
 // 路由前缀：API 全部走 /api/v1/...；其它路径走 SPA 占位 handler。
+// /api/v1/health 单独挂在顶层，不经过任何中间件（OPT-7）。
 func New(d Dependencies) http.Handler {
 	r := chi.NewRouter()
 
-	r.Use(ReadyGate(d.Ready))
-	r.Use(Recover(d.Logger))
-	r.Use(RequestID())
-	r.Use(Logger(d.Logger))
-	r.Use(CORS(d.DevMode))
-
 	h := &handlers{deps: d}
 
-	r.Route("/api/v1", func(r chi.Router) {
-		// 公开 endpoint（不需要 session）。
-		r.Get("/system/ready", h.systemReady)
-		r.Post("/setup", h.setup)
-		r.Post("/auth/login", h.login)
+	// 健康检查端点：不经过 ReadyGate 或任何其它中间件，服务启动中也可访问。
+	r.Get("/api/v1/health", h.health)
 
-		// 受保护 endpoint：先 SessionAuth → CSRF（仅写方法）。
-		r.Group(func(r chi.Router) {
-			r.Use(SessionAuth(d.Store, SessionCookieName))
-			r.Use(CSRF())
+	// 其余所有请求走完整中间件链。
+	r.Group(func(r chi.Router) {
+		r.Use(ReadyGate(d.Ready))
+		r.Use(Recover(d.Logger))
+		r.Use(RequestID())
+		r.Use(Logger(d.Logger))
+		r.Use(CORS(d.DevMode))
 
-			r.Post("/auth/logout", h.logout)
-			r.Post("/auth/password", h.changePassword)
-			r.Get("/auth/me", h.me)
-			r.Get("/auth/csrf", h.csrf)
+		r.Route("/api/v1", func(r chi.Router) {
+			// 公开 endpoint（不需要 session）。
+			r.Get("/system/ready", h.systemReady)
+			r.Post("/setup", h.setup)
+			r.Post("/auth/login", h.login)
 
-			r.Get("/mode", h.getMode)
-			r.Put("/mode", h.putMode)
+			// 受保护 endpoint：先 SessionAuth → CSRF（仅写方法）。
+			r.Group(func(r chi.Router) {
+				r.Use(SessionAuth(d.Store, SessionCookieName))
+				r.Use(CSRF())
 
-			r.Get("/proxies", h.listProxies)
-			r.Post("/proxies", h.createProxy)
-			r.Put("/proxies/{id}", h.updateProxy)
-			r.Delete("/proxies/{id}", h.deleteProxy)
+				r.Post("/auth/logout", h.logout)
+				r.Post("/auth/password", h.changePassword)
+				r.Get("/auth/me", h.me)
+				r.Get("/auth/csrf", h.csrf)
 
-			r.Get("/server", h.getServer)
-			r.Put("/server", h.putServer)
-			r.Get("/client", h.getClient)
-			r.Put("/client", h.putClient)
+				r.Get("/mode", h.getMode)
+				r.Put("/mode", h.putMode)
 
-			r.Post("/proc/{kind}/start", h.procStart)
-			r.Post("/proc/{kind}/stop", h.procStop)
-			r.Post("/proc/{kind}/restart", h.procRestart)
-			r.Get("/proc/status", h.procStatus)
+				r.Get("/proxies", h.listProxies)
+				r.Post("/proxies", h.createProxy)
+				r.Put("/proxies/{id}", h.updateProxy)
+				r.Delete("/proxies/{id}", h.deleteProxy)
 
-			r.Get("/logs/{kind}", h.logs)
+				r.Get("/server", h.getServer)
+				r.Put("/server", h.putServer)
+				r.Get("/client", h.getClient)
+				r.Put("/client", h.putClient)
 
-			// T-002: system utilities — public IP, binary download, wizard.
-			r.Get("/system/public-ip", h.systemPublicIP)
-			r.Post("/system/download-bin", h.downloadBin)
-			r.Get("/system/download-status/{kind}", h.downloadStatus)
-			r.Get("/wizard/status", h.wizardStatus)
-			r.Post("/wizard/complete", h.wizardComplete)
+				r.Post("/proc/{kind}/start", h.procStart)
+				r.Post("/proc/{kind}/stop", h.procStop)
+				r.Post("/proc/{kind}/restart", h.procRestart)
+				r.Get("/proc/status", h.procStatus)
+
+				r.Get("/logs/{kind}", h.logs)
+
+				// T-002: system utilities — public IP, binary download, wizard.
+				r.Get("/system/public-ip", h.systemPublicIP)
+				r.Post("/system/download-bin", h.downloadBin)
+				r.Get("/system/download-status/{kind}", h.downloadStatus)
+				r.Get("/wizard/status", h.wizardStatus)
+				r.Post("/wizard/complete", h.wizardComplete)
+			})
 		})
 	})
 

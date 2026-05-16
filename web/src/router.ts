@@ -70,6 +70,17 @@ router.beforeEach(async (to) => {
     }
   }
 
+  // 向导已完成时，直接访问 /wizard 重定向到 /dashboard（TD-1 修复）
+  if (auth.user !== null && to.path === '/wizard') {
+    const wizard = useWizardStore()
+    if (!wizard.checked) {
+      await wizard.checkWizard()
+    }
+    if (!wizard.shouldShow) {
+      return '/dashboard'
+    }
+  }
+
   return true
 })
 

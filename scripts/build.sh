@@ -16,7 +16,7 @@ done
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="0.1.0"
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS="-X main.Version=${VERSION} -s -w"
 
 # 前端构建（若 web/ 存在且有 package.json）

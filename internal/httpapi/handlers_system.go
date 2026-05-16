@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"sync"
@@ -192,13 +193,11 @@ func fetchIPFromURL(ctx context.Context, url string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	var body struct {
-		IP string `json:"ip"`
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read body: %w", err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "", fmt.Errorf("decode: %w", err)
-	}
-	return body.IP, nil
+	return downloader.ParseIPFromJSON(data)
 }
 
 // buildIPResult constructs an ipResult and adds an IPv6 advisory if applicable.
@@ -220,4 +219,12 @@ func respondWithIPResult(w http.ResponseWriter, result ipResult) {
 		resp.Advisory = result.Advisory
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// health handles GET /api/v1/health — 轻量存活检查，不经过 ReadyGate。
+func (h *handlers) health(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"version": h.deps.Version,
+	})
 }

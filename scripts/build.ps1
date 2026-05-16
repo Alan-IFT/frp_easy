@@ -31,7 +31,8 @@ if (Test-Path (Join-Path $root "web\package.json")) {
 
 $null = New-Item -ItemType Directory -Path (Join-Path $root "bin") -Force
 
-$version = "0.1.0"
+$version = & git describe --tags --always --dirty 2>$null
+if (-not $version -or $LASTEXITCODE -ne 0) { $version = "dev" }
 $ldflags = "-X main.Version=$version -s -w"
 
 # Windows

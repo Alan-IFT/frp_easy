@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -174,7 +175,7 @@ func run() error {
 	}()
 
 	// 6. 启动序列尾巴：恢复模式开关（AC-9）
-	autoRestoreProcs(store, pm, loc, logger)
+	autoRestoreProcs(store, pm, loc, logger, map[string]string{"frpc": frpcTOML, "frps": frpsTOML})
 	ready.Store(true)
 	logger.Info("ready gate opened")
 
@@ -231,11 +232,9 @@ func isAddrInUse(err error) bool {
 
 // newLogger 构造 slog logger：tee 到 logFile（若 nil 则仅 stderr）。
 func newLogger(logFile *os.File) *slog.Logger {
-	var w = os.Stderr
 	if logFile != nil {
-		// 简化：默认写 logFile，stderr 留给启动 banner。
-		_ = w
-		return slog.New(slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		w := io.MultiWriter(logFile, os.Stderr)
+		return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
@@ -276,8 +275,8 @@ func ensureFrpcAdminCreds(store *storage.Store, logger *slog.Logger) frpcAdminCr
 }
 
 // autoRestoreProcs 按 kv.mode.frpc.enabled / kv.mode.frps.enabled 自动 Start
-// （AC-9）。二进制缺失则记 warn 不报错。
-func autoRestoreProcs(store *storage.Store, pm *procmgr.Manager, loc binloc.Locator, logger *slog.Logger) {
+// （AC-9）。二进制缺失则记 warn 不报错。configPaths 用于 TOML 预检（OPT-8）。
+func autoRestoreProcs(store *storage.Store, pm *procmgr.Manager, loc binloc.Locator, logger *slog.Logger, configPaths map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	missing := map[string]bool{}
@@ -296,6 +295,13 @@ func autoRestoreProcs(store *storage.Store, pm *procmgr.Manager, loc binloc.Loca
 		if missing[kind] {
 			logger.Warn("auto-restore skipped: binary missing", "kind", kind)
 			continue
+		}
+		// TOML 预检：配置文件不存在时跳过（避免子进程立即以 error 状态退出）
+		if tomlPath, ok := configPaths[kind]; ok {
+			if _, err := os.Stat(tomlPath); os.IsNotExist(err) {
+				logger.Warn("auto-restore skipped: config file missing", "kind", kind, "path", tomlPath)
+				continue
+			}
 		}
 		// 注意：本期 main 不重写 frpc.toml/frps.toml；若 runtime 目录里没文件
 		// 子进程会启动失败 → procmgr 把 state 标 error。这是已知行为，前端

@@ -16,6 +16,7 @@
 # CUSTOMIZE: edit the command lines below to match your actual stack.
 
 set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 QUICK=false
 for arg in "$@"; do
@@ -117,13 +118,14 @@ else
     fi
 fi
 
-# --- B. Build / test (require package.json) ---
-if [[ ! -f package.json ]]; then
+# --- B. Build / test (require web/package.json) ---
+if [[ ! -f web/package.json ]]; then
     step "B.1" "Install / typecheck" "SKIP"
     step "B.2" "Lint" "SKIP"
     step "B.3" "Unit tests pass" "SKIP"
     step "B.4" "Test count >= baseline" "SKIP"
 else
+    pushd "$ROOT/web" >/dev/null
     PM=$(pkgmgr)
 
     # B.1
@@ -157,11 +159,12 @@ else
     fi
 
     # B.4 — baseline check
-    if [[ -f scripts/baseline.json ]] && grep -q '"test_count":\s*0' scripts/baseline.json; then
+    if [[ -f "$ROOT/scripts/baseline.json" ]] && grep -q '"test_count":\s*0' "$ROOT/scripts/baseline.json"; then
         step "B.4" "Test count >= baseline" "SKIP"
     else
         step "B.4" "Test count >= baseline" "PASS"
     fi
+    popd >/dev/null
 fi
 
 # --- C. E2E (require playwright config) ---
