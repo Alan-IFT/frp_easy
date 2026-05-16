@@ -27,13 +27,13 @@ describe('useAuthStore', () => {
     vi.clearAllMocks()
   })
 
-  it('初期状態は未ログイン', () => {
+  it('初始状态：未登录', () => {
     const store = useAuthStore()
     expect(store.user).toBeNull()
     expect(store.csrfToken).toBe('')
   })
 
-  it('login 成功後に user と csrfToken がセットされる', async () => {
+  it('login 成功后 user 和 csrfToken 被设置', async () => {
     vi.mocked(authApi.apiLogin).mockResolvedValueOnce({ ok: true })
     vi.mocked(authApi.apiGetCsrf).mockResolvedValueOnce({ csrfToken: 'test-csrf-token' })
 
@@ -44,7 +44,7 @@ describe('useAuthStore', () => {
     expect(store.csrfToken).toBe('test-csrf-token')
   })
 
-  it('login 失敗時はエラーを throw する', async () => {
+  it('login 失败时抛出错误', async () => {
     vi.mocked(authApi.apiLogin).mockRejectedValueOnce(new Error('401 Unauthorized'))
 
     const store = useAuthStore()
@@ -52,7 +52,7 @@ describe('useAuthStore', () => {
     expect(store.user).toBeNull()
   })
 
-  it('logout 後に user と csrfToken がクリアされる', async () => {
+  it('logout 后 user 和 csrfToken 被清空', async () => {
     vi.mocked(authApi.apiLogout).mockResolvedValueOnce(undefined)
 
     const store = useAuthStore()
@@ -65,7 +65,7 @@ describe('useAuthStore', () => {
     expect(store.csrfToken).toBe('')
   })
 
-  it('checkMe 成功時は true を返しユーザーをセットする', async () => {
+  it('checkMe 成功时返回 true 并设置用户', async () => {
     vi.mocked(authApi.apiGetMe).mockResolvedValueOnce({ username: 'admin' })
     vi.mocked(authApi.apiGetCsrf).mockResolvedValueOnce({ csrfToken: 'csrf-123' })
 
@@ -77,7 +77,7 @@ describe('useAuthStore', () => {
     expect(store.csrfToken).toBe('csrf-123')
   })
 
-  it('checkMe 失敗時は false を返す', async () => {
+  it('checkMe 失败时返回 false', async () => {
     vi.mocked(authApi.apiGetMe).mockRejectedValueOnce(new Error('401'))
 
     const store = useAuthStore()
@@ -87,7 +87,7 @@ describe('useAuthStore', () => {
     expect(store.user).toBeNull()
   })
 
-  it('fetchCsrf が成功時に csrfToken をセットする', async () => {
+  it('fetchCsrf 成功时设置 csrfToken', async () => {
     vi.mocked(authApi.apiGetCsrf).mockResolvedValueOnce({ csrfToken: 'new-csrf' })
 
     const store = useAuthStore()

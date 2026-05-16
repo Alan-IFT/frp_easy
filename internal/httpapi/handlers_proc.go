@@ -18,14 +18,14 @@ func (h *handlers) procStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeValidationFailed, "kind 只能是 frpc/frps", "kind")
 		return
 	}
-	// TOML を先に書き込む（プロセスが最新設定で起動できるように）
+	// 先写入 TOML（确保进程以最新配置启动）
 	h.applyConfigBestEffort(r.Context(), kind)
 	info, err := h.deps.ProcMgr.Start(kind)
 	if err != nil {
 		mapProcErr(w, err)
 		return
 	}
-	// AC-9: 起動成功後に mode kv を更新
+	// AC-9: 启动成功后更新 mode kv
 	_ = h.persistMode(r.Context(), kind, true)
 	writeJSON(w, http.StatusOK, info)
 }
@@ -41,12 +41,12 @@ func (h *handlers) procStop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, CodeInternal, err.Error(), "")
 		return
 	}
-	// AC-9: 停止成功後に mode kv を更新
+	// AC-9: 停止成功后更新 mode kv
 	_ = h.persistMode(r.Context(), kind, false)
 	writeJSON(w, http.StatusOK, info)
 }
 
-// persistMode は mode.{kind}.enabled を kv に保存する（AC-9 再起動後自動復元用）。
+// persistMode 将 mode.{kind}.enabled 存入 kv（用于 AC-9 重启后自动恢复）。
 func (h *handlers) persistMode(ctx context.Context, kind string, enabled bool) error {
 	v := "false"
 	if enabled {

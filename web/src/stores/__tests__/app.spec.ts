@@ -15,7 +15,7 @@ describe('useAppStore', () => {
     vi.clearAllMocks()
   })
 
-  it('初期状態は未初期化・バイナリ欠損なし', () => {
+  it('初始状态：未初始化、无二进制缺失', () => {
     const store = useAppStore()
     expect(store.initialized).toBe(false)
     expect(store.binMissing).toEqual([])
@@ -23,7 +23,7 @@ describe('useAppStore', () => {
     expect(store.ready).toBe(false)
   })
 
-  it('fetchReady 成功後に initialized・binMissing・version が更新される', async () => {
+  it('fetchReady 成功后 initialized、binMissing、version 更新', async () => {
     vi.mocked(systemApi.apiGetReady).mockResolvedValueOnce({
       initialized: true,
       binMissing: [],
@@ -39,7 +39,7 @@ describe('useAppStore', () => {
     expect(store.ready).toBe(true)
   })
 
-  it('fetchReady でバイナリ欠損リストが更新される', async () => {
+  it('fetchReady 更新二进制缺失列表', async () => {
     vi.mocked(systemApi.apiGetReady).mockResolvedValueOnce({
       initialized: true,
       binMissing: ['frpc', 'frps'],
@@ -52,7 +52,7 @@ describe('useAppStore', () => {
     expect(store.binMissing).toEqual(['frpc', 'frps'])
   })
 
-  it('fetchReady エラー時は ready=false のまま', async () => {
+  it('fetchReady 出错时 ready 保持 false', async () => {
     vi.mocked(systemApi.apiGetReady).mockRejectedValueOnce(new Error('Network Error'))
 
     const store = useAppStore()
@@ -63,7 +63,7 @@ describe('useAppStore', () => {
   })
 
   describe('frpcMissing getter', () => {
-    it('binMissing に frpc が含まれる場合 true', async () => {
+    it('binMissing 包含 frpc 时为 true', async () => {
       vi.mocked(systemApi.apiGetReady).mockResolvedValueOnce({
         initialized: true,
         binMissing: ['frpc'],
@@ -75,7 +75,7 @@ describe('useAppStore', () => {
       expect(store.frpcMissing).toBe(true)
     })
 
-    it('binMissing に frpc が含まれない場合 false', async () => {
+    it('binMissing 不包含 frpc 时为 false', async () => {
       vi.mocked(systemApi.apiGetReady).mockResolvedValueOnce({
         initialized: true,
         binMissing: ['frps'],
@@ -87,7 +87,7 @@ describe('useAppStore', () => {
       expect(store.frpcMissing).toBe(false)
     })
 
-    it('frpsMissing: binMissing に frps が含まれる場合 true', async () => {
+    it('frpsMissing：binMissing 包含 frps 时为 true', async () => {
       vi.mocked(systemApi.apiGetReady).mockResolvedValueOnce({
         initialized: true,
         binMissing: ['frps'],

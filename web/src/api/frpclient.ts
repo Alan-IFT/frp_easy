@@ -1,5 +1,5 @@
-// frpc クライアント設定 API
-// ファイル名衝突回避のため frpclient.ts とする
+// frpc 客户端配置 API
+// 避免文件名冲突，故命名为 frpclient.ts
 import apiClient from './client'
 import type { FrpcServerConn } from '../types'
 

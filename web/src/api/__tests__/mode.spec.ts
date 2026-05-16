@@ -21,7 +21,7 @@ describe('mode API', () => {
   })
 
   describe('apiGetMode', () => {
-    it('GET /api/v1/mode の結果を返す', async () => {
+    it('返回 GET /api/v1/mode 的结果', async () => {
       const mockState: ModeState = { frpc: true, frps: false }
       vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockState })
 
@@ -31,7 +31,7 @@ describe('mode API', () => {
       expect(result).toEqual(mockState)
     })
 
-    it('frpc=false frps=true のレスポンスも正しく返す', async () => {
+    it('frpc=false frps=true 的响应也能正确返回', async () => {
       const mockState: ModeState = { frpc: false, frps: true }
       vi.mocked(apiClient.get).mockResolvedValueOnce({ data: mockState })
 
@@ -41,7 +41,7 @@ describe('mode API', () => {
       expect(result.frps).toBe(true)
     })
 
-    it('API エラー時は例外を伝播する', async () => {
+    it('API 出错时传播异常', async () => {
       vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network Error'))
 
       await expect(apiGetMode()).rejects.toThrow('Network Error')
@@ -49,7 +49,7 @@ describe('mode API', () => {
   })
 
   describe('apiPutMode', () => {
-    it('PUT /api/v1/mode にモード状態を送信する', async () => {
+    it('向 PUT /api/v1/mode 发送模式状态', async () => {
       const reqState: ModeState = { frpc: true, frps: false }
       const respState: ModeState = { frpc: true, frps: false }
       vi.mocked(apiClient.put).mockResolvedValueOnce({ data: respState })
@@ -60,7 +60,7 @@ describe('mode API', () => {
       expect(result).toEqual(respState)
     })
 
-    it('frpc=false frps=false の無効化リクエストを正しく送る', async () => {
+    it('正确发送 frpc=false frps=false 的停用请求', async () => {
       const reqState: ModeState = { frpc: false, frps: false }
       vi.mocked(apiClient.put).mockResolvedValueOnce({ data: reqState })
 
@@ -70,7 +70,7 @@ describe('mode API', () => {
       expect(result.frps).toBe(false)
     })
 
-    it('API エラー時は例外を伝播する', async () => {
+    it('API 出错时传播异常', async () => {
       const reqState: ModeState = { frpc: true, frps: true }
       vi.mocked(apiClient.put).mockRejectedValueOnce(new Error('Unauthorized'))
 

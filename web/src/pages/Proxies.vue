@@ -13,7 +13,7 @@
       style="margin-top: 16px"
     />
 
-    <!-- 新増/編集モーダル -->
+    <!-- 新增/编辑弹窗 -->
     <n-modal
       v-model:show="showForm"
       :title="editingProxy ? '编辑规则' : '新增规则'"
@@ -35,7 +35,7 @@
       </template>
     </n-modal>
 
-    <!-- 削除確認ダイアログ -->
+    <!-- 删除确认对话框 -->
     <confirm-dialog
       v-model:show="showDeleteConfirm"
       title="确认删除"

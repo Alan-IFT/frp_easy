@@ -20,10 +20,10 @@ import (
 	"github.com/frp-easy/frp-easy/internal/storage"
 )
 
-// --- 共通ヘルパー ---
+// --- 公共辅助函数 ---
 
-// newTestServerFull はテスト用サーバーを起動する。
-// configPaths が nil 以外の場合は TOML 書き込みパスが設定される。
+// newTestServerFull 启动测试用服务器。
+// configPaths 非 nil 时配置 TOML 写入路径。
 func newTestServerFull(t *testing.T, configPaths map[string]string, logFiles map[string]string) (*httptest.Server, *storage.Store) {
 	t.Helper()
 	store, err := storage.Open(t.TempDir())
@@ -55,7 +55,7 @@ func newTestServerFull(t *testing.T, configPaths map[string]string, logFiles map
 	return srv, store
 }
 
-// setupAndLogin は管理者をセットアップしてセッション cookie + CSRF トークンを返す。
+// setupAndLogin 初始化管理员并返回 session cookie + CSRF token。
 func setupAndLogin(t *testing.T, srv *httptest.Server) ([]*http.Cookie, string) {
 	t.Helper()
 	resp, _ := doJSON(t, srv, "POST", "/api/v1/setup",
@@ -70,11 +70,10 @@ func setupAndLogin(t *testing.T, srv *httptest.Server) ([]*http.Cookie, string) 
 	return cookies, csrf.CSRFToken
 }
 
-// --- AC-5: TCP ルール → frpc.toml 書き込み ---
+// --- AC-5: TCP 规则 → frpc.toml 写入 ---
 
 func TestAC5_RenderFrpc_TomlWritten(t *testing.T) {
-	// 仮説：serverAddr が設定されていれば CREATE PROXY 後に frpc.toml が生成されるはず。
-	// これが失敗するなら renderAndApplyFrpc が機能していないことになる。
+	// 假设：设置 serverAddr 后 CREATE PROXY 应生成 frpc.toml。
 	dir := t.TempDir()
 	frpcToml := filepath.Join(dir, "frpc.toml")
 	frpsToml := filepath.Join(dir, "frps.toml")
@@ -118,7 +117,7 @@ func TestAC5_RenderFrpc_TomlWritten(t *testing.T) {
 	}
 }
 
-// --- AC-5 frps.toml: PUT /server → frps.toml 書き込み ---
+// --- AC-5 frps.toml: PUT /server → frps.toml 写入 ---
 
 func TestAC5_RenderFrps_TomlWritten(t *testing.T) {
 	dir := t.TempDir()
@@ -142,7 +141,7 @@ func TestAC5_RenderFrps_TomlWritten(t *testing.T) {
 	}
 }
 
-// --- AC-6: 削除後 frpc.toml からプロキシが消える ---
+// --- AC-6: 删除后 frpc.toml 中代理消失 ---
 
 func TestAC6_ProxyDeleted_RemovedFromToml(t *testing.T) {
 	// 仮説：DELETE 後に frpc.toml が再生成されプロキシエントリが削除されるはず。
@@ -190,7 +189,7 @@ func TestAC6_ProxyDeleted_RemovedFromToml(t *testing.T) {
 	}
 }
 
-// --- AC-9: persistMode が KV に保存される ---
+// --- AC-9: persistMode 写入 KV ---
 
 func TestAC9_PersistMode_KVUpdated(t *testing.T) {
 	// 仮説：PUT /mode で frpc=true を設定した後、KV に "true" が永続化されるはず。
@@ -244,7 +243,7 @@ func TestAC9_PersistMode_ToggleFlip(t *testing.T) {
 	}
 }
 
-// --- AC-12: 損坏 DB → initialized=false, broken ファイル存在 ---
+// --- AC-12: 损坏 DB → initialized=false，备份文件存在 ---
 
 func TestAC12_CorruptDB_NotInitialized(t *testing.T) {
 	// 仮説：data.db が破損している場合 initialized=false が返されるはず。
@@ -302,7 +301,7 @@ func TestAC12_CorruptDB_NotInitialized(t *testing.T) {
 	}
 }
 
-// --- AC-14: デフォルト localIP=127.0.0.1 ---
+// --- AC-14: 默认 localIP=127.0.0.1 ---
 
 func TestAC14_DefaultLocalIP(t *testing.T) {
 	// 仮説：localIP を指定しない場合、デフォルトで 127.0.0.1 になるはず。
@@ -323,7 +322,7 @@ func TestAC14_DefaultLocalIP(t *testing.T) {
 	}
 }
 
-// --- AC-11: ログ tail 500行 + インクリメンタル ---
+// --- AC-11: 日志 tail 500 行 + 增量读取 ---
 
 func TestAC11_Logs_EmptyPathReturns404(t *testing.T) {
 	// LogFiles には空文字列が入っている → 404 が返るはず
@@ -376,10 +375,10 @@ func TestAC11_Logs_TailLines500(t *testing.T) {
 }
 
 // ======================================================================
-// 対抗テスト（Adversarial tests）
+// 对抗测试
 // ======================================================================
 
-// --- 対抗1: SQL インジェクション文字列が proxy name 検証でブロックされる ---
+// --- 对抗1: SQL 注入字符串被 proxy name 校验拦截 ---
 
 func TestAdversarial_SQLInjectionInProxyName(t *testing.T) {
 	// 仮説：ValidateProxyName が正規表現 [A-Za-z0-9_-] で SQL 特殊文字を拒否するはず。
@@ -414,7 +413,7 @@ func TestAdversarial_SQLInjectionInProxyName(t *testing.T) {
 // --- 対抗2: 超長入力 proxy name (> 64 chars) → 422 + field=name ---
 
 func TestAdversarial_OverlongProxyName422(t *testing.T) {
-	// 仮説：65 文字以上の名前が 422 で拒否され、field=name が返されるはず。
+	// 假设：超过 65 字符的名称应被 422 拒绝，返回 field=name。
 	srv, _ := newTestServer(t, nil, nil)
 	cookies, csrf := setupAndLogin(t, srv)
 
@@ -433,7 +432,7 @@ func TestAdversarial_OverlongProxyName422(t *testing.T) {
 	}
 }
 
-// --- 対抗3: 超長ユーザー名 (> 32 chars) → 422 ---
+// --- 对抗3: 超长用户名 (> 32 chars) → 422 ---
 
 func TestAdversarial_OverlongUsername422(t *testing.T) {
 	// 仮説：33 文字以上のユーザー名は setup で 422 を返すはず。
@@ -447,7 +446,7 @@ func TestAdversarial_OverlongUsername422(t *testing.T) {
 	}
 }
 
-// --- 対抗4: 短すぎるパスワード → 422 ---
+// --- 对抗4: 密码过短 → 422 ---
 
 func TestAdversarial_TooShortPassword422(t *testing.T) {
 	// 仮説：11 文字以下のパスワードは 422 を返すはず。
@@ -463,7 +462,7 @@ func TestAdversarial_TooShortPassword422(t *testing.T) {
 // --- 対抗5: 並行 proxy 作成（同名）→ 1 成功, rest 409/422 ---
 
 func TestAdversarial_ConcurrentProxyCreation_OnlyOneSucceeds(t *testing.T) {
-	// 仮説：同名プロキシを並行作成しても UNIQUE 制約で 1 件しか作成されないはず。
+	// 假设：并发创建同名代理时，UNIQUE 约束应只允许 1 条写入。
 	srv, store := newTestServer(t, nil, nil)
 	cookies, csrf := setupAndLogin(t, srv)
 
@@ -504,7 +503,7 @@ func TestAdversarial_ConcurrentProxyCreation_OnlyOneSucceeds(t *testing.T) {
 	}
 }
 
-// --- 対抗6: 不正 JSON ボディ → 400 ---
+// --- 对抗6: 非法 JSON 请求体 → 400 ---
 
 func TestAdversarial_InvalidJSONBody400(t *testing.T) {
 	// 仮説：JSON でないボディは 400 Bad Request を返すはず。
@@ -528,7 +527,7 @@ func TestAdversarial_InvalidJSONBody400(t *testing.T) {
 	}
 }
 
-// --- 対抗7: ポート範囲外 → 422 ---
+// --- 对抗7: 端口越界 → 422 ---
 
 func TestAdversarial_PortOutOfRange422(t *testing.T) {
 	// 仮説：remotePort=0 や remotePort=99999 は 422 を返すはず。
@@ -547,7 +546,7 @@ func TestAdversarial_PortOutOfRange422(t *testing.T) {
 	}
 }
 
-// --- 対抗8: http proxy に remotePort を指定 → 422 ---
+// --- 对抗8: http 代理指定 remotePort → 422 ---
 
 func TestAdversarial_HttpProxyWithRemotePort422(t *testing.T) {
 	// 仮説：http/https プロキシに remotePort を指定すると 422 を返すはず。
@@ -566,7 +565,7 @@ func TestAdversarial_HttpProxyWithRemotePort422(t *testing.T) {
 	}
 }
 
-// --- 対抗9: 未認証アクセス → 401 ---
+// --- 对抗9: 未认证访问 → 401 ---
 
 func TestAdversarial_UnauthenticatedProxyCreate401(t *testing.T) {
 	// 仮説：Cookie なしで保護ルートにアクセスすると 401 が返されるはず。
@@ -583,7 +582,7 @@ func TestAdversarial_UnauthenticatedProxyCreate401(t *testing.T) {
 	}
 }
 
-// --- 対抗10: ConfigPaths 未設定でも renderAndApply はクラッシュしない ---
+// --- 对抗10: ConfigPaths 未设置时 renderAndApply 不崩溃 ---
 
 func TestAdversarial_ConfigPaths_Nil_NocrashOnProxy(t *testing.T) {
 	// 仮説：ConfigPaths が nil でも proxy 作成は正常完了するはず（TOML 書き込みはスキップ）。
@@ -599,7 +598,7 @@ func TestAdversarial_ConfigPaths_Nil_NocrashOnProxy(t *testing.T) {
 	}
 }
 
-// --- 回帰: GET /proc/status が ProcMgr=nil でもクラッシュしない (AC-13) ---
+// --- 回归: GET /proc/status 在 ProcMgr=nil 时不崩溃 (AC-13) ---
 
 func TestRegression_ProcStatus_NilProcMgr(t *testing.T) {
 	// AC-13 の一部：バイナリ欠損環境でも /proc/status は 200 を返すはず。

@@ -2,7 +2,7 @@
   <div>
     <n-page-header title="仪表盘" subtitle="frpc / frps 进程状态与控制" />
 
-    <!-- バイナリ欠損警告 -->
+    <!-- 二进制缺失警告 -->
     <n-alert
       v-if="appStore.binMissing.length > 0"
       type="warning"
@@ -14,7 +14,7 @@
     </n-alert>
 
     <n-grid :cols="2" :x-gap="16" :y-gap="16" style="margin-top: 16px">
-      <!-- frpc カード -->
+      <!-- frpc 卡片 -->
       <n-gi>
         <n-card title="frpc（客户端）">
           <template #header-extra>
@@ -41,7 +41,7 @@
             </n-descriptions-item>
           </n-descriptions>
 
-          <!-- エラー時の最後のエラーメッセージ -->
+          <!-- 错误详情 -->
           <n-alert
             v-if="procStore.frpcInfo.state === 'error' && procStore.frpcInfo.lastErr"
             type="error"
@@ -85,7 +85,7 @@
         </n-card>
       </n-gi>
 
-      <!-- frps カード -->
+      <!-- frps 卡片 -->
       <n-gi>
         <n-card title="frps（服务端）">
           <template #header-extra>

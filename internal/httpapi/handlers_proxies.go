@@ -78,7 +78,7 @@ func (h *handlers) createProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed, err.Error(), field)
 		return
 	}
-	// 件数上限チェック（B-20：≤200 件）
+	// 条数上限检查（B-20：≤200 条）
 	existing, cntErr := h.deps.Store.ListProxies(r.Context())
 	if cntErr != nil {
 		writeError(w, http.StatusInternalServerError, CodeInternal, "读取失败", "")
@@ -150,7 +150,7 @@ func (h *handlers) applyConfigBestEffort(ctx context.Context, kind string) {
 	}
 }
 
-// maybeApplyConfig は後方互換のために残す（現在は applyConfigBestEffort を使う）。
+// maybeApplyConfig 为向后兼容保留（当前使用 applyConfigBestEffort）。
 func (h *handlers) maybeApplyConfig(kind string) {
 	if h.deps.ProcMgr == nil {
 		return

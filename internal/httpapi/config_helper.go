@@ -8,11 +8,11 @@ import (
 	"github.com/frp-easy/frp-easy/internal/storage"
 )
 
-// renderAndApply は DB から設定を読み出し、FRP TOML を生成してファイルに書き込み、
-// 最後に procmgr.ApplyConfigChange を呼ぶ。
+// renderAndApply 从 DB 读取配置，生成 FRP TOML 写入文件，
+// 最后调用 procmgr.ApplyConfigChange。
 //
-// TOML 書き込みまたは reload 失敗はエラーを返す（呼び出し元が判断して対応）。
-// プロセスが停止中の場合でも TOML は書き込む（次回 Start 時に有効化される）。
+// TOML 写入或 reload 失败时返回 error（由调用方决策）。
+// 即使进程已停止也写入 TOML（下次 Start 时生效）。
 func (h *handlers) renderAndApply(ctx context.Context, kind string) error {
 	switch kind {
 	case "frpc":
@@ -25,7 +25,7 @@ func (h *handlers) renderAndApply(ctx context.Context, kind string) error {
 
 func (h *handlers) renderAndApplyFrpc(ctx context.Context) error {
 	if h.deps.ConfigPaths == nil {
-		return nil // テスト環境等で未設定の場合は skip
+		return nil // 测试环境等未配置时跳过
 	}
 	path := h.deps.ConfigPaths["frpc"]
 	logPath := ""
@@ -33,13 +33,13 @@ func (h *handlers) renderAndApplyFrpc(ctx context.Context) error {
 		logPath = h.deps.LogFiles["frpc"]
 	}
 
-	// 1. frpc サーバー接続情報を KV から読む
+	// 1. 从 KV 读取 frpc 服务端连接信息
 	var conn FrpcServerConn
 	if v, ok, err := h.deps.Store.KVGet(ctx, kvFrpcServerCfg); err == nil && ok {
 		_ = json.Unmarshal([]byte(v), &conn)
 	}
 
-	// 2. 有効な Proxy 一覧を DB から読む（enabled のみ）
+	// 2. 从 DB 读取已启用的 Proxy 列表
 	all, err := h.deps.Store.ListProxies(ctx)
 	if err != nil {
 		return err
@@ -81,12 +81,12 @@ func (h *handlers) renderAndApplyFrpc(ctx context.Context) error {
 		return err
 	}
 
-	// 5. ファイルに原子書き込み
+	// 5. 原子写入文件
 	if err := frpconf.AtomicWrite(path, data); err != nil {
 		return err
 	}
 
-	// 6. procmgr に設定変更を通知（プロセスが停止中でも無害）
+	// 6. 通知 procmgr 配置已变更（进程停止时无害）
 	if h.deps.ProcMgr != nil {
 		_ = h.deps.ProcMgr.ApplyConfigChange("frpc")
 	}
@@ -103,7 +103,7 @@ func (h *handlers) renderAndApplyFrps(ctx context.Context) error {
 		logPath = h.deps.LogFiles["frps"]
 	}
 
-	// 1. frps 設定を KV から読む
+	// 1. 从 KV 读取 frps 配置
 	var cfg FrpsConfig
 	if v, ok, err := h.deps.Store.KVGet(ctx, kvFrpsConfig); err == nil && ok {
 		_ = json.Unmarshal([]byte(v), &cfg)
@@ -129,19 +129,19 @@ func (h *handlers) renderAndApplyFrps(ctx context.Context) error {
 		return err
 	}
 
-	// 3. ファイルに原子書き込み
+	// 3. 原子写入文件
 	if err := frpconf.AtomicWrite(path, data); err != nil {
 		return err
 	}
 
-	// 4. procmgr に通知
+	// 4. 通知 procmgr
 	if h.deps.ProcMgr != nil {
 		_ = h.deps.ProcMgr.ApplyConfigChange("frps")
 	}
 	return nil
 }
 
-// proxyToFrpconf は storage.Proxy を frpconf.ProxyInput に変換するユーティリティ。
+// proxyToFrpconf 将 storage.Proxy 转换为 frpconf.ProxyInput 的工具函数。
 func proxyToFrpconf(p storage.Proxy) frpconf.ProxyInput {
 	return frpconf.ProxyInput{
 		Name:          p.Name,

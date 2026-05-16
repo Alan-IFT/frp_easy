@@ -19,7 +19,7 @@ export const useAuthStore = defineStore('auth', {
         const res = await apiGetCsrf()
         this.csrfToken = res.csrfToken
       } catch {
-        // ignore — セッションがない場合は空のまま
+        // 忽略——无 session 时保持空值
       }
     },
 
@@ -37,7 +37,7 @@ export const useAuthStore = defineStore('auth', {
 
     async setup(username: string, password: string): Promise<void> {
       await apiSetup(username, password)
-      // setup 成功後は自動ログイン済み → CSRF 取得
+      // setup 成功后自动已登录 → 获取 CSRF
       this.user = username
       await this.fetchCsrf()
     },
@@ -52,7 +52,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         await apiLogout()
       } catch (e) {
-        // ベストエフォート
+        // 尽力执行
         console.warn('Logout error:', extractErrorMessage(e))
       } finally {
         this.user = null

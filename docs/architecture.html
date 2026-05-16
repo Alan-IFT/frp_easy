@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>frp_easy — 架构总览</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #161b27;
+    --bg3: #1e2636;
+    --border: #2a3449;
+    --accent: #4f9cf9;
+    --accent2: #7c6af7;
+    --accent3: #3ecf8e;
+    --accent4: #f7944a;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --go: #00acd7;
+    --vue: #42b883;
+    --sqlite: #003b57;
+    --radius: 10px;
+    --shadow: 0 4px 24px rgba(0,0,0,.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; line-height: 1.6; }
+
+  /* ── Nav ── */
+  nav { position: sticky; top: 0; z-index: 100; background: rgba(15,17,23,.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; gap: 1.5rem; height: 56px; }
+  nav .brand { font-weight: 700; font-size: 1.1rem; color: var(--accent); text-decoration: none; margin-right: auto; }
+  nav a { color: var(--text2); text-decoration: none; font-size: .9rem; padding: .25rem .5rem; border-radius: 6px; transition: color .15s,background .15s; }
+  nav a:hover { color: var(--text); background: var(--bg3); }
+
+  /* ── Layout ── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  section { margin-top: 3.5rem; scroll-margin-top: 80px; }
+  h1 { font-size: 2.4rem; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  h2 { font-size: 1.5rem; font-weight: 700; color: var(--text); margin-bottom: 1.2rem; display: flex; align-items: center; gap: .5rem; }
+  h2 .tag { font-size: .75rem; font-weight: 600; padding: .15rem .55rem; border-radius: 99px; background: var(--bg3); color: var(--accent); border: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; font-weight: 600; color: var(--text); margin-bottom: .6rem; }
+  p { color: var(--text2); margin-bottom: .8rem; }
+  code { font-family: 'JetBrains Mono','Fira Code',monospace; font-size: .88em; background: var(--bg3); padding: .15em .45em; border-radius: 5px; color: var(--accent3); }
+
+  /* ── Hero ── */
+  .hero { padding: 3rem 0 1rem; }
+  .hero h1 { margin-bottom: .75rem; }
+  .hero .subtitle { font-size: 1.15rem; color: var(--text2); max-width: 640px; margin-bottom: 1.5rem; }
+  .badge-row { display: flex; gap: .6rem; flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .8rem; border-radius: 99px; font-size: .8rem; font-weight: 600; border: 1px solid; }
+  .badge.go { color: var(--go); border-color: var(--go); background: rgba(0,172,215,.08); }
+  .badge.vue { color: var(--vue); border-color: var(--vue); background: rgba(66,184,131,.08); }
+  .badge.sq { color: #7fb3c8; border-color: #2e6a82; background: rgba(0,59,87,.3); }
+  .badge.ver { color: var(--accent4); border-color: var(--accent4); background: rgba(247,148,74,.08); }
+
+  /* ── Arch Diagram ── */
+  .arch-diagram { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .arch-row { display: grid; gap: 1px; background: var(--border); }
+  .arch-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .arch-row.cols-2 { grid-template-columns: 1fr 1fr; }
+  .arch-row.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .arch-cell { background: var(--bg2); padding: 1.1rem 1.2rem; }
+  .arch-cell.full { grid-column: 1 / -1; }
+  .arch-cell .label { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: .4rem; }
+  .arch-cell .name { font-size: 1rem; font-weight: 700; color: var(--text); }
+  .arch-cell .desc { font-size: .82rem; color: var(--text2); margin-top: .3rem; line-height: 1.4; }
+  .arch-cell.accent-blue { border-top: 3px solid var(--accent); }
+  .arch-cell.accent-green { border-top: 3px solid var(--accent3); }
+  .arch-cell.accent-purple { border-top: 3px solid var(--accent2); }
+  .arch-cell.accent-orange { border-top: 3px solid var(--accent4); }
+  .arch-cell.accent-go { border-top: 3px solid var(--go); }
+  .arch-arrow { text-align: center; padding: .6rem; background: var(--bg); color: var(--text3); font-size: 1.3rem; grid-column: 1 / -1; }
+
+  /* ── Cards ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(300px,1fr)); gap: 1rem; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.3rem 1.4rem; transition: border-color .15s,box-shadow .15s; }
+  .card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card h3 { color: var(--accent); margin-bottom: .5rem; }
+  .card .path { font-family: monospace; font-size: .8rem; color: var(--text3); margin-bottom: .7rem; }
+  .card ul { color: var(--text2); font-size: .88rem; padding-left: 1.2rem; }
+  .card ul li { margin-bottom: .25rem; }
+
+  /* ── Flow ── */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .flow-step { display: flex; gap: 1rem; align-items: flex-start; }
+  .flow-step .num { width: 32px; height: 32px; min-width: 32px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: .9rem; display: flex; align-items: center; justify-content: center; }
+  .flow-step .body { padding: .4rem 0 1.4rem; border-left: 2px dashed var(--border); margin-left: 15px; padding-left: 1.2rem; width: 100%; }
+  .flow-step:last-child .body { border-left-color: transparent; }
+  .flow-step .body h3 { margin-bottom: .25rem; }
+  .flow-step .body p { font-size: .9rem; margin-bottom: 0; }
+
+  /* ── API Table ── */
+  .api-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .api-table th { text-align: left; padding: .6rem 1rem; background: var(--bg3); color: var(--text3); font-size: .75rem; letter-spacing: .07em; text-transform: uppercase; font-weight: 600; border-bottom: 1px solid var(--border); }
+  .api-table td { padding: .55rem 1rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .api-table tr:hover td { background: var(--bg3); }
+  .method { display: inline-block; padding: .15rem .55rem; border-radius: 5px; font-family: monospace; font-size: .8rem; font-weight: 700; min-width: 52px; text-align: center; }
+  .get { background: rgba(62,207,142,.15); color: var(--accent3); }
+  .post { background: rgba(79,156,249,.15); color: var(--accent); }
+  .put { background: rgba(247,148,74,.15); color: var(--accent4); }
+  .delete { background: rgba(248,113,113,.15); color: #f87171; }
+  .auth-badge { font-size: .72rem; padding: .1rem .4rem; border-radius: 4px; background: var(--bg3); color: var(--text3); border: 1px solid var(--border); }
+  .auth-open { color: var(--accent3); border-color: rgba(62,207,142,.3); background: rgba(62,207,142,.06); }
+
+  /* ── KV Table ── */
+  .kv-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .kv-table th { text-align: left; padding: .5rem .9rem; background: var(--bg3); color: var(--text3); font-size: .75rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; border-bottom: 1px solid var(--border); }
+  .kv-table td { padding: .5rem .9rem; border-bottom: 1px solid var(--border); font-family: monospace; color: var(--text2); }
+  .kv-table tr:hover td { background: var(--bg3); }
+  .kv-table td:first-child { color: var(--accent4); }
+  .kv-table td:last-child { font-family: inherit; color: var(--text2); font-size: .85rem; }
+
+  /* ── Security grid ── */
+  .sec-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: .8rem; }
+  .sec-item { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+  .sec-item .icon { font-size: 1.4rem; margin-bottom: .4rem; }
+  .sec-item h3 { font-size: .92rem; margin-bottom: .25rem; }
+  .sec-item p { font-size: .82rem; margin: 0; }
+
+  /* ── Misc ── */
+  .divider { height: 1px; background: var(--border); margin: 2.5rem 0; }
+  .callout { background: rgba(79,156,249,.07); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: .9rem 1.2rem; color: var(--text2); font-size: .9rem; margin: 1.2rem 0; }
+  .callout strong { color: var(--text); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .section-intro { color: var(--text2); max-width: 720px; margin-bottom: 1.5rem; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#" class="brand">⚡ frp_easy</a>
+  <a href="#overview">概览</a>
+  <a href="#arch">架构</a>
+  <a href="#components">模块</a>
+  <a href="#flow">数据流</a>
+  <a href="#api">API</a>
+  <a href="#security">安全</a>
+  <a href="#kv">数据模型</a>
+</nav>
+
+<div class="page">
+
+  <!-- Hero -->
+  <div class="hero" id="overview">
+    <h1>frp_easy 架构总览</h1>
+    <p class="subtitle">单 Go 二进制 + Vue 3 SPA，通过 Web UI 管理 frpc（客户端）和 frps（服务端）进程的生命周期与配置。</p>
+    <div class="badge-row">
+      <span class="badge go">● Go 1.22</span>
+      <span class="badge vue">● Vue 3 + TypeScript</span>
+      <span class="badge sq">● SQLite (纯Go)</span>
+      <span class="badge ver">v0.1.0 MVP</span>
+    </div>
+  </div>
+
+  <!-- 核心理念 -->
+  <section>
+    <div class="cards" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="card" style="border-top:3px solid var(--accent);">
+        <h3>🗂 单文件部署</h3>
+        <p style="font-size:.88rem">整个应用（Go 后端 + Vue 前端）打包为一个可执行文件。<code>embed.FS</code> 将编译后的 SPA dist/ 嵌入二进制，无需独立 Web 服务器。</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--accent3);">
+        <h3>🔒 无 CGO 依赖</h3>
+        <p style="font-size:.88rem">使用 <code>modernc.org/sqlite</code> 纯 Go 实现的 SQLite，<code>CGO_ENABLED=0</code> 编译，可交叉编译到 Linux/Windows 无需系统库。</p>
+      </div>
+      <div class="card" style="border-top:3px solid var(--accent2);">
+        <h3>⚙️ 配置即生效</h3>
+        <p style="font-size:.88rem">任何配置变更（代理规则、服务端设置）都会立即触发 DB→TOML 管道：读 DB → 渲染 TOML → 原子写入文件 → 通知 frpc/frps 热重载。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 架构图 -->
+  <section id="arch">
+    <h2>系统架构 <span class="tag">分层视图</span></h2>
+    <p class="section-intro">从用户浏览器到 FRP 进程，共 4 层：前端 SPA、HTTP API 层、核心服务层、外部进程层。</p>
+
+    <div class="arch-diagram">
+      <!-- 浏览器层 -->
+      <div class="arch-row cols-3">
+        <div class="arch-cell full accent-blue">
+          <div class="label">Layer 1 · 前端</div>
+          <div class="name">Vue 3 SPA（嵌入在 Go 二进制内）</div>
+          <div class="desc">Naive UI · Pinia 状态管理 · Vue Router · Axios（自动附加 CSRF token）· Vite 构建 → dist/ → embed.FS</div>
+        </div>
+      </div>
+
+      <div class="arch-arrow">↕ HTTP（同源，无跨域，Cookie Session）</div>
+
+      <!-- HTTP 中间件层 -->
+      <div class="arch-row cols-4">
+        <div class="arch-cell accent-purple">
+          <div class="label">Middleware</div>
+          <div class="name">ReadyGate</div>
+          <div class="desc">启动期间返回 503 + Retry-After: 2</div>
+        </div>
+        <div class="arch-cell accent-purple">
+          <div class="label">Middleware</div>
+          <div class="name">SessionAuth</div>
+          <div class="desc">Cookie 验证 session，未登录 → 401</div>
+        </div>
+        <div class="arch-cell accent-purple">
+          <div class="label">Middleware</div>
+          <div class="name">CSRF</div>
+          <div class="desc">写方法检查 X-CSRF-Token header</div>
+        </div>
+        <div class="arch-cell accent-purple">
+          <div class="label">Middleware</div>
+          <div class="name">RateLimiter</div>
+          <div class="desc">登录 5 次失败 → 429 + Retry-After</div>
+        </div>
+      </div>
+
+      <!-- API handlers -->
+      <div class="arch-row cols-4">
+        <div class="arch-cell accent-green">
+          <div class="label">Handler</div>
+          <div class="name">Auth</div>
+          <div class="desc">setup · login · logout · me · csrf · changePassword</div>
+        </div>
+        <div class="arch-cell accent-green">
+          <div class="label">Handler</div>
+          <div class="name">Config</div>
+          <div class="desc">proxies (CRUD) · server · client · mode</div>
+        </div>
+        <div class="arch-cell accent-green">
+          <div class="label">Handler</div>
+          <div class="name">Process</div>
+          <div class="desc">proc start · stop · restart · status</div>
+        </div>
+        <div class="arch-cell accent-green">
+          <div class="label">Handler</div>
+          <div class="name">System / Logs</div>
+          <div class="desc">system/ready · logs/frpc · logs/frps</div>
+        </div>
+      </div>
+
+      <div class="arch-arrow">↕</div>
+
+      <!-- 核心服务 -->
+      <div class="arch-row cols-3">
+        <div class="arch-cell accent-go">
+          <div class="label">Core Service</div>
+          <div class="name">Storage (SQLite)</div>
+          <div class="desc">users · proxies · kv 表<br>argon2id 密码哈希<br>乐观锁（version 字段）<br>损坏自动改名+重建</div>
+        </div>
+        <div class="arch-cell accent-go">
+          <div class="label">Core Service</div>
+          <div class="name">Config Pipeline</div>
+          <div class="desc">DB → frpconf.Render() → AtomicWrite(frpc.toml / frps.toml) → ApplyConfigChange<br>每次配置写入同步触发</div>
+        </div>
+        <div class="arch-cell accent-go">
+          <div class="label">Core Service</div>
+          <div class="name">ProcMgr</div>
+          <div class="desc">Start / Stop / Restart<br>状态机：stopped → starting → running → stopping<br>frpcadmin 热重载（无需重启）</div>
+        </div>
+      </div>
+
+      <div class="arch-arrow">↕ 子进程（os/exec）</div>
+
+      <!-- 外部进程 -->
+      <div class="arch-row cols-2">
+        <div class="arch-cell accent-orange">
+          <div class="label">External Process</div>
+          <div class="name">frpc（FRP 客户端）</div>
+          <div class="desc">读 runtime/frpc.toml · 将本地端口穿透到 frps 服务端<br>admin API：http://127.0.0.1:7400（热重载用）</div>
+        </div>
+        <div class="arch-cell accent-orange">
+          <div class="label">External Process</div>
+          <div class="name">frps（FRP 服务端）</div>
+          <div class="desc">读 runtime/frps.toml · 接受 frpc 连接，暴露公网端口<br>dashboard：可选，端口 7500</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 模块详解 -->
+  <section id="components">
+    <h2>模块详解 <span class="tag">internal/</span></h2>
+    <div class="cards">
+      <div class="card">
+        <h3>httpapi</h3>
+        <div class="path">internal/httpapi/</div>
+        <ul>
+          <li>router.go — chi 路由 + 中间件链</li>
+          <li>handlers_auth.go — setup/login/logout</li>
+          <li>handlers_proxies.go — 代理 CRUD</li>
+          <li>handlers_server.go — frpc/frps 配置</li>
+          <li>handlers_mode.go — 自动启动开关</li>
+          <li>handlers_proc.go — 进程控制</li>
+          <li>config_helper.go — DB→TOML 管道</li>
+          <li>middleware.go — ReadyGate/CSRF/Session</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>storage</h3>
+        <div class="path">internal/storage/</div>
+        <ul>
+          <li>store.go — Open / migrate / Close</li>
+          <li>proxies.go — UpsertProxy / ListProxies / Delete（乐观锁）</li>
+          <li>kv.go — KVGet / KVSet（键值对）</li>
+          <li>users.go — CreateUser / CheckPassword</li>
+          <li>migrations/ — SQL 迁移文件</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>procmgr</h3>
+        <div class="path">internal/procmgr/</div>
+        <ul>
+          <li>manager.go — Start/Stop/Restart/StatusAll</li>
+          <li>状态机：stopped/starting/running/stopping/error</li>
+          <li>ApplyConfigChange — 触发 frpcadmin reload</li>
+          <li>Shutdown — 优雅关闭所有子进程</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>frpconf</h3>
+        <div class="path">internal/frpconf/</div>
+        <ul>
+          <li>render.go — RenderFrpc / RenderFrps</li>
+          <li>使用 go-toml/v2 生成 frpc.toml / frps.toml</li>
+          <li>AtomicWrite — 写临时文件再 rename，防损坏</li>
+          <li>支持 webServer.* 段（frpc admin API）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>auth</h3>
+        <div class="path">internal/auth/</div>
+        <ul>
+          <li>argon2id 密码哈希（m=64MiB/t=3/p=2）</li>
+          <li>session.go — Cookie session 管理（12h TTL）</li>
+          <li>csrf.go — GenerateCSRFToken / 验证</li>
+          <li>ratelimit.go — KV 存储的登录限速</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>binloc</h3>
+        <div class="path">internal/binloc/</div>
+        <ul>
+          <li>查找 frpc / frps 二进制位置</li>
+          <li>Windows: frp_win/frpc.exe</li>
+          <li>Linux: frp_linux/frpc</li>
+          <li>Missing() — 缺失的二进制列表</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>assets</h3>
+        <div class="path">internal/assets/</div>
+        <ul>
+          <li><code>//go:embed all:dist</code></li>
+          <li>Handler() — 服务 SPA 静态资源</li>
+          <li>未知路径 → 返回 index.html（Vue Router history mode）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>frpcadmin</h3>
+        <div class="path">internal/frpcadmin/</div>
+        <ul>
+          <li>调用 frpc admin API（http://127.0.0.1:7400）</li>
+          <li>POST /api/reload — 热重载配置无需重启 frpc</li>
+          <li>凭据持久化在 kv.frpc.admin</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>logtail</h3>
+        <div class="path">internal/logtail/</div>
+        <ul>
+          <li>tail.go — 读日志文件末尾 N 行</li>
+          <li>支持 offset 增量读取</li>
+          <li>GET /api/v1/logs/{kind}?lines=500</li>
+          <li>GET /api/v1/logs/{kind}?offset=X（增量）</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 前端结构 -->
+  <section>
+    <h2>前端结构 <span class="tag">web/src/</span></h2>
+    <div class="cards" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">
+      <div class="card">
+        <h3>📄 Pages</h3>
+        <ul>
+          <li>Setup.vue — 首次初始化向导</li>
+          <li>Login.vue — 登录（含限速倒计时）</li>
+          <li>Dashboard.vue — 进程状态 + 模式开关</li>
+          <li>Proxies.vue — 代理规则管理</li>
+          <li>Server.vue — frps 服务端配置</li>
+          <li>Client.vue — frpc 连接配置</li>
+          <li>Logs.vue — 日志查看</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🗄️ Stores (Pinia)</h3>
+        <ul>
+          <li>auth.ts — 登录状态 + CSRF token</li>
+          <li>app.ts — 系统 ready + 二进制缺失</li>
+          <li>proc.ts — 进程状态轮询（2s）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🔌 API 层</h3>
+        <ul>
+          <li>client.ts — axios 实例 + 拦截器</li>
+          <li>auth.ts · mode.ts · proxies.ts</li>
+          <li>server.ts · frpclient.ts</li>
+          <li>proc.ts · logs.ts · system.ts</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>🧩 Components</h3>
+        <ul>
+          <li>AppLayout.vue — 导航 + 布局</li>
+          <li>StatusBadge.vue — 进程状态徽章</li>
+          <li>ProxyForm.vue — 代理规则表单</li>
+          <li>LogViewer.vue — 日志滚动查看</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 数据流 -->
+  <section id="flow">
+    <h2>核心数据流 <span class="tag">配置变更如何生效</span></h2>
+    <p class="section-intro">从用户点击"保存"到 FRP 进程收到新配置，完整链路如下：</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="num">1</div>
+        <div class="body">
+          <h3>用户提交配置</h3>
+          <p>前端发送 <code>PUT /api/v1/proxies/{id}</code>（或 /server、/client）请求，携带 <code>X-CSRF-Token</code> header 和 session cookie。</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num">2</div>
+        <div class="body">
+          <h3>Handler 写入 SQLite</h3>
+          <p>handler 校验参数后调用 <code>store.UpsertProxy()</code> 或 <code>store.KVSet()</code> 写入数据库，乐观锁（version 字段）防并发冲突。</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num">3</div>
+        <div class="body">
+          <h3>触发 DB→TOML 管道</h3>
+          <p>handler 同步调用 <code>applyConfigBestEffort(ctx, "frpc")</code>，进入 <code>renderAndApplyFrpc()</code>：从 KV 读 serverConn + 从 DB 读已启用代理列表。</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num">4</div>
+        <div class="body">
+          <h3>渲染并原子写入 TOML</h3>
+          <p>调用 <code>frpconf.RenderFrpc(input)</code> 生成 TOML 内容，再通过 <code>frpconf.AtomicWrite(path, data)</code> 写入 <code>runtime/frpc.toml</code>（先写 .tmp 再 rename，防写入一半损坏）。</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num">5</div>
+        <div class="body">
+          <h3>通知 frpc 热重载</h3>
+          <p>调用 <code>procmgr.ApplyConfigChange("frpc")</code>，ProcMgr 通过 frpcadmin 调用 frpc admin API <code>POST /api/reload</code>，frpc 无需重启即可加载新配置。</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="num">6</div>
+        <div class="body">
+          <h3>前端更新状态</h3>
+          <p>API 返回 200，前端更新本地状态；进程状态由独立 2s 轮询（<code>GET /api/v1/proc/status</code>）保持同步。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:1.5rem">
+      <strong>模式切换（Dashboard 开关）：</strong> PUT /api/v1/mode 除了写 KV 外，还会立即执行 applyModeToProc：先写 TOML，再调用 ProcMgr.Start/Stop，并将 <code>mode.frpc.enabled</code> 持久化到 KV，重启后自动恢复（AC-9）。
+    </div>
+  </section>
+
+  <!-- 启动流程 -->
+  <section>
+    <h2>启动序列 <span class="tag">main.go</span></h2>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="num" style="background:var(--accent3)">①</div>
+        <div class="body"><h3>加载 appconf</h3><p>读 frp_easy.toml，解析 UIBindAddr / UIPort / DataDir / LogDir。</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--accent3)">②</div>
+        <div class="body"><h3>初始化 Storage</h3><p>storage.Open(dataDir) 打开/创建 SQLite，运行 SQL 迁移。数据库损坏时自动改名 + 重建（AC-12）。</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--accent3)">③</div>
+        <div class="body"><h3>初始化服务层</h3><p>binloc.NewDefault → procmgr.New（注入 ConfigPaths + frpcadmin reloader）→ auth.NewRateLimiter。</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--accent3)">④</div>
+        <div class="body"><h3>启动 HTTP 服务器</h3><p>httpapi.New(deps) 构建 chi router → net.Listen → srv.Serve（ReadyGate 此时还在拦截，返回 503）。</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--accent3)">⑤</div>
+        <div class="body"><h3>自动恢复进程（AC-9）</h3><p>读 KV mode.frpc.enabled / mode.frps.enabled，若为 true 且二进制存在则自动 Start。</p></div>
+      </div>
+      <div class="flow-step">
+        <div class="num" style="background:var(--accent3)">⑥</div>
+        <div class="body"><h3>开放 ReadyGate</h3><p>ready.Store(true)，所有 API 请求正常处理。监听 SIGINT/SIGTERM，收到信号后优雅关停子进程 → HTTP server。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- API 路由 -->
+  <section id="api">
+    <h2>API 路由表 <span class="tag">/api/v1/</span></h2>
+    <div class="table-wrap">
+      <table class="api-table">
+        <thead><tr><th>方法</th><th>路径</th><th>功能</th><th>认证</th></tr></thead>
+        <tbody>
+          <tr><td><span class="method get">GET</span></td><td><code>/system/ready</code></td><td>系统状态 + 二进制缺失列表</td><td><span class="auth-badge auth-open">公开</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/setup</code></td><td>初始化管理员账户</td><td><span class="auth-badge auth-open">公开</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/auth/login</code></td><td>登录（限速 5次/IP）</td><td><span class="auth-badge auth-open">公开</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/auth/logout</code></td><td>注销 session</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/auth/password</code></td><td>修改密码</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/auth/me</code></td><td>当前用户信息</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/auth/csrf</code></td><td>获取 CSRF token</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/mode</code></td><td>读取自动启动开关状态</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method put">PUT</span></td><td><code>/mode</code></td><td>设置自动启动开关（立即启停）</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/proxies</code></td><td>列出所有代理规则</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/proxies</code></td><td>新建代理规则（上限 200 条）</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method put">PUT</span></td><td><code>/proxies/{id}</code></td><td>更新代理（含乐观锁 version）</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method delete">DELETE</span></td><td><code>/proxies/{id}</code></td><td>删除代理规则</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/server</code></td><td>读取 frps 配置（token 脱敏）</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method put">PUT</span></td><td><code>/server</code></td><td>保存 frps 配置 → 写 frps.toml</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/client</code></td><td>读取 frpc 服务端连接配置</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method put">PUT</span></td><td><code>/client</code></td><td>保存 frpc 连接配置 → 写 frpc.toml</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/proc/{kind}/start</code></td><td>启动 frpc 或 frps</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/proc/{kind}/stop</code></td><td>停止 frpc 或 frps</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/proc/{kind}/restart</code></td><td>重启 frpc 或 frps</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/proc/status</code></td><td>全部进程状态（含 PID）</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/logs/{kind}</code></td><td>日志 tail / 增量读取</td><td><span class="auth-badge">需登录</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout">
+      <strong>CSRF 保护：</strong> 所有需登录的写方法（POST/PUT/DELETE）都需要在请求头携带 <code>X-CSRF-Token</code>，token 通过 <code>GET /auth/csrf</code> 获取后存在 Pinia store，axios 拦截器自动附加。
+    </div>
+  </section>
+
+  <!-- 安全设计 -->
+  <section id="security">
+    <h2>安全设计 <span class="tag">多层防护</span></h2>
+    <div class="sec-grid">
+      <div class="sec-item">
+        <div class="icon">🔐</div>
+        <h3>argon2id 密码哈希</h3>
+        <p>m=64MiB · t=3 · p=2，PHC 格式存储，暴力破解极难。</p>
+      </div>
+      <div class="sec-item">
+        <div class="icon">🛡️</div>
+        <h3>CSRF 防护</h3>
+        <p>所有写方法验证 X-CSRF-Token header，防跨站请求伪造。</p>
+      </div>
+      <div class="sec-item">
+        <div class="icon">🚦</div>
+        <h3>登录限速</h3>
+        <p>同 IP 5 次失败后 → 429 + Retry-After，存储在 SQLite KV。</p>
+      </div>
+      <div class="sec-item">
+        <div class="icon">🍪</div>
+        <h3>Session Cookie</h3>
+        <p>HttpOnly + SameSite=Strict，12 小时 TTL，服务端校验。</p>
+      </div>
+      <div class="sec-item">
+        <div class="icon">🔑</div>
+        <h3>Token 脱敏</h3>
+        <p>GET 返回的 authToken 替换为 "***"，需 ?reveal=1 才显示原值。</p>
+      </div>
+      <div class="sec-item">
+        <div class="icon">🌐</div>
+        <h3>默认仅本机</h3>
+        <p>UIBindAddr 默认 127.0.0.1，对外暴露时 stderr 打 WARN。</p>
+      </div>
+      <div class="sec-item">
+        <div class="icon">🔒</div>
+        <h3>原子文件写入</h3>
+        <p>TOML 先写 .tmp 再 rename，防止部分写入导致配置损坏。</p>
+      </div>
+      <div class="sec-item">
+        <div class="icon">🔄</div>
+        <h3>DB 损坏自恢复</h3>
+        <p>SQLite 损坏时自动改名备份 + 重建，用户重新 setup 即可。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 数据模型 -->
+  <section id="kv">
+    <h2>数据模型 <span class="tag">SQLite</span></h2>
+    <p class="section-intro">三张表：<code>users</code>（账户）、<code>proxies</code>（代理规则）、<code>kv</code>（键值对配置）。所有配置持久化在 KV 表。</p>
+
+    <h3 style="margin-bottom:.7rem;color:var(--accent)">KV 表关键 Key</h3>
+    <div class="table-wrap">
+      <table class="kv-table">
+        <thead><tr><th>Key</th><th>类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>frpc.serverConn</td><td>JSON</td><td>frpc 连接配置：serverAddr / serverPort / authMethod / authToken</td></tr>
+          <tr><td>frps.config</td><td>JSON</td><td>frps 配置：bindPort / authToken / dashboard 设置</td></tr>
+          <tr><td>frpc.admin</td><td>JSON</td><td>frpc admin API 凭据：addr / port / user / pass（自动生成）</td></tr>
+          <tr><td>mode.frpc.enabled</td><td>bool string</td><td>"true"/"false"，控制重启后是否自动启动 frpc（AC-9）</td></tr>
+          <tr><td>mode.frps.enabled</td><td>bool string</td><td>"true"/"false"，控制重启后是否自动启动 frps（AC-9）</td></tr>
+          <tr><td>auth.ratelimit.{ip}</td><td>JSON</td><td>登录失败计数 + 锁定时间，按 IP 存储</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:1.5rem;margin-bottom:.7rem;color:var(--accent)">proxies 表字段</h3>
+    <div class="table-wrap">
+      <table class="kv-table">
+        <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>id</td><td>INTEGER PK</td><td>自增主键</td></tr>
+          <tr><td>name</td><td>TEXT UNIQUE</td><td>代理名称，全局唯一</td></tr>
+          <tr><td>type</td><td>TEXT</td><td>tcp / udp / http / https</td></tr>
+          <tr><td>local_ip</td><td>TEXT</td><td>本地 IP，默认 127.0.0.1</td></tr>
+          <tr><td>local_port</td><td>INTEGER</td><td>本地端口（1-65535）</td></tr>
+          <tr><td>remote_port</td><td>INTEGER NULL</td><td>远端端口（仅 tcp/udp），UNIQUE 约束</td></tr>
+          <tr><td>custom_domains</td><td>JSON NULL</td><td>自定义域名数组（仅 http/https）</td></tr>
+          <tr><td>enabled</td><td>BOOLEAN</td><td>是否启用（false 时 TOML 中排除）</td></tr>
+          <tr><td>version</td><td>INTEGER</td><td>乐观锁版本号，PUT 时必填</td></tr>
+          <tr><td>updated_at</td><td>DATETIME</td><td>最后更新时间（UTC）</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 构建部署 -->
+  <section>
+    <h2>构建与部署</h2>
+    <div class="cards" style="grid-template-columns:1fr 1fr;">
+      <div class="card" style="border-top:3px solid var(--accent3);">
+        <h3>生产构建</h3>
+        <ul>
+          <li><code>cd web && npm run build</code> → dist/ 输出到 internal/assets/dist/</li>
+          <li><code>CGO_ENABLED=0 go build ./cmd/frp-easy</code> → 单一可执行文件</li>
+          <li>文件内嵌：<code>//go:embed all:dist</code></li>
+          <li>版本注入：<code>-ldflags "-X main.Version=x.y.z"</code></li>
+        </ul>
+      </div>
+      <div class="card" style="border-top:3px solid var(--accent2);">
+        <h3>开发模式</h3>
+        <ul>
+          <li><code>go run ./cmd/frp-easy</code>（后端，端口 8080）</li>
+          <li><code>cd web && npm run dev</code>（Vite，端口 5173）</li>
+          <li>Vite proxy：<code>/api → http://127.0.0.1:8080</code></li>
+          <li><code>scripts/start.sh</code> 或 <code>start.ps1</code> 一键启动</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout" style="margin-top:1rem">
+      <strong>运行依赖：</strong> 将 frp 二进制（frpc / frps）放入 <code>frp_win/</code>（Windows）或 <code>frp_linux/</code>（Linux）目录，与 frp_easy 可执行文件同级。数据库文件自动创建在 <code>dataDir</code>（默认 <code>.frp_easy/</code>），无需手动初始化。
+    </div>
+  </section>
+
+  <!-- 测试 -->
+  <section>
+    <h2>测试覆盖</h2>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card">
+        <h3>Go 集成测试</h3>
+        <p style="font-size:.88rem"><strong style="color:var(--accent);font-size:1.4rem">101</strong> 个测试用例，覆盖全部 14 个 AC，含 DB→TOML 管道、进程模式持久化、乐观锁冲突等场景。</p>
+      </div>
+      <div class="card">
+        <h3>Vitest 前端测试</h3>
+        <p style="font-size:.88rem"><strong style="color:var(--vue);font-size:1.4rem">45</strong> 个测试用例，覆盖 stores（auth/app/proc）、API 层（mode 等）、组件（StatusBadge/ProxyForm）。</p>
+      </div>
+      <div class="card">
+        <h3>对抗性测试</h3>
+        <p style="font-size:.88rem">SQL 注入 6 pattern、并发写入 UNIQUE 约束、超长输入（65字符名称）、不合法 JSON、端口越界等场景。</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+// 平滑滚动
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const id = a.getAttribute('href').slice(1);
+    if (!id) return;
+    e.preventDefault();
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  });
+});
+</script>
+</body>
+</html>

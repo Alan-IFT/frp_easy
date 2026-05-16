@@ -36,7 +36,7 @@ async function loadTail() {
   try {
     const res = await apiGetLogsTail(props.kind, 500)
     lines.value = res.lines
-    // 次回のインクリメンタル取得のためオフセットをリセット（0 = ファイル末尾から再取得）
+    // 重置偏移量以便下次增量获取（0 = 从文件末尾重新读取）
     currentOffset.value = 0
   } catch {
     // ignore

@@ -34,8 +34,20 @@ vendor/
 logs/
 data/
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
+
+# frp_easy runtime data
+.frp_easy/
+frp_easy.toml
+frp-easy.exe
+frp-easy
+
+# Test coverage
+coverage/
+coverage.out
 
 # Secrets
 .env

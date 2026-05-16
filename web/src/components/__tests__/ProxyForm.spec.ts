@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { useProxyForm } from '../../composables/useProxyForm'
 import type { ProxyInput } from '../../types'
 
-describe('useProxyForm composable（ProxyForm ロジック）', () => {
+describe('useProxyForm composable（ProxyForm 逻辑）', () => {
   const tcpInput = (): ProxyInput => ({
     name: 'test-proxy',
     type: 'tcp',
@@ -21,33 +21,33 @@ describe('useProxyForm composable（ProxyForm ロジック）', () => {
     enabled: true,
   })
 
-  it('type=tcp のとき isTcpUdp が true になる', () => {
+  it('type=tcp 时 isTcpUdp 为 true', () => {
     const { isTcpUdp, isHttpHttps } = useProxyForm(tcpInput())
     expect(isTcpUdp.value).toBe(true)
     expect(isHttpHttps.value).toBe(false)
   })
 
-  it('type=udp のとき isTcpUdp が true になる', () => {
+  it('type=udp 时 isTcpUdp 为 true', () => {
     const udpInput: ProxyInput = { ...tcpInput(), type: 'udp' }
     const { isTcpUdp, isHttpHttps } = useProxyForm(udpInput)
     expect(isTcpUdp.value).toBe(true)
     expect(isHttpHttps.value).toBe(false)
   })
 
-  it('type=http のとき isHttpHttps が true になる', () => {
+  it('type=http 时 isHttpHttps 为 true', () => {
     const { isTcpUdp, isHttpHttps } = useProxyForm(httpInput())
     expect(isTcpUdp.value).toBe(false)
     expect(isHttpHttps.value).toBe(true)
   })
 
-  it('type=https のとき isHttpHttps が true になる', () => {
+  it('type=https 时 isHttpHttps 为 true', () => {
     const httpsInput: ProxyInput = { ...httpInput(), type: 'https' }
     const { isTcpUdp, isHttpHttps } = useProxyForm(httpsInput)
     expect(isTcpUdp.value).toBe(false)
     expect(isHttpHttps.value).toBe(true)
   })
 
-  it('handleTypeChange でタイプ変更時に相互排他フィールドがクリアされる', () => {
+  it('handleTypeChange 切换类型时互斥字段被清空', () => {
     const { form, handleTypeChange } = useProxyForm(tcpInput())
     form.value.remotePort = 8080
     form.value.customDomains = ['test.com']
@@ -58,21 +58,21 @@ describe('useProxyForm composable（ProxyForm ロジック）', () => {
     expect(form.value.customDomains).toHaveLength(0)
   })
 
-  it('toProxyInput が tcp 型の場合 remotePort を含む', () => {
+  it('toProxyInput tcp 类型时包含 remotePort', () => {
     const { toProxyInput } = useProxyForm(tcpInput())
     const output = toProxyInput()
     expect(output.remotePort).toBe(6000)
     expect(output.customDomains).toBeUndefined()
   })
 
-  it('toProxyInput が http 型の場合 customDomains を含む', () => {
+  it('toProxyInput http 类型时包含 customDomains', () => {
     const { toProxyInput } = useProxyForm(httpInput())
     const output = toProxyInput()
     expect(output.customDomains).toEqual(['example.com'])
     expect(output.remotePort).toBeUndefined()
   })
 
-  it('syncFromInput で外部からフォームを更新できる', () => {
+  it('syncFromInput 可从外部更新表单', () => {
     const { form, syncFromInput } = useProxyForm(tcpInput())
     const newInput: ProxyInput = {
       name: 'updated',

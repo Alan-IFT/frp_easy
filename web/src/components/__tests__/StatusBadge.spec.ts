@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { getTagType, getStateLabel } from '../../composables/statusUtils'
 import type { ProcessState } from '../../types'
 
-describe('StatusBadge ロジック', () => {
+describe('StatusBadge 逻辑', () => {
   describe('getTagType', () => {
     it('running → success', () => {
       expect(getTagType('running' as ProcessState)).toBe('success')

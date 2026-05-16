@@ -11,7 +11,7 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 
-// Pinia 初期化後に CSRF トークンゲッターを登録
+// Pinia 初始化后注册 CSRF token 获取器
 const authStore = useAuthStore()
 setCsrfTokenGetter(() => authStore.csrfToken)
 

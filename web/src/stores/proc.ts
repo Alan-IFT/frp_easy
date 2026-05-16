@@ -35,7 +35,7 @@ export const useProcStore = defineStore('proc', {
         this.frpc = status.frpc
         this.frps = status.frps
       } catch {
-        // 一時エラーは無視
+        // 忽略临时错误
       }
     },
 

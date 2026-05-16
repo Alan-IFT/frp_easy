@@ -37,7 +37,7 @@
       />
     </n-form-item>
 
-    <!-- tcp/udp のみ -->
+    <!-- 仅 tcp/udp -->
     <n-form-item
       v-if="isTcpUdp"
       label="远程端口"
@@ -52,7 +52,7 @@
       />
     </n-form-item>
 
-    <!-- http/https のみ -->
+    <!-- 仅 http/https -->
     <n-form-item
       v-if="isHttpHttps"
       label="自定义域名"
@@ -96,12 +96,12 @@ const { form, isTcpUdp, isHttpHttps, handleTypeChange, toProxyInput, syncFromInp
   props.existingProxy,
 )
 
-// フォーム変更を親に通知
+// 通知父组件表单变更
 watch(form, () => {
   emit('update:modelValue', toProxyInput())
 }, { deep: true })
 
-// 親からの変更を反映
+// 响应父组件的变更
 watch(() => props.modelValue, (val) => {
   syncFromInput(val)
 }, { deep: true })
@@ -170,7 +170,7 @@ const rules: FormRules = {
   ],
 }
 
-// 親コンポーネントから validate を呼べるように expose
+// 暴露 validate 供父组件调用
 defineExpose({
   validate: () => formRef.value?.validate(),
 })

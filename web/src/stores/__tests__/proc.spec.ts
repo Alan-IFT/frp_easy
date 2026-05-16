@@ -43,19 +43,19 @@ describe('useProcStore', () => {
     store.stopPolling()
   })
 
-  it('初期状態は null', () => {
+  it('初始状态为 null', () => {
     const store = useProcStore()
     expect(store.frpc).toBeNull()
     expect(store.frps).toBeNull()
   })
 
-  it('frpcInfo のデフォルトは stopped', () => {
+  it('frpcInfo 默认状态为 stopped', () => {
     const store = useProcStore()
     expect(store.frpcInfo.state).toBe('stopped')
     expect(store.frpcInfo.kind).toBe('frpc')
   })
 
-  it('pollStatus が状態を更新する', async () => {
+  it('pollStatus 更新进程状态', async () => {
     vi.mocked(procApi.apiGetProcStatus).mockResolvedValueOnce(mockStatusAll)
 
     const store = useProcStore()
@@ -66,7 +66,7 @@ describe('useProcStore', () => {
     expect(store.frps?.state).toBe('stopped')
   })
 
-  it('pollStatus エラー時は状態が変わらない', async () => {
+  it('pollStatus 出错时状态不变', async () => {
     vi.mocked(procApi.apiGetProcStatus).mockRejectedValueOnce(new Error('network error'))
 
     const store = useProcStore()
@@ -76,7 +76,7 @@ describe('useProcStore', () => {
     expect(store.frps).toBeNull()
   })
 
-  it('startPolling が 2 秒ごとにポーリングする', async () => {
+  it('startPolling 每 2 秒轮询', async () => {
     vi.mocked(procApi.apiGetProcStatus).mockResolvedValue(mockStatusAll)
 
     const store = useProcStore()
@@ -94,7 +94,7 @@ describe('useProcStore', () => {
     store.stopPolling()
   })
 
-  it('stopPolling がポーリングを止める', async () => {
+  it('stopPolling 停止轮询', async () => {
     vi.mocked(procApi.apiGetProcStatus).mockResolvedValue(mockStatusAll)
 
     const store = useProcStore()
@@ -109,7 +109,7 @@ describe('useProcStore', () => {
     expect(vi.mocked(procApi.apiGetProcStatus)).toHaveBeenCalledTimes(1)
   })
 
-  it('startProc が frpc の状態を更新する', async () => {
+  it('startProc 更新 frpc 状态', async () => {
     const runningInfo: ProcessInfo = { kind: 'frpc', state: 'running', pid: 999, changedAt: '2026-05-16T00:00:00Z' }
     vi.mocked(procApi.apiStartProc).mockResolvedValueOnce(runningInfo)
 

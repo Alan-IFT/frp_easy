@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-// ModeState は GET/PUT /api/v1/mode の请求 / 响应体。
+// ModeState 是 GET/PUT /api/v1/mode 的请求/响应体。
 type ModeState struct {
 	Frpc bool `json:"frpc"`
 	Frps bool `json:"frps"`
@@ -40,7 +40,7 @@ func (h *handlers) putMode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, CodeInternal, "保存失败", "")
 		return
 	}
-	// B-7: モードスイッチ変更でプロセスを即時起動/停止
+	// B-7: 模式开关变更时立即启停进程
 	if h.deps.ProcMgr != nil {
 		h.applyModeToProc(r.Context(), "frpc", req.Frpc)
 		h.applyModeToProc(r.Context(), "frps", req.Frps)
@@ -48,10 +48,10 @@ func (h *handlers) putMode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, req)
 }
 
-// applyModeToProc は enabled=true なら TOML を書いてから Start、false なら Stop する。
+// applyModeToProc 若 enabled=true 则先写 TOML 再 Start，否则 Stop。
 func (h *handlers) applyModeToProc(ctx context.Context, kind string, enable bool) {
 	if enable {
-		h.applyConfigBestEffort(ctx, kind) // TOML を先に書く
+		h.applyConfigBestEffort(ctx, kind) // 先写 TOML
 		if _, err := h.deps.ProcMgr.Start(kind); err != nil {
 			if h.deps.Logger != nil {
 				h.deps.Logger.Warn("mode start failed", "kind", kind, "err", err)

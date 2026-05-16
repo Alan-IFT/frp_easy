@@ -32,17 +32,17 @@ router.beforeEach(async (to) => {
   const app = useAppStore()
   const auth = useAuthStore()
 
-  // system/ready を未取得の場合は取得する
+  // 若尚未获取 system/ready，先获取
   if (!app.ready) {
     await app.fetchReady()
   }
 
-  // 未初期化 → /setup へ（/setup 自体は例外）
+  // 未初始化 → 跳转 /setup（/setup 本身除外）
   if (!app.initialized && to.path !== '/setup') {
     return '/setup'
   }
 
-  // 初期化済みかつ未認証 → /login へ（/login 自体は例外）
+  // 已初始化但未登录 → 跳转 /login（/login 本身除外）
   if (app.initialized && to.path !== '/setup' && to.path !== '/login') {
     if (auth.user === null) {
       const loggedIn = await auth.checkMe()
@@ -52,7 +52,7 @@ router.beforeEach(async (to) => {
     }
   }
 
-  // 認証済みで /login や /setup にアクセス → /dashboard へ
+  // 已登录时访问 /login 或 /setup → 跳转 /dashboard
   if (auth.user !== null && (to.path === '/login' || to.path === '/setup')) {
     return '/dashboard'
   }

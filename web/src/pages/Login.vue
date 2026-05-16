@@ -21,7 +21,7 @@
         </n-form-item>
       </n-form>
 
-      <!-- 速率限制カウントダウン -->
+      <!-- 限速倒计时 -->
       <n-alert v-if="retryAfter > 0" type="error" style="margin-bottom: 12px">
         登录尝试过多，请 {{ retryAfter }} 秒后重试
       </n-alert>

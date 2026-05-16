@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------
-// frp_easy フロントエンド共通型定義
-// バックエンド API 契約 (02 §5.2) と厳密に一致させること
+// frp_easy 前端公共类型定义
+// 与后端 API 契约 (02 §5.2) 严格保持一致
 // -----------------------------------------------------------------------
 
 export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'error'
@@ -21,7 +21,7 @@ export interface ProxyInput {
   remotePort?: number
   customDomains?: string[]
   enabled?: boolean
-  version?: number  // PUT 時必須（楽観的ロック）
+  version?: number  // PUT 时必填（乐观锁）
 }
 
 export interface Proxy {

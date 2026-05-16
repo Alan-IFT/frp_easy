@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// TestHandler_ServesIndexHTML は embed.FS から dist/index.html が返ること、
-// および未知パスが SPA fallback で index.html を返すことを確認する。
+// TestHandler_ServesIndexHTML 验证 embed.FS 能返回 dist/index.html，
+// 且未知路径通过 SPA fallback 返回 index.html。
 func TestHandler_ServesIndexHTML(t *testing.T) {
 	srv := httptest.NewServer(Handler())
 	defer srv.Close()
@@ -31,7 +31,7 @@ func TestHandler_ServesIndexHTML(t *testing.T) {
 	}
 }
 
-// TestHandler_ContentType は index.html が text/html を返すことを確認する。
+// TestHandler_ContentType 验证 index.html 返回 text/html 内容类型。
 func TestHandler_ContentType(t *testing.T) {
 	srv := httptest.NewServer(Handler())
 	defer srv.Close()

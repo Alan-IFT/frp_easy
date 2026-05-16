@@ -7,7 +7,7 @@
           v{{ appStore.version }}
         </n-text>
         <div style="flex: 1" />
-        <!-- バイナリ欠損バナー -->
+        <!-- 二进制缺失横幅 -->
         <n-alert
           v-if="appStore.binMissing.length > 0"
           type="warning"
