@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>frp_easy 项目状况总览</title>
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #212529;
+  background: #ffffff;
+}
+
+/* ===== Header ===== */
+.site-header {
+  background: #343a40;
+  color: #ffffff;
+  padding: 1.25rem 2rem;
+}
+.site-header h1 { font-size: 1.5rem; font-weight: 700; }
+.site-header .meta {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.version-badge {
+  display: inline-block;
+  background: #0d6efd;
+  color: #fff;
+  border-radius: 4px;
+  padding: 0 0.5em;
+  font-size: 0.8rem;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+/* ===== Layout ===== */
+.layout {
+  display: flex;
+  min-height: calc(100vh - 80px);
+}
+
+/* ===== TOC Sidebar ===== */
+.toc {
+  width: 210px;
+  min-width: 210px;
+  background: #f8f9fa;
+  border-right: 1px solid #dee2e6;
+  padding: 1.5rem 1rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.toc h2 {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6c757d;
+  margin-bottom: 0.75rem;
+}
+.toc ul { list-style: none; }
+.toc ul li { margin-bottom: 0.25rem; }
+.toc a {
+  display: block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  color: #495057;
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s;
+}
+.toc a:hover {
+  background: #e9ecef;
+  color: #0d6efd;
+}
+
+/* ===== Content Area ===== */
+.content {
+  flex: 1;
+  padding: 2rem 2.5rem;
+  max-width: 960px;
+}
+
+/* ===== Section ===== */
+.section {
+  margin-bottom: 3rem;
+}
+.section h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #343a40;
+  border-bottom: 2px solid #dee2e6;
+  padding-bottom: 0.4rem;
+  margin-bottom: 1.2rem;
+}
+.section h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #495057;
+  margin: 1.2rem 0 0.6rem;
+}
+p { margin-bottom: 0.75rem; }
+
+/* ===== Tables ===== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+thead th {
+  background: #343a40;
+  color: #fff;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+}
+tbody tr:nth-child(even) { background: #f8f9fa; }
+tbody td { padding: 0.45rem 0.75rem; border-bottom: 1px solid #dee2e6; vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+
+/* ===== Priority / Impact Badges ===== */
+.badge {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 0.1em 0.55em;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-high   { background: #dc3545; color: #fff; }
+.badge-medium { background: #fd7e14; color: #fff; }
+.badge-low    { background: #6c757d; color: #fff; }
+.badge-info   { background: #0d6efd; color: #fff; }
+.badge-green  { background: #198754; color: #fff; }
+
+/* ===== Tech Stack Cards ===== */
+.stack-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.stack-card {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  font-size: 0.88rem;
+}
+.stack-card strong { display: block; color: #343a40; margin-bottom: 0.15rem; }
+.stack-card span { color: #6c757d; font-size: 0.82rem; }
+
+/* ===== Baseline Grid ===== */
+.baseline-grid {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.baseline-card {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 1rem 1.5rem;
+  text-align: center;
+  min-width: 130px;
+}
+.baseline-card .number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #0d6efd;
+  line-height: 1;
+}
+.baseline-card .label {
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin-top: 0.3rem;
+}
+
+/* ===== Update Flow ===== */
+.code-block {
+  background: #f1f3f5;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85rem;
+  overflow-x: auto;
+  margin-bottom: 0.75rem;
+}
+
+/* ===== Warning box ===== */
+.warning-box {
+  background: #fff3cd;
+  border-left: 4px solid #fd7e14;
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #664d03;
+}
+.warning-box strong { display: block; margin-bottom: 0.25rem; }
+
+/* ===== Responsive ===== */
+@media (max-width: 700px) {
+  .toc { display: none; }
+  .content { padding: 1.25rem; }
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <h1>frp_easy 项目状况总览 <span class="version-badge">v0.1.0</span></h1>
+  <div class="meta">更新日期：2026-05-16 &nbsp;|&nbsp; Go + Vue 3 + SQLite 单二进制 FRP Web 管理 UI</div>
+</header>
+
+<div class="layout">
+
+  <!-- ===== 左侧导航 TOC ===== -->
+  <nav class="toc" aria-label="页面目录">
+    <h2>目录</h2>
+    <ul>
+      <li><a href="#sec-1">§1 技术栈一览</a></li>
+      <li><a href="#sec-2">§2 已交付功能</a></li>
+      <li><a href="#sec-3">§3 架构模块表</a></li>
+      <li><a href="#sec-4">§4 测试基线</a></li>
+      <li><a href="#sec-5">§5 技术债清单</a></li>
+      <li><a href="#sec-6">§6 优化建议清单</a></li>
+      <li><a href="#sec-7">§7 已知后续事项</a></li>
+      <li><a href="#sec-8">§8 更新流程说明</a></li>
+    </ul>
+  </nav>
+
+  <!-- ===== 右侧内容区 ===== -->
+  <main class="content">
+
+    <!-- §1 技术栈一览 -->
+    <section class="section" id="sec-1">
+      <h2>§1 技术栈一览</h2>
+      <div class="stack-grid">
+        <div class="stack-card">
+          <strong>Go 1.25</strong>
+          <span>后端语言；CGO_ENABLED=0 静态编译</span>
+        </div>
+        <div class="stack-card">
+          <strong>Vue 3 + Vite</strong>
+          <span>前端 SPA；TypeScript + Pinia + Naive UI</span>
+        </div>
+        <div class="stack-card">
+          <strong>SQLite</strong>
+          <span>via modernc.org/sqlite（纯 Go，无 CGo）</span>
+        </div>
+        <div class="stack-card">
+          <strong>go-chi/chi v5</strong>
+          <span>HTTP 路由器 + 中间件链</span>
+        </div>
+        <div class="stack-card">
+          <strong>argon2id</strong>
+          <span>密码哈希（m=64MiB / t=3 / p=2）</span>
+        </div>
+        <div class="stack-card">
+          <strong>Naive UI</strong>
+          <span>Vue 3 组件库</span>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>构建产物</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>bin/frp-easy（Linux）</td><td>单静态二进制，内嵌前端 SPA（embed.FS）</td></tr>
+          <tr><td>bin/frp-easy.exe（Windows）</td><td>同上，Windows x64 交叉编译</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §2 已交付功能 -->
+    <section class="section" id="sec-2">
+      <h2>§2 已交付功能</h2>
+
+      <h3>T-001 · web-ui-mvp（核心 Web UI）</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>功能</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>setup 向导</td><td>首次启动自动跳转 /setup，argon2id 密码哈希，session 自动登录</td></tr>
+          <tr><td>2</td><td>frpc/frps 进程控制</td><td>启动 / 停止 / 重启，状态轮询（2 秒），PID 显示</td></tr>
+          <tr><td>3</td><td>模式自动启动</td><td>NSwitch 切换，mode.{kind}.enabled KV 持久化，重启后自动恢复</td></tr>
+          <tr><td>4</td><td>frpc 客户端配置</td><td>serverAddr / serverPort / authMethod / authToken</td></tr>
+          <tr><td>5</td><td>frps 服务端配置</td><td>bindPort / authToken / dashboard，token 脱敏显示</td></tr>
+          <tr><td>6</td><td>代理规则管理</td><td>tcp / udp / http / https，增删改查，200 条上限，乐观锁</td></tr>
+          <tr><td>7</td><td>DB→TOML 管道</td><td>配置变更即时写 frpc.toml / frps.toml，原子写入，ApplyConfigChange 热重载</td></tr>
+          <tr><td>8</td><td>日志查看</td><td>tail 500 行 + 2 秒增量轮询，frpc / frps 独立页面</td></tr>
+          <tr><td>9</td><td>认证与安全</td><td>session cookie，CSRF token，5 次失败 429 + Retry-After，argon2id</td></tr>
+        </tbody>
+      </table>
+
+      <h3>T-002 · zero-config-quickstart（零配置快速上手）</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>功能</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>frp 二进制自动下载</td><td>首次启动缺失 frpc/frps 时 UI 顶部弹出横幅，一键异步下载（GitHub Releases），进度条实时显示 0–100%，成功后自动消失，失败时显示手动下载链接</td></tr>
+          <tr><td>2</td><td>部署向导</td><td>新安装自动跳转 /wizard，3 步流程（选角色 → 填配置 → 完成），支持 frpc-only / frps-only / 两者，wizard.handled 防重复弹出</td></tr>
+          <tr><td>3</td><td>公网 IP 自动检测</td><td>/server 页面"检测公网 IP"按钮，调用 ipify/my-ip.io，超时 3 秒，结果仅展示不自动填充</td></tr>
+          <tr><td>4</td><td>防火墙提示 UI</td><td>FirewallHint 组件，按协议（tcp/udp）过滤 ufw + iptables 命令，含"复制全部"按钮，http/https 不显示</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §3 架构模块表 -->
+    <section class="section" id="sec-3">
+      <h2>§3 架构模块表</h2>
+      <p>来源：<code>docs/dev-map.md</code> §功能在哪里</p>
+      <table>
+        <thead>
+          <tr><th>功能区域</th><th>文件</th><th>约定</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>程序入口</td><td>cmd/frp-easy/main.go</td><td>启动序列：appconf → storage → binloc/procmgr/ratelimiter → HTTP server → ReadyGate → 自动恢复</td></tr>
+          <tr><td>应用配置（UI 服务自身）</td><td>internal/appconf/config.go</td><td>AppConfig{UIBindAddr, UIPort, DataDir, LogDir}；Load/Validate/ListenAddr；toml 不存在时写默认</td></tr>
+          <tr><td>嵌入前端资源</td><td>internal/assets/assets.go</td><td>//go:embed all:dist 嵌入 Vue SPA；dev 阶段返回 404 占位</td></tr>
+          <tr><td>密码哈希 / 限流</td><td>internal/auth/</td><td>argon2id / VerifyPassword / GenerateSessionToken / GenerateCSRFToken / RateLimiter</td></tr>
+          <tr><td>FRP 二进制定位</td><td>internal/binloc/binloc.go</td><td>NewDefault(root) 按 runtime.GOOS 选 frp_win/frp_linux；Missing() 反馈缺失项</td></tr>
+          <tr><td>FRP 二进制自动下载（T-002）</td><td>internal/downloader/downloader.go</td><td>New(root, logger) *Manager；Start(kind)；Status(kind)；异步 goroutine，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御</td></tr>
+          <tr><td>frpc admin 客户端</td><td>internal/frpcadmin/client.go</td><td>Reload(ctx, strictConfig) / Status(ctx)；5s 超时；basic auth</td></tr>
+          <tr><td>DB→TOML 渲染</td><td>internal/frpconf/render.go</td><td>RenderFrpc / RenderFrps / AtomicWrite；字段名严格对齐 FRP camelCase TOML 上游</td></tr>
+          <tr><td>HTTP 路由层</td><td>internal/httpapi/router.go</td><td>chi router；中间件链 ReadyGate→Recover→RequestID→Logger→CORS→SessionAuth→CSRF；T-001: 22 条路由；T-002: +5 条</td></tr>
+          <tr><td>日志尾部读取</td><td>internal/logtail/tail.go</td><td>TailLines(path, n) / ReadFrom(path, offset) 增量 + 新 offset</td></tr>
+          <tr><td>子进程生命周期</td><td>internal/procmgr/manager.go</td><td>Manager；Start/Stop/Restart/Status/Shutdown；supervisor goroutine；ApplyConfigChange</td></tr>
+          <tr><td>数据库迁移（权威 SQL）</td><td>migrations/*.up.sql</td><td>文件名 NNNN_slug.up.sql / .down.sql；绝不修改已合并迁移；新改动 = 新文件</td></tr>
+          <tr><td>持久化层（连接 / 迁移引擎 / DAO）</td><td>internal/storage/*.go</td><td>Open / Close / GetAdmin / SetAdmin / CreateSession / GetSession / ListProxies / UpsertProxy / KVGet / KVSet 等</td></tr>
+          <tr><td>迁移嵌入副本</td><td>internal/storage/sqlmigrations/*.sql</td><td>migrations/ 的字节级镜像；//go:embed 编入二进制；TestEmbeddedMigrations_MatchDisk 防 drift</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §4 测试基线 -->
+    <section class="section" id="sec-4">
+      <h2>§4 测试基线</h2>
+      <p>截至 T-002 交付（commit 1138694）：</p>
+      <div class="baseline-grid">
+        <div class="baseline-card">
+          <div class="number">117</div>
+          <div class="label">Go 测试（全部 PASS）</div>
+        </div>
+        <div class="baseline-card">
+          <div class="number">45</div>
+          <div class="label">前端测试（Vitest，PASS）</div>
+        </div>
+        <div class="baseline-card">
+          <div class="number">162</div>
+          <div class="label">合计测试用例</div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>verify_all 项</th><th>状态</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>PASS</td><td><span class="badge badge-green">12</span></td><td>Go 静态检查、测试、构建；harness 合规；配置文件检查等</td></tr>
+          <tr><td>SKIP</td><td><span class="badge badge-low">6</span></td><td>B.1–B.4（前端检查）/ C.1（E2E）/ D.1（OpenAPI）—— 见 TD-3</td></tr>
+          <tr><td>FAIL</td><td><span class="badge badge-green">0</span></td><td>无失败项</td></tr>
+        </tbody>
+      </table>
+
+      <table>
+        <thead>
+          <tr><th>版本节点</th><th>Go 测试</th><th>前端测试</th><th>合计</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>T-001 结束</td><td>101</td><td>45</td><td>146</td></tr>
+          <tr><td>T-002 结束（当前）</td><td>117</td><td>45</td><td>162</td></tr>
+          <tr><td>增量</td><td>+16</td><td>0</td><td>+16</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §5 技术债清单 -->
+    <section class="section" id="sec-5">
+      <h2>§5 技术债清单</h2>
+      <p>来源：代码审查 + T-001/T-002 交付报告。以下为已确认的 8 条技术债，本版本仅文档化，不修复。</p>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>描述</th><th>影响级别</th><th>来源</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>TD-1</strong></td>
+            <td><strong>向导路由守卫漏洞</strong>：router.ts 中 wizard 守卫仅在导航到 /dashboard 时触发。向导已处理后直接访问 /wizard 不被重定向，用户可重复进入向导流程</td>
+            <td><span class="badge badge-medium">中</span></td>
+            <td>T-002 delivery 已知问题</td>
+          </tr>
+          <tr>
+            <td><strong>TD-2</strong></td>
+            <td><strong>ParseIPFromJSON 重复</strong>：downloader.ParseIPFromJSON 已导出，但 handlers_system.go 的 fetchIPFromURL 有自己的内联 {"ip":"..."} JSON 解析，未复用</td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>T-002 delivery 已知问题</td>
+          </tr>
+          <tr>
+            <td><strong>TD-3</strong></td>
+            <td><strong>verify_all 前端检查永久 SKIP</strong>：verify_all.sh 在项目根查找 package.json，但 package.json 在 web/ 目录，导致 B.1 typecheck、B.2 lint、B.3 unit tests 全部 SKIP，前端质量门禁实际上未执行</td>
+            <td><span class="badge badge-medium">中</span></td>
+            <td>代码审查 + scripts/verification_history.log</td>
+          </tr>
+          <tr>
+            <td><strong>TD-4</strong></td>
+            <td><strong>Version 字符串写死</strong>：var Version = "0.1.0" — 若构建时未注入 -ldflags "-X main.Version=..." 则版本永远为 0.1.0，无法区分构建</td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>cmd/frp-easy/main.go</td>
+          </tr>
+          <tr>
+            <td><strong>TD-5</strong></td>
+            <td><strong>slog 单写模式</strong>：newLogger 在 logFile 非 nil 时仅写文件，stderr 不收 slog 输出（仅 startup banner 写 stderr）。go run 开发模式下 slog 日志写入文件，不便观察</td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>cmd/frp-easy/main.go:newLogger</td>
+          </tr>
+          <tr>
+            <td><strong>TD-6</strong></td>
+            <td><strong>dist/ .gitignore 歧义</strong>：根目录 .gitignore 的 dist/ 规则递归匹配，会忽略 internal/assets/dist/（Go embed 的输入目录）。克隆后须先 npm run build 才能 go build；此依赖关系已在 README "前置条件"和"更新流程"中文档化。根本修复策略（是否提交 dist/ 到 git）见 OPT-3</td>
+            <td><span class="badge badge-medium">中</span></td>
+            <td>build.sh + .gitignore + internal/assets/assets.go</td>
+          </tr>
+          <tr>
+            <td><strong>TD-7</strong></td>
+            <td><strong>auto-restore 时 TOML 缺失无预检</strong>：autoRestoreProcs 在 frpc.toml / frps.toml 不存在时直接 Start，子进程立即失败，状态标记为 error，UI 无法区分"配置未生成"与"进程崩溃"</td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>cmd/frp-easy/main.go:autoRestoreProcs</td>
+          </tr>
+          <tr>
+            <td><strong>TD-8</strong></td>
+            <td><strong>单 SQLite 连接并发限制</strong>：SetMaxOpenConns(1) 使所有读写串行化，适合 MVP（≤200 proxy）但在多 tab 高频轮询时（logs/proc/status 均 2s 轮询）会产生队列等待</td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>internal/storage/store.go</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §6 优化建议清单 -->
+    <section class="section" id="sec-6">
+      <h2>§6 优化建议清单</h2>
+      <p>以下 9 条优化建议来源于代码审查，按优先级分组。本版本仅文档化，不实现。</p>
+
+      <h3>高优先级（影响正确性或可观测性）</h3>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>OPT-1</strong></td>
+            <td><strong>修复 verify_all 前端路径</strong></td>
+            <td><span class="badge badge-high">高</span></td>
+            <td>修改 verify_all.sh 和 verify_all.ps1，切换到 web/ 目录执行 B.1–B.4 前端检查，使 45 个 frontend tests 真正进入质量门禁</td>
+          </tr>
+          <tr>
+            <td><strong>OPT-2</strong></td>
+            <td><strong>补全向导路由守卫</strong></td>
+            <td><span class="badge badge-high">高</span></td>
+            <td>在 router.ts 的 beforeEach 中，当 to.path === '/wizard' 且 wizard.handled === true 时重定向到 /dashboard，堵住 TD-1 漏洞</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>中优先级（改善开发体验和维护性）</h3>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>OPT-3</strong></td>
+            <td><strong>明确 dist/ git 追踪策略</strong></td>
+            <td><span class="badge badge-medium">中</span></td>
+            <td>方案 A：在 internal/assets/ 下加 .gitignore 内容为 !dist/（取消根规则），将构建产物提交到仓库，用户可直接 go build。方案 B：保持 dist/ 不提交，在 README 中明确"克隆后必须先 npm run build"。选一个方案并落实</td>
+          </tr>
+          <tr>
+            <td><strong>OPT-4</strong></td>
+            <td><strong>slog 双写（tee）</strong></td>
+            <td><span class="badge badge-medium">中</span></td>
+            <td>修改 newLogger 使用 io.MultiWriter 同时写文件和 stderr，使开发期 go run 和生产期 bin/frp-easy 都能在 stderr 看到日志</td>
+          </tr>
+          <tr>
+            <td><strong>OPT-5</strong></td>
+            <td><strong>版本注入标准化</strong></td>
+            <td><span class="badge badge-medium">中</span></td>
+            <td>修改 build.sh / build.ps1 读 git describe --tags --always 作为版本，注入 -ldflags "-X main.Version=..."；README 说明版本号由构建脚本管理</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>低优先级（代码质量和未来扩展）</h3>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>建议</th><th>优先级</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>OPT-6</strong></td>
+            <td><strong>ParseIPFromJSON 统一</strong></td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>将 handlers_system.go 内联解析改用 downloader.ParseIPFromJSON，消除 TD-2 重复代码</td>
+          </tr>
+          <tr>
+            <td><strong>OPT-7</strong></td>
+            <td><strong>健康检查端点</strong></td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>添加 GET /api/v1/health 返回 {"status":"ok","version":"..."} 供外部监控（Uptime Kuma、Nginx upstream_check 等）使用</td>
+          </tr>
+          <tr>
+            <td><strong>OPT-8</strong></td>
+            <td><strong>auto-restore TOML 预检</strong></td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>autoRestoreProcs 在 Start 之前检查对应 TOML 文件是否存在，不存在时记录 warn 并跳过，而非启动后失败</td>
+          </tr>
+          <tr>
+            <td><strong>OPT-9</strong></td>
+            <td><strong>OpenAPI Schema</strong></td>
+            <td><span class="badge badge-low">低</span></td>
+            <td>当前无 OpenAPI 文档（verify_all D.1 永久 SKIP）。添加 OpenAPI 3.x schema 可改善前后端契约可见性，并使 D.1 从 SKIP 变为 PASS</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §7 已知后续事项 -->
+    <section class="section" id="sec-7">
+      <h2>§7 已知后续事项</h2>
+      <p>以下两条来自 T-002 交付报告（docs/features/_archived/zero-config-quickstart/07_DELIVERY.md）：</p>
+      <table>
+        <thead>
+          <tr><th>事项</th><th>说明</th><th>建议处理</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>[MINOR] 向导路由守卫漏洞</strong></td>
+            <td>router.ts 中 wizard 守卫仅拦截 /dashboard 导航，向导完成后直接访问 /wizard 不被重定向，用户可重复进入向导流程</td>
+            <td>参见 OPT-2：在 router.ts beforeEach 中补 /wizard 已处理重定向逻辑</td>
+          </tr>
+          <tr>
+            <td><strong>ParseIPFromJSON 重复</strong></td>
+            <td>downloader 包中 ParseIPFromJSON 已导出，但 handlers_system.go 有自己的内联 JSON 解析，代码存在重复</td>
+            <td>参见 OPT-6：统一使用 downloader.ParseIPFromJSON</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §8 更新流程说明 -->
+    <section class="section" id="sec-8">
+      <h2>§8 更新流程说明</h2>
+
+      <div class="warning-box">
+        <strong>警告：仅 git pull + 重启旧二进制是不够的</strong>
+        二进制不变则更新不生效；跳过 npm run build 则前端仍为旧版本。
+      </div>
+
+      <h3>完整更新步骤（Linux / macOS）</h3>
+      <div class="code-block">git pull<br>bash scripts/build.sh<br># 以新二进制替换旧进程并重启</div>
+
+      <h3>完整更新步骤（Windows）</h3>
+      <div class="code-block">git pull<br>.\scripts\build.ps1<br># 以新二进制替换旧进程并重启</div>
+
+      <h3>原因说明</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>原因</th><th>技术细节</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>前端需重建</strong></td>
+            <td>internal/assets/dist/ 被 .gitignore 的 dist/ 规则排除，git pull 不会更新前端产物。前端 SPA 通过 //go:embed all:dist 嵌入 Go 二进制，build.sh 自动执行 npm run build</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>数据库迁移自动运行</strong></td>
+            <td>storage.Open() 在启动时对所有未应用的迁移执行 applyOne()，用户无需手动执行任何 SQL</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>配置文件向后兼容</strong></td>
+            <td>appconf.Load() 对现有 frp_easy.toml 缺失字段补默认值；frp_easy.toml 在 .gitignore 中，git pull 不覆盖用户配置</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>仅后端变更的简化路径</strong></td>
+            <td>若明确只有 Go 代码变更，可执行 CGO_ENABLED=0 go build ./cmd/frp-easy 后重启。不确定时始终使用 scripts/build.sh</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>

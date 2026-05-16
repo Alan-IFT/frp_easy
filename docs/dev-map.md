@@ -11,8 +11,10 @@
 ```
 frp_easy/
 ├── (项目根目录)
+├── README.md       ← 用户入口文档（安装、配置、更新、开发，T-003 新增）
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
 ├── docs/           ← SPEC、feature 文档、本导航、任务看板
+│   └── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增）
 ├── scripts/        ← verify_all、start、build、baseline、sync 辅助
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）

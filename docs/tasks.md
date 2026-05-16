@@ -12,6 +12,8 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-004 | tech-debt-cleanup | DELIVERED | 2026-05-16 | `docs/features/_archived/tech-debt-cleanup/` |
+| T-003 | readme-and-health-report | DELIVERED | 2026-05-16 | `docs/features/_archived/readme-and-health-report/` |
 | T-002 | zero-config-quickstart | DELIVERED | 2026-05-16 | `docs/features/_archived/zero-config-quickstart/` |
 | T-001 | web-ui-mvp | DELIVERED | 2026-05-16 | `docs/features/_archived/web-ui-mvp/` |
 
