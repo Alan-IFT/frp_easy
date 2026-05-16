@@ -42,8 +42,8 @@ data/
 # frp_easy runtime data
 .frp_easy/
 frp_easy.toml
-frp-easy.exe
-frp-easy
+/frp-easy.exe
+/frp-easy
 
 # Test coverage
 coverage/

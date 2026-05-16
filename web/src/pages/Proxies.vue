@@ -13,6 +13,9 @@
       style="margin-top: 16px"
     />
 
+    <!-- 防火墙提示（保存成功后展示） -->
+    <firewall-hint :ports="firewallPorts" :proto="firewallProto" />
+
     <!-- 新增/编辑弹窗 -->
     <n-modal
       v-model:show="showForm"
@@ -54,6 +57,7 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import ProxyForm from '../components/ProxyForm.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import FirewallHint from '../components/FirewallHint.vue'
 import { useProxiesStore } from '../stores/proxies'
 import { extractErrorMessage } from '../api/client'
 import type { Proxy, ProxyInput } from '../types'
@@ -67,6 +71,8 @@ const submitting = ref(false)
 const editingProxy = ref<Proxy | null>(null)
 const deletingProxy = ref<Proxy | null>(null)
 const proxyFormRef = ref<{ validate: () => Promise<void> } | null>(null)
+const firewallPorts = ref<number[]>([])
+const firewallProto = ref<'tcp' | 'udp' | 'both'>('both')
 
 const defaultFormData = (): ProxyInput => ({
   name: '',
@@ -125,14 +131,24 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
+    let savedProxy: Proxy
     if (editingProxy.value) {
-      await proxiesStore.updateProxy(editingProxy.value.id, formData.value)
+      savedProxy = await proxiesStore.updateProxy(editingProxy.value.id, formData.value)
       message.success('规则已更新')
     } else {
-      await proxiesStore.createProxy(formData.value)
+      savedProxy = await proxiesStore.createProxy(formData.value)
       message.success('规则已创建')
     }
     showForm.value = false
+
+    // Show firewall hint for tcp/udp proxies with a remotePort
+    if ((savedProxy.type === 'tcp' || savedProxy.type === 'udp') && savedProxy.remotePort) {
+      firewallPorts.value = [savedProxy.remotePort]
+      firewallProto.value = savedProxy.type === 'tcp' ? 'tcp' : 'udp'
+    } else {
+      // http/https: pass empty so FirewallHint auto-hides
+      firewallPorts.value = []
+    }
   } catch (e) {
     message.error(extractErrorMessage(e, '保存失败'))
   } finally {

@@ -8,6 +8,7 @@ import (
 	"github.com/frp-easy/frp-easy/internal/assets"
 	"github.com/frp-easy/frp-easy/internal/auth"
 	"github.com/frp-easy/frp-easy/internal/binloc"
+	"github.com/frp-easy/frp-easy/internal/downloader"
 	"github.com/frp-easy/frp-easy/internal/procmgr"
 	"github.com/frp-easy/frp-easy/internal/storage"
 
@@ -33,6 +34,9 @@ type Dependencies struct {
 	Logger      *slog.Logger
 	DevMode     bool   // true 时开 CORS（vite dev）
 	Version     string // 注入到 /system/ready
+	// Downloader manages async frp binary downloads (T-002).
+	// nil is safe: download endpoints will return 503.
+	Downloader *downloader.Manager
 }
 
 // FrpcAdminCreds 是 frpc admin API 凭据，持久化在 kv.frpc.admin。
@@ -97,6 +101,13 @@ func New(d Dependencies) http.Handler {
 			r.Get("/proc/status", h.procStatus)
 
 			r.Get("/logs/{kind}", h.logs)
+
+			// T-002: system utilities — public IP, binary download, wizard.
+			r.Get("/system/public-ip", h.systemPublicIP)
+			r.Post("/system/download-bin", h.downloadBin)
+			r.Get("/system/download-status/{kind}", h.downloadStatus)
+			r.Get("/wizard/status", h.wizardStatus)
+			r.Post("/wizard/complete", h.wizardComplete)
 		})
 	})
 
@@ -113,6 +124,8 @@ func New(d Dependencies) http.Handler {
 }
 
 // handlers 持有依赖，每个 handler 是方法。
+// C-1 gate: ipCache field must be declared here, not in handlers_system.go.
 type handlers struct {
-	deps Dependencies
+	deps    Dependencies
+	ipCache ipCache // process-scoped public IP cache (type defined in handlers_system.go)
 }

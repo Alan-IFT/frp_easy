@@ -42,7 +42,7 @@ fi
 
 # Step 1: harvest insights from 07_DELIVERY.md
 delivery_file="$task_dir/07_DELIVERY.md"
-declare -a harvested
+harvested=()
 if [[ -f "$delivery_file" ]]; then
     # Extract '## Insight' section bullets
     while IFS= read -r line; do
@@ -61,7 +61,7 @@ if [[ ! -f "$insight_index" ]]; then
     [[ "$DRY_RUN" == false ]] && touch "$insight_index"
 fi
 
-declare -a current
+current=()
 if [[ -f "$insight_index" ]]; then
     while IFS= read -r line; do
         current+=("$line")
@@ -69,14 +69,14 @@ if [[ -f "$insight_index" ]]; then
 fi
 
 total_after=$(( ${#current[@]} + ${#harvested[@]} ))
-declare -a rotated
+rotated=()
 if (( total_after > 30 )); then
     rotate_count=$(( total_after - 30 ))
     echo "Rotating $rotate_count old insight(s) to insight-history.md"
     for ((i=0; i<rotate_count; i++)); do
         rotated+=("${current[$i]}")
     done
-    declare -a remaining
+    remaining=()
     for ((i=rotate_count; i<${#current[@]}; i++)); do
         remaining+=("${current[$i]}")
     done

@@ -96,3 +96,24 @@ export interface LogsIncrementalResponse {
   data: string
   nextOffset: number
 }
+
+export interface DownloadState {
+  status: 'idle' | 'downloading' | 'success' | 'failed'
+  progress: number
+  error?: string
+}
+
+export interface PublicIPResponse {
+  ip?: string
+  error?: string
+  advisory?: string
+}
+
+export interface WizardStatus {
+  handled: boolean
+  shouldShow: boolean
+}
+
+export interface DownloadBinRequest {
+  kind: 'frpc' | 'frps'
+}

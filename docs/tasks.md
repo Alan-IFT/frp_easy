@@ -6,15 +6,14 @@
 
 ## 进行中
 
-| ID | Slug | 阶段 | mode | 开始 | 文档目录 |
-|---|---|---|---|---|---|
-| _(暂无)_ | | | | | |
+（暂无）
 
 ## 已完成
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
-| T-001 | web-ui-mvp | DELIVERED | 2026-05-16 | `docs/features/web-ui-mvp/` |
+| T-002 | zero-config-quickstart | DELIVERED | 2026-05-16 | `docs/features/_archived/zero-config-quickstart/` |
+| T-001 | web-ui-mvp | DELIVERED | 2026-05-16 | `docs/features/_archived/web-ui-mvp/` |
 
 ## 约定
 

@@ -2,10 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAppStore } from './stores/app'
 import { useAuthStore } from './stores/auth'
+import { useWizardStore } from './stores/wizard'
 
 const routes: RouteRecordRaw[] = [
   { path: '/setup', component: () => import('./pages/Setup.vue') },
   { path: '/login', component: () => import('./pages/Login.vue') },
+  { path: '/wizard', component: () => import('./pages/Wizard.vue') },
   {
     path: '/',
     component: () => import('./components/AppLayout.vue'),
@@ -55,6 +57,17 @@ router.beforeEach(async (to) => {
   // 已登录时访问 /login 或 /setup → 跳转 /dashboard
   if (auth.user !== null && (to.path === '/login' || to.path === '/setup')) {
     return '/dashboard'
+  }
+
+  // Wizard 检查：已登录且正在导航到 /dashboard 且本 session 未检查过
+  if (auth.user !== null && to.path === '/dashboard') {
+    const wizard = useWizardStore()
+    if (!wizard.checked) {
+      await wizard.checkWizard()
+      if (wizard.shouldShow) {
+        return '/wizard'
+      }
+    }
   }
 
   return true

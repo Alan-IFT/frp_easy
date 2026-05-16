@@ -24,9 +24,10 @@ frp_easy/
 │   ├── assets/     ← embed.FS 占位（dev 模式返回 404；Round 2 挂 dist/）
 │   ├── auth/       ← argon2id 哈希 / 会话 token / CSRF token / IP 限流
 │   ├── binloc/     ← runtime.GOOS 选 frp_win/ 或 frp_linux/ 二进制路径
+│   ├── downloader/ ← frp 二进制自动下载（T-002）：异步下载 tar.gz/zip，进度追踪，原子安装
 │   ├── frpcadmin/  ← frpc admin HTTP 客户端（/api/reload、/api/status）
 │   ├── frpconf/    ← DB → TOML 渲染器（AtomicWrite；camelCase 字段对齐 FRP 上游）
-│   ├── httpapi/    ← chi router + 全部 22 条 REST handler + 中间件链
+│   ├── httpapi/    ← chi router + 全部 REST handler（T-001: 22 条；T-002: +5 条）+ 中间件链
 │   ├── logtail/    ← TailLines + ReadFrom 增量读取子进程日志文件
 │   ├── procmgr/    ← frpc/frps 子进程生命周期（supervisor goroutine；跨平台 kill）
 │   └── storage/    ← SQLite 句柄 + 迁移引擎 + DAO（admin / sessions / kv / proxies）
@@ -41,38 +42,45 @@ frp_easy/
         ├── api/            ← axios クライアント + エンドポイント別ラッパー
         │   ├── client.ts   ← axios インスタンス；CSRF インターセプター；401 リダイレクト
         │   ├── auth.ts     ← /api/v1/auth/* / /api/v1/setup
-        │   ├── system.ts   ← /api/v1/system/ready
+        │   ├── system.ts   ← /api/v1/system/ready, /api/v1/system/public-ip
         │   ├── proxies.ts  ← /api/v1/proxies CRUD
         │   ├── server.ts   ← /api/v1/server (FrpsConfig)
         │   ├── frpclient.ts← /api/v1/client (FrpcServerConn)
         │   ├── proc.ts     ← /api/v1/proc/{kind}/start|stop|restart, /proc/status
         │   ├── logs.ts     ← /api/v1/logs/{kind} tail / incremental
-        │   └── mode.ts     ← /api/v1/mode
+        │   ├── mode.ts     ← /api/v1/mode
+        │   ├── downloader.ts← /api/v1/system/download-bin + download-status/{kind}
+        │   └── wizard.ts   ← /api/v1/wizard/status + /wizard/complete
         ├── stores/         ← Pinia ストア
         │   ├── auth.ts     ← user / csrfToken；login / logout / checkMe / fetchCsrf
         │   ├── proc.ts     ← frpc/frps ProcessInfo；2s ポーリング
         │   ├── proxies.ts  ← Proxy[] CRUD
         │   ├── app.ts      ← initialized / binMissing / version
+        │   ├── downloader.ts← frpc/frps DownloadState；1s ポーリング；downloadBin/startPolling
+        │   ├── wizard.ts   ← wizardHandled / shouldShow / checked；checkWizard / completeWizard
         │   └── __tests__/  ← Vitest ストアテスト
         ├── composables/    ← 再利用ロジック
         │   ├── statusUtils.ts  ← getTagType / getStateLabel (ProcessState → Naive UI 色)
         │   └── useProxyForm.ts ← ProxyForm フォームロジック (isTcpUdp / isHttpHttps 等)
         ├── components/
-        │   ├── AppLayout.vue    ← サイドナビ + ヘッダ + コンテンツ共通レイアウト
+        │   ├── AppLayout.vue    ← サイドナビ + ヘッダ + コンテンツ共通レイアウト（T-002: 下載ボタン追加）
         │   ├── StatusBadge.vue  ← ProcessState → 色付き NTag
         │   ├── ProxyForm.vue    ← Proxy 新規/編集フォーム（type 連動フィールド切り替え）
         │   ├── ConfirmDialog.vue← 破壊的操作の二次確認モーダル
         │   ├── LogViewer.vue    ← ログ表示（TailLines 初期表示 + 2s 増分ポーリング）
+        │   ├── FirewallHint.vue ← T-002: Linux ufw/iptables コマンドヒント（ports[] props）
+        │   ├── PublicIpDetector.vue← T-002: 公網 IP 検出ボタン + 結果表示
         │   └── __tests__/      ← Vitest コンポーネントテスト
         └── pages/
             ├── Setup.vue     ← 初回セットアップ（username + password）
             ├── Login.vue     ← ログイン（429 カウントダウン対応）
             ├── Dashboard.vue ← frpc/frps 状態バッジ + 起動/停止/再起動ボタン
-            ├── Proxies.vue   ← Proxy 一覧 + 新規/編集/削除（ConfirmDialog 経由）
-            ├── Server.vue    ← frps 設定フォーム（bindPort / authToken / dashboard）
+            ├── Proxies.vue   ← Proxy 一覧 + 新規/編集/削除（T-002: FirewallHint 追加）
+            ├── Server.vue    ← frps 設定フォーム（T-002: PublicIpDetector + FirewallHint 追加）
             ├── Client.vue    ← frpc 接続設定フォーム（serverAddr / serverPort / authToken）
             ├── Logs.vue      ← ログビューア（LogViewer コンポーネント利用）
-            └── Settings.vue  ← パスワード変更フォーム
+            ├── Settings.vue  ← パスワード変更フォーム
+            └── Wizard.vue    ← T-002: 部署向导（トップレベルルート /wizard，3ステップ）
 ```
 
 ## 功能在哪里
@@ -84,9 +92,10 @@ frp_easy/
 | 嵌入前端资源（占位） | `internal/assets/assets.go` | dev 阶段返回 404 占位；Round 2 改成 `//go:embed all:dist`。 |
 | 密码哈希 / 限流 | `internal/auth/` | `HashPassword`(argon2id m=64MiB/t=3/p=2) / `VerifyPassword` / `GenerateSessionToken` / `GenerateCSRFToken` / `RateLimiter`(5次/60s per IP 基于 kv)。 |
 | FRP 二进制定位 | `internal/binloc/binloc.go` | `NewDefault(root)` 按 `runtime.GOOS` 选 frp_win/frp_linux；Missing() 反馈缺失项（AC-13）。 |
+| FRP 二进制自动下载（T-002） | `internal/downloader/downloader.go` | `New(root, logger) *Manager`；`Start(kind) error`；`Status(kind) (DownloadState, bool)`。异步 goroutine 下载 tar.gz/zip，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御（R-2）。 |
 | frpc admin 客户端 | `internal/frpcadmin/client.go` | `Reload(ctx, strictConfig)` / `Status(ctx)`；5s 超时；basic auth。 |
 | DB → TOML 渲染 | `internal/frpconf/render.go` | `RenderFrpc` / `RenderFrps` / `AtomicWrite`；字段名严格对齐 FRP camelCase TOML 上游（见 02 附录 A）。 |
-| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。22 条路由。 |
+| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）。 |
 | 日志尾部读取 | `internal/logtail/tail.go` | `TailLines(path, n)` / `ReadFrom(path, offset)` 增量 + 新 offset。 |
 | 子进程生命周期 | `internal/procmgr/manager.go` | `Manager`；Start/Stop/Restart/Status/Shutdown；supervisor goroutine；Windows Kill / Linux SIGTERM→SIGKILL；ApplyConfigChange(frpc→reload/restart；frps→restart)。 |
 | 数据库迁移（权威 SQL） | `migrations/0001_init.up.sql` / `0001_init.down.sql` | 文件名 `NNNN_<slug>.up.sql / .down.sql`。**绝不修改已合并的迁移**；新改动 = 新文件。dev-db 分区 owned。 |

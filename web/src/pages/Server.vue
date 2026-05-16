@@ -9,6 +9,11 @@
         label-placement="left"
         label-width="140"
       >
+        <!-- 公网 IP 检测 -->
+        <n-form-item label=" " :show-feedback="false" style="margin-bottom: 8px">
+          <public-ip-detector />
+        </n-form-item>
+
         <n-form-item label="监听端口" path="bindPort">
           <n-input-number
             v-model:value="form.bindPort"
@@ -68,6 +73,9 @@
         </n-space>
       </template>
     </n-card>
+
+    <!-- 防火墙提示（保存成功后展示）；frps bindPort 和 dashboardPort 都是 TCP -->
+    <firewall-hint :ports="savedPorts" proto="tcp" />
   </div>
 </template>
 
@@ -80,10 +88,13 @@ import {
 import type { FormInst, FormRules } from 'naive-ui'
 import { apiGetServer, apiPutServer } from '../api/server'
 import { extractErrorMessage } from '../api/client'
+import PublicIpDetector from '../components/PublicIpDetector.vue'
+import FirewallHint from '../components/FirewallHint.vue'
 
 const message = useMessage()
 const formRef = ref<FormInst | null>(null)
 const saving = ref(false)
+const savedPorts = ref<number[]>([])
 
 const form = ref({
   bindPort: 7000,
@@ -144,6 +155,13 @@ async function handleSave() {
       dashboardPass: form.value.dashboardEnabled ? form.value.dashboardPass : undefined,
     })
     message.success('服务端配置已保存（重启 frps 后生效）')
+
+    // Build the list of ports to show firewall hint
+    const ports: number[] = [form.value.bindPort]
+    if (form.value.dashboardEnabled && form.value.dashboardPort) {
+      ports.push(form.value.dashboardPort)
+    }
+    savedPorts.value = ports
   } catch (e) {
     message.error(extractErrorMessage(e, '保存失败'))
   } finally {

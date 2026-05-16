@@ -36,6 +36,7 @@ import (
 	"github.com/frp-easy/frp-easy/internal/appconf"
 	"github.com/frp-easy/frp-easy/internal/auth"
 	"github.com/frp-easy/frp-easy/internal/binloc"
+	"github.com/frp-easy/frp-easy/internal/downloader"
 	"github.com/frp-easy/frp-easy/internal/frpcadmin"
 	"github.com/frp-easy/frp-easy/internal/httpapi"
 	"github.com/frp-easy/frp-easy/internal/procmgr"
@@ -117,6 +118,9 @@ func run() error {
 
 	rl := auth.NewRateLimiter(store)
 
+	// T-002: binary downloader — installs frpc/frps from GitHub Releases.
+	dl := downloader.New(loc.Root(), logger)
+
 	// 5. ReadyGate 状态：HTTP 启动期间 false；启动序列结束后翻 true。
 	ready := &atomic.Bool{}
 	ready.Store(false)
@@ -134,10 +138,11 @@ func run() error {
 			User: adminCfg.User,
 			Pass: adminCfg.Pass,
 		},
-		Ready:   ready.Load,
-		Logger:  logger,
-		DevMode: false,
-		Version: Version,
+		Ready:      ready.Load,
+		Logger:     logger,
+		DevMode:    false,
+		Version:    Version,
+		Downloader: dl,
 	}
 	handler := httpapi.New(deps)
 

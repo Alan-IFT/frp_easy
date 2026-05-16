@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/frp-easy/frp-easy/internal/auth"
+	"github.com/frp-easy/frp-easy/internal/downloader"
 	"github.com/frp-easy/frp-easy/internal/storage"
 )
 
@@ -617,5 +618,190 @@ func TestRegression_ProcStatus_NilProcMgr(t *testing.T) {
 	}
 	if _, ok := status["frps"]; !ok {
 		t.Errorf("proc/status missing 'frps' key: %s", body)
+	}
+}
+
+// ======================================================================
+// T-002 新端点测试（Code Review M-4 补充）
+// ======================================================================
+
+// newTestServerWithDownloader 创建带 Downloader 的测试服务器。
+// 注意：不使用 t.TempDir() 作为下载器根目录，避免 Windows 上下载 goroutine
+// 持有临时文件句柄时 t.TempDir() 清理失败导致测试报错。
+func newTestServerWithDownloader(t *testing.T) (*httptest.Server, *storage.Store) {
+	t.Helper()
+	store, err := storage.Open(t.TempDir())
+	if err != nil && !errors.Is(err, storage.ErrCorruptReset) {
+		t.Fatalf("storage.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	rl := auth.NewRateLimiter(store)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// 使用 os.MkdirTemp 而非 t.TempDir()，并以 _ 丢弃清理错误，
+	// 避免下载 goroutine 在 Windows 上持有 archive 临时文件导致测试失败。
+	dlRoot, dirErr := os.MkdirTemp("", "frp-dl-test-")
+	if dirErr != nil {
+		t.Fatalf("os.MkdirTemp: %v", dirErr)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dlRoot) })
+
+	dl := downloader.New(dlRoot, logger)
+
+	deps := Dependencies{
+		Store:       store,
+		Locator:     &fakeLoc{},
+		ProcMgr:     nil,
+		RateLimiter: rl,
+		LogFiles:    map[string]string{"frpc": "", "frps": ""},
+		Ready:       func() bool { return true },
+		Logger:      logger,
+		Version:     "qa-test-dl-0.1.0",
+		Downloader:  dl,
+	}
+	srv := httptest.NewServer(New(deps))
+	t.Cleanup(srv.Close)
+	return srv, store
+}
+
+// --- GET /api/v1/wizard/status: 全新 DB → shouldShow=true ---
+
+func TestWizardStatus_FreshDB_ShouldShow(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	cookies, _ := setupAndLogin(t, srv)
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/wizard/status", nil, cookies, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d body=%s", resp.StatusCode, body)
+	}
+	var got WizardStatus
+	_ = json.Unmarshal(body, &got)
+	if !got.ShouldShow {
+		t.Errorf("fresh DB: expected shouldShow=true, got %+v", got)
+	}
+}
+
+// --- GET /api/v1/wizard/status: 已有配置 → shouldShow=false ---
+
+func TestWizardStatus_WithConfig_ShouldNotShow(t *testing.T) {
+	srv, store := newTestServer(t, nil, nil)
+	cookies, _ := setupAndLogin(t, srv)
+
+	// 先写入一个配置 key 表示"用户已配置过"。
+	if err := store.KVSet(context.Background(), "mode.frpc.enabled", "true"); err != nil {
+		t.Fatalf("KVSet: %v", err)
+	}
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/wizard/status", nil, cookies, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d body=%s", resp.StatusCode, body)
+	}
+	var got WizardStatus
+	_ = json.Unmarshal(body, &got)
+	if got.ShouldShow {
+		t.Errorf("with config: expected shouldShow=false, got %+v", got)
+	}
+}
+
+// --- POST /api/v1/wizard/complete → 200；再查 shouldShow=false ---
+
+func TestWizardComplete_ThenShouldNotShow(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	cookies, csrf := setupAndLogin(t, srv)
+
+	resp, body := doJSON(t, srv, "POST", "/api/v1/wizard/complete", map[string]string{}, cookies, csrf)
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST wizard/complete status %d body=%s", resp.StatusCode, body)
+	}
+
+	// 再查 wizard/status → shouldShow 应为 false（已 handled）。
+	resp, body = doJSON(t, srv, "GET", "/api/v1/wizard/status", nil, cookies, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("GET wizard/status status %d body=%s", resp.StatusCode, body)
+	}
+	var got WizardStatus
+	_ = json.Unmarshal(body, &got)
+	if got.ShouldShow {
+		t.Errorf("after complete: expected shouldShow=false, got %+v", got)
+	}
+}
+
+// --- POST /api/v1/system/download-bin: kind=frpc → 202 ---
+
+func TestDownloadBin_ValidKind_202(t *testing.T) {
+	srv, _ := newTestServerWithDownloader(t)
+	cookies, csrf := setupAndLogin(t, srv)
+
+	resp, body := doJSON(t, srv, "POST", "/api/v1/system/download-bin",
+		map[string]string{"kind": "frpc"}, cookies, csrf)
+	// 第一次触发 → 202 Accepted（异步下载已启动）。
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", resp.StatusCode, body)
+	}
+}
+
+// --- POST /api/v1/system/download-bin: kind=invalid → 422 ---
+
+func TestDownloadBin_InvalidKind_422(t *testing.T) {
+	srv, _ := newTestServerWithDownloader(t)
+	cookies, csrf := setupAndLogin(t, srv)
+
+	resp, body := doJSON(t, srv, "POST", "/api/v1/system/download-bin",
+		map[string]string{"kind": "invalid"}, cookies, csrf)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d body=%s", resp.StatusCode, body)
+	}
+}
+
+// --- GET /api/v1/system/download-status/frpc → 200 + JSON ---
+
+func TestDownloadStatus_KnownKind_200(t *testing.T) {
+	srv, _ := newTestServerWithDownloader(t)
+	cookies, _ := setupAndLogin(t, srv)
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/system/download-status/frpc", nil, cookies, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, body)
+	}
+	var st DownloadStatusResponse
+	if err := json.Unmarshal(body, &st); err != nil {
+		t.Fatalf("unmarshal DownloadStatusResponse: %v body=%s", err, body)
+	}
+	// 初始状态应为 idle。
+	if st.Status == "" {
+		t.Errorf("expected non-empty status field, got %+v", st)
+	}
+}
+
+// --- GET /api/v1/system/download-status/unknownkind → 404 ---
+
+func TestDownloadStatus_UnknownKind_404(t *testing.T) {
+	srv, _ := newTestServerWithDownloader(t)
+	cookies, _ := setupAndLogin(t, srv)
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/system/download-status/unknownkind", nil, cookies, "")
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d body=%s", resp.StatusCode, body)
+	}
+}
+
+// --- GET /api/v1/system/public-ip → always 200 with ip or error ---
+
+func TestPublicIP_Always200(t *testing.T) {
+	srv, _ := newTestServer(t, nil, nil)
+	cookies, _ := setupAndLogin(t, srv)
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/system/public-ip", nil, cookies, "")
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, body)
+	}
+	var got PublicIPResponse
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal PublicIPResponse: %v body=%s", err, body)
+	}
+	// 无论是否能访问网络，必须有 ip 或 error 字段之一。
+	if got.IP == "" && got.Error == "" {
+		t.Errorf("expected ip or error field in response, got empty; body=%s", body)
 	}
 }
