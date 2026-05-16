@@ -27,10 +27,20 @@ type Dependencies struct {
 	ProcMgr     *procmgr.Manager
 	RateLimiter *auth.RateLimiter
 	LogFiles    map[string]string // kind → log file path
+	ConfigPaths map[string]string // kind → toml file path (runtime/frpc.toml etc)
+	FrpcAdmin   FrpcAdminCreds   // frpc admin API 凭据（用于 webServer.* 渲染）
 	Ready       func() bool
 	Logger      *slog.Logger
 	DevMode     bool   // true 时开 CORS（vite dev）
 	Version     string // 注入到 /system/ready
+}
+
+// FrpcAdminCreds 是 frpc admin API 凭据，持久化在 kv.frpc.admin。
+type FrpcAdminCreds struct {
+	Addr string
+	Port int
+	User string
+	Pass string
 }
 
 // New 构造 chi router 并挂全部路由 + 中间件链。

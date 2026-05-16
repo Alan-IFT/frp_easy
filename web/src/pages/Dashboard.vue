@@ -18,7 +18,16 @@
       <n-gi>
         <n-card title="frpc（客户端）">
           <template #header-extra>
-            <status-badge :state="procStore.frpcInfo.state" />
+            <n-space align="center">
+              <n-text depth="3" style="font-size: 13px">自动启动</n-text>
+              <n-switch
+                :value="modeState.frpc"
+                :disabled="appStore.frpcMissing || modeLoading.frpc"
+                :loading="modeLoading.frpc"
+                @update:value="handleModeToggle('frpc', $event)"
+              />
+              <status-badge :state="procStore.frpcInfo.state" />
+            </n-space>
           </template>
           <n-descriptions :column="1" size="small">
             <n-descriptions-item label="状态">
@@ -80,7 +89,16 @@
       <n-gi>
         <n-card title="frps（服务端）">
           <template #header-extra>
-            <status-badge :state="procStore.frpsInfo.state" />
+            <n-space align="center">
+              <n-text depth="3" style="font-size: 13px">自动启动</n-text>
+              <n-switch
+                :value="modeState.frps"
+                :disabled="appStore.frpsMissing || modeLoading.frps"
+                :loading="modeLoading.frps"
+                @update:value="handleModeToggle('frps', $event)"
+              />
+              <status-badge :state="procStore.frpsInfo.state" />
+            </n-space>
           </template>
           <n-descriptions :column="1" size="small">
             <n-descriptions-item label="状态">
@@ -144,13 +162,14 @@
 import { reactive, onMounted, onUnmounted } from 'vue'
 import {
   NPageHeader, NCard, NGrid, NGi, NSpace, NButton, NAlert,
-  NDescriptions, NDescriptionsItem, NText,
+  NDescriptions, NDescriptionsItem, NText, NSwitch,
   useMessage,
 } from 'naive-ui'
 import StatusBadge from '../components/StatusBadge.vue'
 import { useProcStore } from '../stores/proc'
 import { useAppStore } from '../stores/app'
 import { extractErrorMessage } from '../api/client'
+import { apiGetMode, apiPutMode } from '../api/mode'
 import type { ProcessState } from '../types'
 
 const procStore = useProcStore()
@@ -158,6 +177,33 @@ const appStore = useAppStore()
 const message = useMessage()
 
 const loadingMap = reactive<Record<string, boolean>>({})
+const modeState = reactive({ frpc: false, frps: false })
+const modeLoading = reactive({ frpc: false, frps: false })
+
+async function fetchMode() {
+  try {
+    const s = await apiGetMode()
+    modeState.frpc = s.frpc
+    modeState.frps = s.frps
+  } catch {
+    // 非致命性错误，静默忽略
+  }
+}
+
+async function handleModeToggle(kind: 'frpc' | 'frps', enabled: boolean) {
+  modeLoading[kind] = true
+  try {
+    const next = { ...modeState, [kind]: enabled }
+    const result = await apiPutMode(next)
+    modeState.frpc = result.frpc
+    modeState.frps = result.frps
+    message.success(`${kind} 自动启动已${enabled ? '开启' : '关闭'}`)
+  } catch (e) {
+    message.error(extractErrorMessage(e, `${kind} 模式切换失败`))
+  } finally {
+    modeLoading[kind] = false
+  }
+}
 
 function canStart(kind: string): boolean {
   const state: ProcessState = kind === 'frpc' ? procStore.frpcInfo.state : procStore.frpsInfo.state
@@ -219,6 +265,7 @@ function formatTime(iso: string): string {
 
 onMounted(() => {
   procStore.startPolling()
+  fetchMode()
 })
 
 onUnmounted(() => {

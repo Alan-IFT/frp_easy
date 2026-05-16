@@ -127,10 +127,17 @@ func run() error {
 		ProcMgr:     pm,
 		RateLimiter: rl,
 		LogFiles:    map[string]string{"frpc": frpcLog, "frps": frpsLog},
-		Ready:       ready.Load,
-		Logger:      logger,
-		DevMode:     false,
-		Version:     Version,
+		ConfigPaths: map[string]string{"frpc": frpcTOML, "frps": frpsTOML},
+		FrpcAdmin: httpapi.FrpcAdminCreds{
+			Addr: adminCfg.Addr,
+			Port: adminCfg.Port,
+			User: adminCfg.User,
+			Pass: adminCfg.Pass,
+		},
+		Ready:   ready.Load,
+		Logger:  logger,
+		DevMode: false,
+		Version: Version,
 	}
 	handler := httpapi.New(deps)
 

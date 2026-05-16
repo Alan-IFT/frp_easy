@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -17,11 +18,15 @@ func (h *handlers) procStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, CodeValidationFailed, "kind 只能是 frpc/frps", "kind")
 		return
 	}
+	// TOML を先に書き込む（プロセスが最新設定で起動できるように）
+	h.applyConfigBestEffort(r.Context(), kind)
 	info, err := h.deps.ProcMgr.Start(kind)
 	if err != nil {
 		mapProcErr(w, err)
 		return
 	}
+	// AC-9: 起動成功後に mode kv を更新
+	_ = h.persistMode(r.Context(), kind, true)
 	writeJSON(w, http.StatusOK, info)
 }
 
@@ -36,7 +41,18 @@ func (h *handlers) procStop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, CodeInternal, err.Error(), "")
 		return
 	}
+	// AC-9: 停止成功後に mode kv を更新
+	_ = h.persistMode(r.Context(), kind, false)
 	writeJSON(w, http.StatusOK, info)
+}
+
+// persistMode は mode.{kind}.enabled を kv に保存する（AC-9 再起動後自動復元用）。
+func (h *handlers) persistMode(ctx context.Context, kind string, enabled bool) error {
+	v := "false"
+	if enabled {
+		v = "true"
+	}
+	return h.deps.Store.KVSet(ctx, "mode."+kind+".enabled", v)
 }
 
 func (h *handlers) procRestart(w http.ResponseWriter, r *http.Request) {

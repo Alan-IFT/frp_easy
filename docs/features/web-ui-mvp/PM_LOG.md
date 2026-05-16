@@ -20,3 +20,7 @@
 | 2026-05-16 16:30 | dev-backend Round 1 完成 | 35 文件 + go.mod/go.sum 更新；go vet/build 干净；全测试 PASS（verify_all PASS 11/0/0）。C-2/C-3/C-5/I-1/I-2 全实现。04_DEVELOPMENT_backend.md 记录完成。**采纳**。 |
 | 2026-05-16 16:30 | dev-backend commit | 后端全实现提交。 |
 | 2026-05-16 16:30 | Stage 4 派发 (第 3 轮) | dev-frontend — `web/` Vue 3+Vite+TS+Pinia+VueRouter+NaiveUI+Axios+Vitest；8 页面；API 客户端层；Vitest 单测。对齐设计 §10 + 02 §5 REST 契约。完成后通知 PM → Round 2（embed.FS）。 |
+| 2026-05-16 17:00 | dev-frontend 完成 | 44 文件；npm lint/build/test 全 PASS（32 Vitest）；dist/index.html 生成至 internal/assets/dist/。04_DEVELOPMENT_frontend.md 记录完成。**采纳**。 |
+| 2026-05-16 17:00 | dev-backend Round 2 完成 | internal/assets/assets.go 替换为 //go:embed all:dist + SPA fallback；assets 单测更新；go vet/test/build 全 PASS。 |
+| 2026-05-16 17:00 | 前端 + embed commit | `8f0324c feat(T-001): implement Vue 3 frontend + embed.FS single binary` |
+| 2026-05-16 17:00 | Stage 5 派发 | code-reviewer — 审查 backend + frontend 全实现；对照 01/02/03；重点：AC 可追溯性、安全（argon2id/CSRF/session）、设计漂移、测试覆盖。 |

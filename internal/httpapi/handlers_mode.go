@@ -3,12 +3,11 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 )
 
-// ModeState 是 GET/PUT /api/v1/mode 的请求 / 响应体。
+// ModeState は GET/PUT /api/v1/mode の请求 / 响应体。
 type ModeState struct {
 	Frpc bool `json:"frpc"`
 	Frps bool `json:"frps"`
@@ -41,7 +40,30 @@ func (h *handlers) putMode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, CodeInternal, "保存失败", "")
 		return
 	}
+	// B-7: モードスイッチ変更でプロセスを即時起動/停止
+	if h.deps.ProcMgr != nil {
+		h.applyModeToProc(r.Context(), "frpc", req.Frpc)
+		h.applyModeToProc(r.Context(), "frps", req.Frps)
+	}
 	writeJSON(w, http.StatusOK, req)
+}
+
+// applyModeToProc は enabled=true なら TOML を書いてから Start、false なら Stop する。
+func (h *handlers) applyModeToProc(ctx context.Context, kind string, enable bool) {
+	if enable {
+		h.applyConfigBestEffort(ctx, kind) // TOML を先に書く
+		if _, err := h.deps.ProcMgr.Start(kind); err != nil {
+			if h.deps.Logger != nil {
+				h.deps.Logger.Warn("mode start failed", "kind", kind, "err", err)
+			}
+		}
+	} else {
+		if _, err := h.deps.ProcMgr.Stop(kind); err != nil {
+			if h.deps.Logger != nil {
+				h.deps.Logger.Warn("mode stop failed", "kind", kind, "err", err)
+			}
+		}
+	}
 }
 
 func readBoolKV(ctx context.Context, h *handlers, key string) bool {
@@ -53,5 +75,3 @@ func readBoolKV(ctx context.Context, h *handlers, key string) bool {
 	return b
 }
 
-// 维持 fmt 引用（部分文件后续添加日志时复用）。
-var _ = fmt.Sprintf

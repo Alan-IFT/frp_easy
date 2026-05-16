@@ -87,7 +87,7 @@ func (h *handlers) putServer(w http.ResponseWriter, r *http.Request) {
 		cfg.AuthToken = "***"
 	}
 	writeJSON(w, http.StatusOK, cfg)
-	go h.maybeApplyConfig("frps")
+	h.applyConfigBestEffort(r.Context(), "frps")
 }
 
 func (h *handlers) getClient(w http.ResponseWriter, r *http.Request) {
@@ -132,5 +132,5 @@ func (h *handlers) putClient(w http.ResponseWriter, r *http.Request) {
 		cfg.AuthToken = "***"
 	}
 	writeJSON(w, http.StatusOK, cfg)
-	go h.maybeApplyConfig("frpc")
+	h.applyConfigBestEffort(r.Context(), "frpc")
 }

@@ -8,7 +8,7 @@
 
 | ID | Slug | 阶段 | mode | 开始 | 文档目录 |
 |---|---|---|---|---|---|
-| T-001 | web-ui-mvp | gate | full | 2026-05-16 | `docs/features/web-ui-mvp/` |
+| T-001 | web-ui-mvp | dev | full | 2026-05-16 | `docs/features/web-ui-mvp/` |
 
 ## 已完成
 

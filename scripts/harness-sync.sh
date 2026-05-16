@@ -22,7 +22,7 @@ if [[ ! -d "$harness_dir" ]]; then
     exit 1
 fi
 
-declare -a drift
+drift=()
 
 # ---------- Copy .harness/agents/ -> .claude/agents/ ----------
 harness_agents="$harness_dir/agents"

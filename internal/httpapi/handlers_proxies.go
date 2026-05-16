@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -77,12 +78,22 @@ func (h *handlers) createProxy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed, err.Error(), field)
 		return
 	}
+	// 件数上限チェック（B-20：≤200 件）
+	existing, cntErr := h.deps.Store.ListProxies(r.Context())
+	if cntErr != nil {
+		writeError(w, http.StatusInternalServerError, CodeInternal, "读取失败", "")
+		return
+	}
+	if len(existing) >= 200 {
+		writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed, "代理规则已达上限（200 条），请删除部分规则后重试", "")
+		return
+	}
 	if err := h.deps.Store.UpsertProxy(r.Context(), p); err != nil {
 		mapProxyWriteError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toResponse(*p))
-	go h.maybeApplyConfig("frpc")
+	h.applyConfigBestEffort(r.Context(), "frpc")
 }
 
 func (h *handlers) updateProxy(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +121,7 @@ func (h *handlers) updateProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toResponse(*p))
-	go h.maybeApplyConfig("frpc")
+	h.applyConfigBestEffort(r.Context(), "frpc")
 }
 
 func (h *handlers) deleteProxy(w http.ResponseWriter, r *http.Request) {
@@ -128,9 +139,18 @@ func (h *handlers) deleteProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-	go h.maybeApplyConfig("frpc")
+	h.applyConfigBestEffort(r.Context(), "frpc")
 }
 
+func (h *handlers) applyConfigBestEffort(ctx context.Context, kind string) {
+	if err := h.renderAndApply(ctx, kind); err != nil {
+		if h.deps.Logger != nil {
+			h.deps.Logger.Warn("apply config failed", "kind", kind, "err", err)
+		}
+	}
+}
+
+// maybeApplyConfig は後方互換のために残す（現在は applyConfigBestEffort を使う）。
 func (h *handlers) maybeApplyConfig(kind string) {
 	if h.deps.ProcMgr == nil {
 		return
