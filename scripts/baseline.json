@@ -1,8 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
   "created": "2026-05-16",
-  "test_count": 0,
-  "passing_count": 0,
+  "updated": "2026-05-16",
+  "test_count": 146,
+  "passing_count": 146,
+  "go_tests": 101,
+  "frontend_tests": 45,
   "warnings_baseline": 0,
-  "notes": "Baseline starts at zero. Run verify_all and let it populate after the first successful task."
+  "notes": "T-001 web-ui-mvp QA phase. Go: 101 tests (storage×14, httpapi×44, frpconf×…, auth×…, procmgr×…, logtail×…, binloc×…, appconf×…, assets×1, frpcadmin×…). Frontend Vitest: 45 tests (was 32). Baseline raised by QA Tester stage."
 }
