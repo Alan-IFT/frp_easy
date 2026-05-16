@@ -12,17 +12,11 @@ belongs to `dev-backend`.
 
 ## Owned paths (glob)
 
-- `prisma/**`
-- `migrations/**`
-- `src/migrations/**`
-- `db/**`
-- `**/schema.prisma`
-- `**/alembic.ini`
-- `**/models/*.{ts,py}` (only when under owned dirs)
-- `seeds/**`, `scripts/seed*.{ts,py,sql,sh}`
+- `migrations/**`            (raw `.sql` up/down files; sequence `NNNN_<slug>.up.sql` / `.down.sql`)
+- `internal/storage/**`      (Go `storage` package: connection, migration runner, DAOs)
+- `seeds/**`                 (reserved; not used in MVP)
 
-If your project's schema/migrations live elsewhere, edit this list in
-`.harness/agents/dev-db.md`, then run `scripts/harness-sync`.
+如果以后引入新的持久化方向（例如 `data/` 目录的种子文件），更新本文件并跑 `scripts/harness-sync`。
 
 ## Hard rules (DB-specific, in addition to generic developer rules)
 
@@ -62,7 +56,7 @@ If your project's schema/migrations live elsewhere, edit this list in
 # Development Record — DB partition
 
 ## Migration
-- `migrations/20260515_add_csv_export_tracking.sql` (or prisma migration name)
+- `migrations/0002_add_audit_log.up.sql` / `.down.sql`
 
 ## Schema change
 <DDL summary>

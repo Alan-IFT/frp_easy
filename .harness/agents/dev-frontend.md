@@ -15,18 +15,10 @@ agents; this contract is the same as `developer.md` but narrowed to the frontend
 These globs define what files this agent may **create / edit / delete**. If the PM
 asks you to touch anything outside, **stop and route back** to PM as a partition mismatch.
 
-- `apps/web/**`
-- `apps/frontend/**`
-- `src/client/**`
-- `src/components/**`
-- `src/pages/**`
-- `src/app/**`           (Next.js app router)
-- `public/**`
-- `**/*.tsx`             (only when under one of the above)
-- `**/*.css`, `**/*.scss` (only when under one of the above)
+- `web/**`                  (Vue 3 + Vite + TS 前端工程；构建产物落到 `internal/assets/dist/`，由 dev-backend embed)
 
-If your project's frontend lives elsewhere, edit this list (it's in `.harness/agents/dev-frontend.md`).
-After editing, run `scripts/harness-sync` so the binding picks up the change.
+后端 `cmd/**`、`internal/**`、`go.mod` 等归 `dev-backend`；持久化 `internal/storage/**` 与 `migrations/**` 归 `dev-db`。
+如需调整本列表，编辑本文件后跑 `scripts/harness-sync`。
 
 ## Hard rules (same as generic developer.md, plus partition rules)
 
@@ -61,15 +53,15 @@ Same as `developer.md`. The only difference is partition scope:
 # Development Record — Frontend partition
 
 ## Partition
-dev-frontend — owns: apps/web/**, src/components/**, ...
+dev-frontend — owns: `web/**`
 
 ## Files changed (this partition only)
-- `apps/web/app/page.tsx` — added CSV export button
-- `src/components/ExportDialog.tsx` — new
+- `web/src/pages/Proxies.vue` — 端口规则增删改页面
+- `web/src/components/ProxyForm.vue` — 表单组件
+- `web/src/api/proxies.ts` — 后端契约对齐
 
 ## Out-of-partition coordination
-(If the task required touching backend or DB, note here which partition handled it
-and link to its development doc.)
+(若需要后端或 DB 改动，记录哪个分区在哪个文档里处理。)
 
 ## verify_all result
 ...
@@ -80,14 +72,15 @@ READY FOR REVIEW (frontend partition complete)
 
 ## What "good" looks like
 
-- All changed files are within owned paths.
-- No accidental backend/DB edits.
-- Frontend tests added or updated.
-- dev-map updated if new component directory.
+- 所有改动均在 owned paths（`web/**`）内。
+- 没有越界改后端 / DB。
+- Vitest 单测加在对应组件 / 模块。
+- dev-map 在新增页面 / 组件目录时同步。
+- 接口调用形状与 `02_SOLUTION_DESIGN.md §5` 字段精确一致（camelCase JSON）。
 
 ## What "bad" looks like (avoid)
 
-- Editing backend code "while you're there".
-- Updating `prisma/schema.prisma` or any migration.
-- Skipping verify_all because "it's just CSS".
-- Silent design drift — flag it like generic developer does.
+- 顺手改后端 Go 代码或 `internal/storage/**`。
+- 改 `migrations/**`。
+- "只改了 CSS" 就跳过 `verify_all`。
+- 静默方案漂移 — 跟通用 developer.md 一样必须显式标 `DESIGN DRIFT`。

@@ -12,17 +12,15 @@ services, business logic, and server-side state only. Database migrations go to
 
 ## Owned paths (glob)
 
-- `apps/api/**`
-- `apps/backend/**`
-- `src/server/**`
-- `src/api/**`
-- `src/services/**`
-- `src/routes/**`
-- `src/controllers/**`
-- `**/*.ts` and `**/*.js` (only when under one of the above)
+- `cmd/**`                                              (Go 程序入口 main.go)
+- `internal/appconf/**`、`internal/auth/**`、`internal/binloc/**`、`internal/frpconf/**`、`internal/frpcadmin/**`、`internal/httpapi/**`、`internal/logtail/**`、`internal/procmgr/**`、`internal/assets/**`
+- `go.mod`、`go.sum`
+- `scripts/start.{ps1,sh}`、`scripts/build.{ps1,sh}`、`scripts/verify_all.{ps1,sh}`
+- `.gitignore`、`.gitattributes`
 
-If your project's backend lives elsewhere, edit this list in `.harness/agents/dev-backend.md`,
-then run `scripts/harness-sync`.
+**注意**：`internal/storage/**` 与 `migrations/**` 归 `dev-db`；`web/**` 归 `dev-frontend`；
+Harness 脚本（`scripts/harness-sync.*`、`archive-task.*`、`install-hooks.*`）不归任何 dev-* 分区。
+如需调整本列表，编辑本文件后跑 `scripts/harness-sync`。
 
 ## Hard rules
 
@@ -55,14 +53,16 @@ which partition owns which file. If it doesn't, that's a gate-review miss — fl
 ## What "good" looks like
 
 - All changed files within owned paths.
-- API contracts (OpenAPI / tRPC) updated when shape changes.
-- Backend tests added or updated.
+- API contract (REST routes + JSON shape) matches `02_SOLUTION_DESIGN.md §5` exactly.
+- Go 单测（`*_test.go`）加在对应包内；HTTP 层用 `net/http/httptest`。
 - dev-map updated for new modules.
-- No `prisma migrate dev` or equivalent run from here — that's `dev-db`.
+- 无 cgo 引入（项目栈承诺纯 Go 跨平台单二进制，见 `02_SOLUTION_DESIGN.md §6.1`）。
+- 子进程管理走 `internal/procmgr`，不在其它包里直接 `os/exec`。
 
 ## What "bad" looks like
 
-- Editing migration files.
-- Editing React components.
-- Bypassing the type-shared layer to inline types in two places.
-- Skipping verify_all "because backend's fine".
+- 编辑 `internal/storage/**` 或 `migrations/**`（属 dev-db）。
+- 编辑 `web/**`（属 dev-frontend）。
+- 在 handler 里直接拼 SQL（应走 `internal/storage` DAO）。
+- 在两个 Go 包里重复定义同一类型（共享 type 放在 owning 包并 export）。
+- 跳过 `verify_all` "因为 backend 没问题"。
