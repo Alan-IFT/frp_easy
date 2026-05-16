@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "created": "2026-05-16",
+  "test_count": 0,
+  "passing_count": 0,
+  "warnings_baseline": 0,
+  "notes": "Baseline starts at zero. Run verify_all and let it populate after the first successful task."
+}

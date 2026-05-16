@@ -1,0 +1,10 @@
+# Auto-detect text vs binary; normalize line endings to LF on commit.
+* text=auto eol=lf
+
+# Force binary for FRP shipped binaries.
+frp_linux/frpc binary
+frp_linux/frps binary
+frp_win/*.exe binary
+
+# Shell scripts must stay LF even on Windows checkout.
+*.sh text eol=lf

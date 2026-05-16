@@ -1,0 +1,46 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build / dist
+dist/
+build/
+out/
+bin/
+*.exe~
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Go
+*.test
+*.out
+coverage.out
+vendor/
+
+# Logs / runtime
+*.log
+logs/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets
+.env
+.env.local
+.env.*.local
+
+# AI / harness runtime
+.claude/settings.local.json
