@@ -6,14 +6,13 @@
 
 ## 进行中
 
-| ID | Slug | 阶段 | 描述 | 文档目录 |
-|---|---|---|---|---|
-| T-006 | e2e-smoke-tests | req | Playwright E2E 烟雾测试 | `docs/features/e2e-smoke-tests/` |
+（无）
 
 ## 已完成
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-006 | e2e-smoke-tests | DELIVERED | 2026-05-17 | `docs/features/_archived/e2e-smoke-tests/` |
 | T-005 | docs-and-api-schema | DELIVERED | 2026-05-16 | `docs/features/_archived/docs-and-api-schema/` |
 | T-004 | tech-debt-cleanup | DELIVERED | 2026-05-16 | `docs/features/_archived/tech-debt-cleanup/` |
 | T-003 | readme-and-health-report | DELIVERED | 2026-05-16 | `docs/features/_archived/readme-and-health-report/` |
