@@ -168,17 +168,27 @@ else
 fi
 
 # --- C. E2E (require playwright config) ---
+# 同时检测 web/playwright.config.ts（frp_easy 项目约定）和根目录配置
 if [[ "$QUICK" == "true" ]]; then
     :  # skipped via flag, do not even emit step
-elif [[ ! -f playwright.config.ts && ! -f playwright.config.js ]]; then
+elif [[ ! -f playwright.config.ts && ! -f playwright.config.js && \
+        ! -f web/playwright.config.ts && ! -f web/playwright.config.js ]]; then
     step "C.1" "E2E smoke (playwright)" "SKIP"
 else
-    PM=$(pkgmgr)
+    # frp_easy 约定：playwright config 位于 web/ 子目录
+    if [[ -f web/playwright.config.ts || -f web/playwright.config.js ]]; then
+        PLAYWRIGHT_DIR="$ROOT/web"
+    else
+        PLAYWRIGHT_DIR="$ROOT"
+    fi
+    pushd "$PLAYWRIGHT_DIR" >/dev/null
+    PM=$(pkgmgr)   # 在 playwright 目录内调用，检测正确的 lockfile
     if $PM exec playwright test --project=chromium &>/dev/null; then
         step "C.1" "E2E smoke (playwright)" "PASS"
     else
         step "C.1" "E2E smoke (playwright)" "FAIL"
     fi
+    popd >/dev/null
 fi
 
 # --- D. Schema (require source code) ---

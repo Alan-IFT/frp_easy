@@ -156,9 +156,23 @@ Step "B.4" "Test count >= baseline" {
 # --- C. End-to-end (require playwright config) ---
 if (-not $Quick) {
     Step "C.1" "E2E smoke (playwright)" {
-        if (-not ((Test-Path "playwright.config.ts") -or (Test-Path "playwright.config.js"))) { return "SKIP" }
-        $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
-        & $pkgMgr exec playwright test --project=chromium 2>&1 | Out-Null
+        $hasConfig = (Test-Path "playwright.config.ts") -or (Test-Path "playwright.config.js") `
+                  -or (Test-Path "web/playwright.config.ts") -or (Test-Path "web/playwright.config.js")
+        if (-not $hasConfig) { return "SKIP" }
+        # frp_easy 约定：playwright config 位于 web/ 子目录
+        if ((Test-Path "web/playwright.config.ts") -or (Test-Path "web/playwright.config.js")) {
+            $playwrightDir = Join-Path $root "web"
+        } else {
+            $playwrightDir = $root
+        }
+        Push-Location $playwrightDir
+        try {
+            $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
+            & $pkgMgr exec playwright test --project=chromium 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "playwright test failed (exit code $LASTEXITCODE)" }
+        } finally {
+            Pop-Location
+        }
     }
 }
 

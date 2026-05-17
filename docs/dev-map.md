@@ -16,7 +16,7 @@ frp_easy/
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
 ├── docs/           ← SPEC、feature 文档、本导航、任务看板
 │   └── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增）
-├── scripts/        ← verify_all、start、build、baseline、sync 辅助
+├── scripts/        ← verify_all、start、build、baseline、sync 辅助；start-e2e-server.sh（T-006）
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
 ├── bin/            ← 构建产物（gitignore；build.ps1/build.sh 输出到这里）
@@ -37,9 +37,17 @@ frp_easy/
 └── web/            ← 前端 Vue 3 + Vite（dev-frontend 分区）
     ├── index.html
     ├── package.json / vite.config.ts / tsconfig.json / vitest.config.ts / .eslintrc.cjs
+    ├── playwright.config.ts   ← T-006 新增：Playwright E2E 配置（webServer + chromium project）
+    ├── tests/
+    │   └── e2e/               ← T-006 新增：Playwright E2E 烟雾测试
+    │       ├── 01-setup.spec.ts    ← TC-01（未初始化跳转）、TC-02（setup 表单提交）
+    │       ├── 02-auth.spec.ts     ← TC-03（login 表单提交）
+    │       ├── 03-dashboard.spec.ts← TC-04（dashboard 元素可见）、TC-05（退出登录）
+    │       └── fixtures/
+    │           └── auth.ts         ← programmaticLogin / bypassWizard / setupAccount / programmaticLogout
     └── src/
         ├── main.ts         ← app 入口；Pinia・Router 組み立て・CSRF トークンゲッター登録
-        ├── App.vue         ← ルートコンポーネント（router-view のみ）
+        ├── App.vue         ← ルートコンポーネント（NConfigProvider + NMessageProvider ラップ；T-006 修正）
         ├── router.ts       ← Vue Router 4 (history mode)；ナビゲーションガード
         ├── types.ts        ← バックエンド API 契約と一致する型定義（Proxy / ProcessInfo 等）
         ├── api/            ← axios クライアント + エンドポイント別ラッパー
