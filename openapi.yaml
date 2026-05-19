@@ -660,8 +660,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 代理名称冲突（CONFLICT，name 已被占用）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
         '422':
-          description: 校验失败（字段不合法、达到 200 条上限等）
+          description: 校验失败（字段不合法、达到 200 条上限、(type,remotePort) 组合冲突等）
           content:
             application/json:
               schema:
@@ -714,13 +720,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
         '409':
-          description: 版本冲突（CONFLICT）
+          description: 冲突（CONFLICT，版本冲突 version 不匹配，或代理名称已被占用）
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
         '422':
-          description: 校验失败
+          description: 校验失败（字段不合法、(type,remotePort) 组合冲突等）
           content:
             application/json:
               schema:

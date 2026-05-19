@@ -179,6 +179,29 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
+// SecurityHeaders 给所有响应注入最低基线安全头（T-007 AC-3）：
+//
+//   - X-Content-Type-Options: nosniff —— 阻止浏览器对响应做 MIME sniff。
+//   - X-Frame-Options: DENY —— 禁止任何 origin iframe 嵌入；适配 frp_easy 当前
+//     单机本地 UI 定位；如未来需要 SSO / OAuth 跳转再独立调整。
+//   - Referrer-Policy: no-referrer —— 不向任何 link / form 跳转目标泄露
+//     UI URL，避免可能的端口 / 路径侧信道。
+//
+// 设计：在 next.ServeHTTP 之前 Set，确保即便下游 handler panic 被 Recover 兜底
+// 仍能写出三个头。挂载位置：router.New 顶层 r.Use，先于 /api/v1/health 注册
+// 之前（chi 文档保证全局 Use 覆盖后续注册的所有路由，包括 NotFound / SPA fallback）。
+func SecurityHeaders() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "no-referrer")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // CORS 仅 dev 模式打开（02 §3.9）。MVP 期默认 prod 关闭。
 func CORS(allow bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

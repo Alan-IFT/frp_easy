@@ -169,70 +169,119 @@ func (m *Manager) StatusAll() map[string]ProcessInfo {
 // 若当前 State ∈ {starting, running} 直接返回当前 ProcessInfo + 不报错（idempotent）。
 // 若二进制缺失（locator 报错）返回错误 + state 不变。
 // 启动后等待 3 秒确认未退出 → state=running。
+//
+// 【T-007 AC-5】实现采用单一 defer-unlock 模式：所有早返回不再手动 unlock；
+// 持锁段封装在 IIFE 内，IIFE 退出时 defer 释放锁；解锁后才 emit / supervise /
+// waitUntilStable（保留"不在持锁期间 emit"的不变量，避免与慢消费者死锁）。
+//
+// 关键不变量（外部可观察行为）：
+//   - idempotent Start 时返回的 ProcessInfo、错误值类型不变。
+//   - emit 次数 / 顺序：cmd.Start 失败 → emit error 一次；成功 → emit starting
+//     一次，supervise 内部再 emit running / stopped / error。
+//   - waitUntilStable 仅在 cmd.Start 成功时调用，且必在 unlock 之后。
 func (m *Manager) Start(kind string) (ProcessInfo, error) {
 	if err := validateKind(kind); err != nil {
 		return ProcessInfo{}, err
 	}
-	m.mu.Lock()
-	ps := m.processes[kind]
-	switch ps.info.State {
-	case StateStarting, StateRunning:
-		info := ps.info
-		m.mu.Unlock()
-		return info, nil
-	case StateStopping:
-		m.mu.Unlock()
-		return ps.info, fmt.Errorf("procmgr.Start(%s): currently stopping", kind)
-	}
-	binPath, err := m.binPathFor(kind)
-	if err != nil {
-		m.mu.Unlock()
-		return ps.info, err
-	}
-	cfgPath, ok := m.configPaths[kind]
-	if !ok || cfgPath == "" {
-		m.mu.Unlock()
-		return ps.info, fmt.Errorf("procmgr.Start(%s): no config path configured", kind)
-	}
-	logPath := m.logFiles[kind]
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil && logPath != "" {
-		m.mu.Unlock()
-		return ps.info, fmt.Errorf("procmgr.Start(%s) mkdir log: %w", kind, err)
-	}
 
-	cmd := exec.Command(binPath, "-c", cfgPath)
-	cmd.Dir = filepath.Dir(binPath)
-	applyPlatformAttrs(cmd)
+	// 第一段（IIFE，持锁）输出到这些局部变量；第二段（解锁后）据此决策。
+	var (
+		infoSnapshot ProcessInfo
+		shouldEmit   bool // cmd.Start 成功 / cmd.Start 失败 均 emit；早返回（idempotent / 校验失败）不 emit
+		startErr     error
+		successPath  bool // 仅 cmd.Start 成功路径走 supervise + waitUntilStable
+		startCmd     *exec.Cmd
+		startCtx     context.Context
+		startDone    chan struct{}
+		stdoutPipe   io.ReadCloser
+		stderrPipe   io.ReadCloser
+		logPath      string
+	)
 
-	// 准备 stdout/stderr 管道 → tee 到日志文件。
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
 
-	if err := cmd.Start(); err != nil {
-		ps.info.State = StateError
-		ps.info.LastErr = err.Error()
+		ps := m.processes[kind]
+		switch ps.info.State {
+		case StateStarting, StateRunning:
+			// idempotent 早返回（不 emit、不报错）
+			infoSnapshot = ps.info
+			return
+		case StateStopping:
+			infoSnapshot = ps.info
+			startErr = fmt.Errorf("procmgr.Start(%s): currently stopping", kind)
+			return
+		}
+
+		binPath, err := m.binPathFor(kind)
+		if err != nil {
+			infoSnapshot = ps.info
+			startErr = err
+			return
+		}
+		cfgPath, ok := m.configPaths[kind]
+		if !ok || cfgPath == "" {
+			infoSnapshot = ps.info
+			startErr = fmt.Errorf("procmgr.Start(%s): no config path configured", kind)
+			return
+		}
+		logPath = m.logFiles[kind]
+		if logPath != "" {
+			if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+				infoSnapshot = ps.info
+				startErr = fmt.Errorf("procmgr.Start(%s) mkdir log: %w", kind, err)
+				return
+			}
+		}
+
+		cmd := exec.Command(binPath, "-c", cfgPath)
+		cmd.Dir = filepath.Dir(binPath)
+		applyPlatformAttrs(cmd)
+		stdoutPipe, _ = cmd.StdoutPipe()
+		stderrPipe, _ = cmd.StderrPipe()
+
+		if err := cmd.Start(); err != nil {
+			ps.info.State = StateError
+			ps.info.LastErr = err.Error()
+			ps.info.ChangedAt = time.Now().UTC()
+			infoSnapshot = ps.info
+			shouldEmit = true
+			startErr = fmt.Errorf("procmgr.Start(%s): %w", kind, err)
+			return
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		doneCh := make(chan struct{})
+		ps.cmd = cmd
+		ps.cancel = cancel
+		ps.doneCh = doneCh
+		ps.info.State = StateStarting
+		ps.info.PID = cmd.Process.Pid
+		ps.info.LastErr = ""
 		ps.info.ChangedAt = time.Now().UTC()
-		info := ps.info
-		m.mu.Unlock()
-		m.emit(StatusEvent{Kind: kind, Info: info})
-		return info, fmt.Errorf("procmgr.Start(%s): %w", kind, err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	doneCh := make(chan struct{})
-	ps.cmd = cmd
-	ps.cancel = cancel
-	ps.doneCh = doneCh
-	ps.info.State = StateStarting
-	ps.info.PID = cmd.Process.Pid
-	ps.info.LastErr = ""
-	ps.info.ChangedAt = time.Now().UTC()
-	info := ps.info
-	m.mu.Unlock()
+		infoSnapshot = ps.info
+		shouldEmit = true
+		successPath = true
+		startCmd = cmd
+		startCtx = ctx
+		startDone = doneCh
+	}()
 
-	m.emit(StatusEvent{Kind: kind, Info: info})
+	// 第二段（已解锁）：emit + supervise + waitUntilStable
+	if shouldEmit {
+		m.emit(StatusEvent{Kind: kind, Info: infoSnapshot})
+	}
+	if startErr != nil {
+		return infoSnapshot, startErr
+	}
+	if !successPath {
+		// idempotent 早返回（StateStarting / StateRunning）
+		return infoSnapshot, nil
+	}
 
 	// supervisor goroutine：负责 tee 日志 + 监听退出。
-	go m.supervise(ctx, kind, cmd, stdout, stderr, logPath, doneCh)
+	go m.supervise(startCtx, kind, startCmd, stdoutPipe, stderrPipe, logPath, startDone)
 
 	// 等 3 秒确认未自我退出（02 §6.4）。
 	if waitErr := m.waitUntilStable(kind, 3*time.Second); waitErr != nil {
@@ -372,11 +421,21 @@ func (m *Manager) supervise(ctx context.Context, kind string, cmd *exec.Cmd,
 
 	defer close(doneCh)
 
+	// 【T-007 AC-2 / C-5 归责边界】
+	// 本处打开的是 UI 进程 tee 子进程 stdout/stderr 用的日志文件：UI 进程对该
+	// 文件的"首次创建权限"负责。OpenFile 的 mode 仅在新建文件时生效（O_CREATE
+	// + 文件不存在）；老版本升级遗留的 0o644 文件可借 Chmod 幂等收紧到 0o600。
+	//
+	// 范围边界：FRP 子进程通过 toml 的 log.to 自行打开同路径文件（O_APPEND）时，
+	// 上游 FRP 内部 OpenFile 的 mode 由 FRP 自己决定，**不在本任务修补范围内**。
+	// 升级路径下 UI 进程的 Chmod 仍能把已存在文件的权限收紧；FRP 后续以 append
+	// 模式打开（无 O_CREATE 或文件已存在）不会重置 mode 位。
 	var logFile *os.File
 	if logPath != "" {
 		var err error
-		logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err == nil {
+			_ = os.Chmod(logPath, 0o600)
 			defer logFile.Close()
 		}
 	}

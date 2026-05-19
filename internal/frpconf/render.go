@@ -253,6 +253,11 @@ func proxyToEntry(p ProxyInput) (frpProxyEntry, error) {
 //
 // Windows 上 os.Rename 在目标已存在时仍可成功（modernc 等同 MoveFileEx 覆盖）；
 // 若运行环境不支持原子覆盖，调用方应在感知失败时回退到直接 WriteFile。
+//
+// 【T-007 AC-1】临时文件创建后立即 Chmod 到 0o600；rename 完成后对目标文件再次
+// Chmod 0o600（覆盖已存在文件保留旧权限的 corner case）。POSIX 立即生效；Windows
+// 上 os.Chmod 仅当 mode 关闭 owner-write 位时设 ReadOnly attr，本处 0o600 含
+// owner-write 位（=1），不会触发 ReadOnly，对 rename 不变量无影响。
 func AtomicWrite(path string, content []byte) error {
 	if path == "" {
 		return errors.New("frpconf.AtomicWrite: empty path")
@@ -267,6 +272,14 @@ func AtomicWrite(path string, content []byte) error {
 	}
 	tmpName := tmp.Name()
 	cleanup := func() { _ = os.Remove(tmpName) }
+	// 临时文件立即收紧权限：os.CreateTemp 在 POSIX 下用 0o600 调 open，但实际生效
+	// = 0o600 & ~umask；在 umask=0 / 0o002 等场景下其它本地用户仍可读，临时窗口
+	// 内含 frps_token 明文存在泄露风险。chmod 一次彻底关掉 group/other 位。
+	if err := os.Chmod(tmpName, 0o600); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("frpconf.AtomicWrite chmod tmp: %w", err)
+	}
 	if _, err := tmp.Write(content); err != nil {
 		_ = tmp.Close()
 		cleanup()
@@ -284,6 +297,11 @@ func AtomicWrite(path string, content []byte) error {
 	if err := os.Rename(tmpName, path); err != nil {
 		cleanup()
 		return fmt.Errorf("frpconf.AtomicWrite rename: %w", err)
+	}
+	// 目标文件再次 chmod：rename 在某些场景（目标文件已存在被覆盖）可能保留旧
+	// 权限位，此处 fail-closed 保证最终输出始终是 0o600。
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("frpconf.AtomicWrite chmod final: %w", err)
 	}
 	return nil
 }

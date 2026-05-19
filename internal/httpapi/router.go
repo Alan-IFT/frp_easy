@@ -61,7 +61,14 @@ func New(d Dependencies) http.Handler {
 
 	h := &handlers{deps: d}
 
-	// 健康检查端点：不经过 ReadyGate 或任何其它中间件，服务启动中也可访问。
+	// 【T-007 AC-3 / C-4】SecurityHeaders 必须在任何路由注册之前 r.Use，
+	// 才能覆盖 /api/v1/health（顶层）与 SPA fallback（NotFound）。chi 文档保证
+	// 全局 r.Use 对后续注册的全部路由生效，包括顶层 Get、Group、NotFound、
+	// MethodNotAllowed 与 SPA 资源 handler。
+	r.Use(SecurityHeaders())
+
+	// 健康检查端点：不经过 ReadyGate 或任何其它业务中间件，服务启动中也可访问。
+	// 注意：SecurityHeaders 仍会作用于此端点（顶层 r.Use 已挂）。
 	r.Get("/api/v1/health", h.health)
 
 	// 其余所有请求走完整中间件链。

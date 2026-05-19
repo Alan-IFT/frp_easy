@@ -29,10 +29,22 @@ export function useProxyForm(initial: ProxyInput, _existingProxy?: Proxy | null)
   const isTcpUdp = computed(() => form.value.type === 'tcp' || form.value.type === 'udp')
   const isHttpHttps = computed(() => form.value.type === 'http' || form.value.type === 'https')
 
-  function handleTypeChange() {
-    form.value.remotePort = null
-    form.value.customDomains = []
+  function handleTypeChange(newType?: ProxyFormType) {
+    const t = newType ?? form.value.type
+    if (t === 'tcp' || t === 'udp') {
+      form.value.customDomains = []
+    } else if (t === 'http' || t === 'https') {
+      form.value.remotePort = null
+    }
   }
+
+  watch(
+    () => form.value.type,
+    (newType, oldType) => {
+      if (newType === oldType) return
+      handleTypeChange(newType)
+    },
+  )
 
   function toProxyInput(): ProxyInput {
     const output: ProxyInput = {
@@ -69,6 +81,5 @@ export function useProxyForm(initial: ProxyInput, _existingProxy?: Proxy | null)
     handleTypeChange,
     toProxyInput,
     syncFromInput,
-    watch,
   }
 }

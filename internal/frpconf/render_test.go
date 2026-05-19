@@ -3,6 +3,7 @@ package frpconf
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -204,5 +205,71 @@ func TestAtomicWrite_CreatesParentDir(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Errorf("file missing: %v", err)
+	}
+}
+
+// TestAtomicWritePerm0600 验证 AC-1.1：AtomicWrite 后目标文件权限位 = 0o600。
+// Windows 上 os.Chmod 仅控制 ReadOnly attr，权限位语义与 POSIX 不同，跳过断言。
+func TestAtomicWritePerm0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("权限位语义在 Windows 不同；本测试仅覆盖 POSIX 平台")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "frpc.toml")
+	if err := AtomicWrite(path, []byte("token=secret")); err != nil {
+		t.Fatalf("AtomicWrite: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	perm := info.Mode().Perm()
+	if perm != 0o600 {
+		t.Errorf("perm = %o, want 0o600", perm)
+	}
+	// 同时确认 group/other 位完全为 0。
+	if perm&0o077 != 0 {
+		t.Errorf("group/other bits set: %o", perm&0o077)
+	}
+}
+
+// TestAtomicWritePerm0600_OverwriteExisting 验证 AC-1.2：目标文件已存在且权限
+// 宽松（如 0o644）时，AtomicWrite 后必须收紧到 0o600，不允许保留旧权限。
+func TestAtomicWritePerm0600_OverwriteExisting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("权限位语义在 Windows 不同；本测试仅覆盖 POSIX 平台")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "frpc.toml")
+	// 先写一个宽松权限的旧文件
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := AtomicWrite(path, []byte("new")); err != nil {
+		t.Fatalf("AtomicWrite: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("perm after overwrite = %o, want 0o600", perm)
+	}
+}
+
+// TestAtomicWrite_NoTempLeakOnSuccess 回归 AC-1.3：原有"不残留 .frpconf-*.tmp"
+// 行为不退化（与 TestAtomicWrite_ReplacesExisting 中的同名断言冗余但显式，
+// 保证 chmod 改动不引入新的 cleanup 漏洞）。
+func TestAtomicWrite_NoTempLeakOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "frpc.toml")
+	if err := AtomicWrite(path, []byte("x")); err != nil {
+		t.Fatalf("AtomicWrite: %v", err)
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".frpconf-") {
+			t.Errorf("leftover temp file: %s", e.Name())
+		}
 	}
 }

@@ -82,10 +82,20 @@ func TailLines(path string, n int) ([]string, error) {
 	return lines, nil
 }
 
-// ReadFrom 从指定 offset 开始读到 EOF，返回 (data, newOffset, error)。
+// MaxReadBytes 是 ReadFrom 单次最多返回的字节数（T-007 AC-4）。
+//
+// 超过部分留到下次调用：客户端按返回的 newOffset 继续轮询即可还原完整流。
+// 当前 = 2 MiB（2 * 1024 * 1024 = 2_097_152 字节）。
+//
+// 目的：保护服务器免于恶意客户端用 offset=0 对 100+ MiB 日志一次性读入内存 +
+// 序列化进 HTTP body 触发 DoS。该常量导出为包级 const，便于测试断言与未来调整。
+const MaxReadBytes = 2 << 20 // 2 MiB = 2 * 1024 * 1024
+
+// ReadFrom 从指定 offset 开始读，返回 (data, newOffset, error)。
 //
 // 调用方持续保存 newOffset，下次再传入 —— 即可做 polling 增量。
 // 文件被截断（size < offset）时：自动从头开始读，返回全部内容 + 新 offset。
+// 单次返回最多 MaxReadBytes 字节；超过部分留到下次调用。
 func ReadFrom(path string, offset int64) ([]byte, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -108,11 +118,9 @@ func ReadFrom(path string, offset int64) ([]byte, int64, error) {
 	if _, err := f.Seek(startAt, io.SeekStart); err != nil {
 		return nil, offset, fmt.Errorf("logtail.ReadFrom seek: %w", err)
 	}
-	// 限制单次读取最多 1 MiB，避免突发巨增导致响应体过大。
-	const maxReadPerCall = 1 << 20
 	want := size - startAt
-	if want > maxReadPerCall {
-		want = maxReadPerCall
+	if want > int64(MaxReadBytes) {
+		want = int64(MaxReadBytes)
 	}
 	data := make([]byte, want)
 	n, err := io.ReadFull(f, data)

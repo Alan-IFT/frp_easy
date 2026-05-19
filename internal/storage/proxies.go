@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -119,6 +120,9 @@ func (s *Store) UpsertProxy(ctx context.Context, p *Proxy) error {
 			nullableInt(p.RemotePort), nullableString(cdJSON),
 			enabledInt)
 		if err != nil {
+			if isDuplicateNameError(err) {
+				return ErrDuplicateName
+			}
 			return fmt.Errorf("storage.UpsertProxy insert: %w", err)
 		}
 		id, err := res.LastInsertId()
@@ -165,6 +169,9 @@ func (s *Store) UpsertProxy(ctx context.Context, p *Proxy) error {
 		nullableInt(p.RemotePort), nullableString(cdJSON), enabledInt,
 		p.ID); err != nil {
 		_ = tx.Rollback()
+		if isDuplicateNameError(err) {
+			return ErrDuplicateName
+		}
 		return fmt.Errorf("storage.UpsertProxy update: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -305,4 +312,25 @@ func nullableString(s string) any {
 		return nil
 	}
 	return s
+}
+
+// isDuplicateNameError 判断 sqlite 错误是否为 proxies.name 列的 UNIQUE 冲突。
+//
+// 约束来源：internal/storage/sqlmigrations/0001_init.up.sql 第 32 行
+// `name TEXT NOT NULL UNIQUE` —— 是 column-level UNIQUE，sqlite 在违规时输出文本
+// `UNIQUE constraint failed: proxies.name`。
+//
+// 区分另一处 UNIQUE 约束（同文件第 46 行的部分唯一索引
+// `idx_proxies_tcp_remote ON proxies(type, remote_port)`），其错误文本含
+// `proxies.type, proxies.remote_port` 而非 `proxies.name`，本函数据此精确区分。
+//
+// 驱动：modernc.org/sqlite（internal/storage/store.go L23 blank import）。
+// 未来如果驱动升级改了错误文本，本任务 AC-6.1 / AC-6.2 测试会立即捕获回归。
+func isDuplicateNameError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "UNIQUE constraint failed") &&
+		strings.Contains(s, "proxies.name")
 }

@@ -243,7 +243,14 @@ func mapProxyWriteError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, CodeConflict, "规则已被其它会话修改，请刷新后重试", "version")
 		return
 	}
-	// SQL UNIQUE / 部分索引等冲突
+	// 【T-007 AC-6】name 列 UNIQUE 冲突走 sentinel：409 + 友好中文 + field=name。
+	// 必须放在下面 strings.Contains(low, "unique") 之前，确保 name 冲突走
+	// 专用语义化 409 路径；(type,remotePort) 组合冲突仍走原 422 兜底分支。
+	if errors.Is(err, storage.ErrDuplicateName) {
+		writeError(w, http.StatusConflict, CodeConflict, "代理名称已存在，请改用其它名称", "name")
+		return
+	}
+	// SQL UNIQUE / 部分索引等冲突（剩余只可能是 (type,remote_port) 组合冲突）
 	msg := err.Error()
 	low := strings.ToLower(msg)
 	if strings.Contains(low, "unique") || strings.Contains(low, "constraint") {

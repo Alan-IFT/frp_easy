@@ -89,8 +89,16 @@ func run() error {
 	defer store.Close()
 
 	// 3. logger（slog → 同时写 ui.log 与 stderr）
+	//
+	// 【T-007 AC-2】ui.log 权限收紧到 0o600：仅 owner 可读写，避免多用户主机上
+	// 同主机其它本地用户读取日志中的 redact 后请求体 / frpc 错误回环。OpenFile
+	// 的 mode 仅在新建文件时生效；如果是从老版本升级，文件已存在权限仍是
+	// 0o644 → 显式 Chmod 一次幂等收紧。
 	uiLogPath := filepath.Join(logDir, "ui.log")
-	logFile, _ := os.OpenFile(uiLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	logFile, _ := os.OpenFile(uiLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if logFile != nil {
+		_ = os.Chmod(uiLogPath, 0o600)
+	}
 	logger := newLogger(logFile)
 	if errors.Is(openErr, storage.ErrCorruptReset) {
 		logger.Warn("data.db corrupt detected; renamed and reset", "dataDir", dataDir)

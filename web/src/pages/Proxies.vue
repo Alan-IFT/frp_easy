@@ -11,7 +11,12 @@
       :data="proxiesStore.proxies"
       :loading="proxiesStore.loading"
       style="margin-top: 16px"
-    />
+    >
+      <!-- T-007 AC-8(b)：空状态文案，与「新增规则」按钮文本对齐 -->
+      <template #empty>
+        <n-empty description="暂无代理规则，点击右上角「新增规则」开始配置" />
+      </template>
+    </n-data-table>
 
     <!-- 防火墙提示（保存成功后展示） -->
     <firewall-hint :ports="firewallPorts" :proto="firewallProto" />
@@ -51,7 +56,7 @@
 <script setup lang="ts">
 import { ref, h, onMounted } from 'vue'
 import {
-  NPageHeader, NButton, NDataTable, NModal, NSpace, NTag,
+  NPageHeader, NButton, NDataTable, NModal, NSpace, NTag, NEmpty,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
@@ -115,6 +120,10 @@ async function handleDeleteConfirm() {
   try {
     await proxiesStore.deleteProxy(deletingProxy.value.id)
     message.success('规则已删除')
+    // T-007 AC-8(a)：删除成功后清空 FirewallHint，避免残留已删规则的端口提示。
+    // 注意：仅在删除成功时清；失败时保留以便用户参考（NIT-5）。
+    firewallPorts.value = []
+    firewallProto.value = 'both'
   } catch (e) {
     message.error(extractErrorMessage(e, '删除失败'))
   } finally {

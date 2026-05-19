@@ -44,6 +44,13 @@ var (
 
 	// ErrNotFound 表示请求的实体（按 id 或 token / key）在 DB 中不存在。
 	ErrNotFound = errors.New("storage: not found")
+
+	// ErrDuplicateName 表示 UpsertProxy 时与已有 proxies.name 唯一约束冲突。
+	// 调用方（httpapi）应据此返回 409 Conflict 而非 422，与 (type,remote_port)
+	// 组合冲突区分开（后者继续走原 422 兜底分支）。
+	// 触发条件：proxies 表 name 列 column-level UNIQUE 约束（见
+	// internal/storage/sqlmigrations/0001_init.up.sql 第 32 行）。
+	ErrDuplicateName = errors.New("storage: duplicate proxy name")
 )
 
 // Store 是 SQLite 持久化层句柄。所有写操作受内部 mu 守护（避免单连接 + 并发写时

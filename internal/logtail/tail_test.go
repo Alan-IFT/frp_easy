@@ -182,3 +182,92 @@ func TestReadFrom_TruncatedFile(t *testing.T) {
 		t.Errorf("data=%q off=%d", data, off)
 	}
 }
+
+// TestReadFromCapsAt2MiB 验证 AC-4.1：5 MiB 文件通过 3 次轮询切片，
+// 每次最多 MaxReadBytes (2 MiB)。
+func TestReadFromCapsAt2MiB(t *testing.T) {
+	const total = 5 * 1024 * 1024 // 5 MiB
+	if MaxReadBytes != 2*1024*1024 {
+		t.Fatalf("MaxReadBytes = %d, expected 2 MiB (=%d)", MaxReadBytes, 2*1024*1024)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big.log")
+	payload := make([]byte, total)
+	for i := range payload {
+		payload[i] = byte('a' + (i % 26))
+	}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 第 1 次：offset=0 → len=2 MiB, next=2 MiB
+	data, next, err := ReadFrom(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != MaxReadBytes {
+		t.Fatalf("first chunk len = %d, want %d", len(data), MaxReadBytes)
+	}
+	if next != int64(MaxReadBytes) {
+		t.Errorf("first next = %d, want %d", next, MaxReadBytes)
+	}
+
+	// 第 2 次：offset=2 MiB → len=2 MiB, next=4 MiB
+	data, next, err = ReadFrom(path, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != MaxReadBytes {
+		t.Fatalf("second chunk len = %d, want %d", len(data), MaxReadBytes)
+	}
+	if next != int64(2*MaxReadBytes) {
+		t.Errorf("second next = %d, want %d", next, 2*MaxReadBytes)
+	}
+
+	// 第 3 次：offset=4 MiB → len=1 MiB（剩余）, next=5 MiB
+	data, next, err = ReadFrom(path, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 1024*1024 {
+		t.Errorf("third chunk len = %d, want %d", len(data), 1024*1024)
+	}
+	if next != int64(total) {
+		t.Errorf("third next = %d, want %d", next, total)
+	}
+
+	// 第 4 次：offset==size → 空响应，next 不变
+	data, next, err = ReadFrom(path, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != 0 {
+		t.Errorf("after EOF data should be empty, got %d bytes", len(data))
+	}
+	if next != int64(total) {
+		t.Errorf("after EOF next = %d, want %d", next, total)
+	}
+}
+
+// TestReadFrom_SmallFileNoSplit 验证 AC-4.2：< MaxReadBytes 时一次返回全部。
+func TestReadFrom_SmallFileNoSplit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "small.log")
+	payload := make([]byte, 100*1024) // 100 KiB
+	for i := range payload {
+		payload[i] = 'x'
+	}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data, next, err := ReadFrom(path, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) != len(payload) {
+		t.Errorf("small file data len = %d, want %d (single-shot)", len(data), len(payload))
+	}
+	if next != int64(len(payload)) {
+		t.Errorf("small file next = %d, want %d", next, len(payload))
+	}
+}

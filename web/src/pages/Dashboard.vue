@@ -41,13 +41,13 @@
             </n-descriptions-item>
           </n-descriptions>
 
-          <!-- 错误详情 -->
+          <!-- 错误详情（T-007 AC-7：lastErr 默认完整显示；word-break 防长 token 溢出） -->
           <n-alert
             v-if="procStore.frpcInfo.state === 'error' && procStore.frpcInfo.lastErr"
             type="error"
             style="margin-top: 12px"
           >
-            <div style="font-family: monospace; font-size: 12px; white-space: pre-wrap">
+            <div style="font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word">
               {{ procStore.frpcInfo.lastErr }}
             </div>
             <n-button text tag="a" href="/logs/frpc" style="margin-top: 4px">
@@ -117,7 +117,7 @@
             type="error"
             style="margin-top: 12px"
           >
-            <div style="font-family: monospace; font-size: 12px; white-space: pre-wrap">
+            <div style="font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word">
               {{ procStore.frpsInfo.lastErr }}
             </div>
             <n-button text tag="a" href="/logs/frps" style="margin-top: 4px">
