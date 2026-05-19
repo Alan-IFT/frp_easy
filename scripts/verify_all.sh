@@ -129,8 +129,13 @@ else
     PM=$(pkgmgr)
 
     # B.1
+    # 注意 `npm exec -- tsc --noEmit` 中 `--` 分隔符必需：
+    # 没有它，npm 会把 --noEmit 当作 npm 自身的 flag 吞掉（npm warn Unknown cli config），
+    # tsc 实际收不到 --noEmit。早期写成 `$PM exec tsc --noEmit` 让 tsc fallback 到
+    # tsconfig.json 默认 emit，污染 web/src 写出 .js（T-010 修 tsconfig 加 noEmit:true
+    # 是另一层防御，此处同步修正以让 typecheck 真的只 typecheck）。
     if $PM install --frozen-lockfile &>/dev/null && \
-       { [[ ! -f tsconfig.json ]] || $PM exec tsc --noEmit &>/dev/null; }; then
+       { [[ ! -f tsconfig.json ]] || $PM exec -- tsc --noEmit &>/dev/null; }; then
         step "B.1" "Install / typecheck" "PASS"
     else
         step "B.1" "Install / typecheck" "FAIL"
@@ -163,6 +168,18 @@ else
         step "B.4" "Test count >= baseline" "SKIP"
     else
         step "B.4" "Test count >= baseline" "PASS"
+    fi
+
+    # B.5 — anti-residue sentinel（T-010）：
+    # tsc 早期未启用 noEmit 时会在 web/src/ 里写下 .js / .js.map 与 .ts 同名共存，
+    # 让 vitest 模块解析按 .js 优先（insight-index 2026-05-19），改 .ts 测试看似无效果。
+    # tsconfig.json 已加 "noEmit": true 但旧 tooling / IDE 仍可能误触；本步是闸门。
+    # 命中即 FAIL；env.d.ts 是 Vite 类型声明，例外保留。
+    residue=$(find src -type f \( -name '*.js' -o -name '*.js.map' \) -not -name 'env.d.ts' 2>/dev/null | head -10)
+    if [[ -n "$residue" ]]; then
+        step "B.5" "No tsc residue in web/src/" "FAIL" "found: $residue"
+    else
+        step "B.5" "No tsc residue in web/src/" "PASS"
     fi
     popd >/dev/null
 fi

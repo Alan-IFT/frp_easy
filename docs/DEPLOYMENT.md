@@ -14,9 +14,8 @@
 |---|---|---|
 | `<INSTALL_DIR>` | 你解压发布包的目录绝对路径 | Linux `/opt/frp-easy` · Windows `C:\Program Files\frp-easy` |
 | `<VERSION>` | 你下载的发布包版本号（与文件名一致） | `0.1.0` |
-| `<ORG>` | GitHub 组织名（仓库地址中的 owner 部分） | 由实际仓库决定 |
 
-> 除上述三个占位符外，其余命令可**整段复制即用**。
+> 除上述两个占位符外，其余命令可**整段复制即用**。
 
 ---
 
@@ -38,7 +37,7 @@
 
 到发布页面下载与你操作系统匹配的压缩包：
 
-- 下载地址（占位符）：`https://github.com/<ORG>/frp_easy/releases/latest`
+- 下载地址：<https://github.com/Alan-IFT/frp_easy/releases/latest>
 - Linux 用户：`frp-easy-<VERSION>-linux-amd64.tar.gz`
 - Windows 用户：`frp-easy-<VERSION>-windows-amd64.zip`
 
@@ -148,7 +147,7 @@ Remove-Item -Recurse -Force C:\path\to\frp-easy-<VERSION>-windows-amd64\
 ### B.2 克隆
 
 ```bash
-git clone https://github.com/<ORG>/frp_easy.git
+git clone https://github.com/Alan-IFT/frp_easy.git
 cd frp_easy
 ```
 

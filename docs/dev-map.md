@@ -14,6 +14,8 @@ frp_easy/
 ├── README.md       ← 用户入口文档（顶部决策表 + 开发模式概念；T-008 重排）
 ├── openapi.yaml    ← REST API OpenAPI 3.0.3 规范（28 条路由，T-005 新增）
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
+├── .github/
+│   └── workflows/release.yml  ← T-010 新增：push v* tag 时自动 build + 上传 GitHub Releases 资产
 ├── docs/           ← SPEC、feature 文档、本导航、任务看板
 │   ├── DEPLOYMENT.md       ← 部署权威文档：路径 A 发布包 / 路径 B 源码 / 路径 C 系统服务（T-008 新增）
 │   └── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增）
@@ -29,10 +31,12 @@ frp_easy/
 │   ├── assets/     ← embed.FS 占位（dev 模式返回 404；Round 2 挂 dist/）
 │   ├── auth/       ← argon2id 哈希 / 会话 token / CSRF token / IP 限流
 │   ├── binloc/     ← runtime.GOOS 选 frp_win/ 或 frp_linux/ 二进制路径
+│   ├── browseropen/← T-010 新增：跨平台浏览器自动打开（rundll32/open/xdg-open）+ TTY 检测 + --no-browser/env opt-out
 │   ├── downloader/ ← frp 二进制自动下载（T-002）：异步下载 tar.gz/zip，进度追踪，原子安装
 │   ├── frpcadmin/  ← frpc admin HTTP 客户端（/api/reload、/api/status）
 │   ├── frpconf/    ← DB → TOML 渲染器（AtomicWrite；camelCase 字段对齐 FRP 上游）
 │   ├── httpapi/    ← chi router + 全部 REST handler（T-001: 22 条；T-002: +5 条）+ 中间件链
+│   ├── logrotate/  ← T-010 新增：基于 lumberjack 的 ui.log 三轴轮转（size/backups/age）+ FRP_EASY_LOG_MAX_* env 覆盖
 │   ├── logtail/    ← TailLines + ReadFrom 增量读取子进程日志文件
 │   ├── procmgr/    ← frpc/frps 子进程生命周期（supervisor goroutine；跨平台 kill）
 │   └── storage/    ← SQLite 句柄 + 迁移引擎 + DAO（admin / sessions / kv / proxies）
@@ -100,7 +104,7 @@ frp_easy/
 
 | 功能区域 | 文件 | 约定 |
 |---|---|---|
-| 程序入口 | `cmd/frp-easy/main.go` | 启动序列：appconf → storage → binloc/procmgr/ratelimiter → HTTP server → ReadyGate → AC-9 自动恢复。 |
+| 程序入口 | `cmd/frp-easy/main.go` | 启动序列：appconf → storage → logrotate(ui.log) → binloc/procmgr/ratelimiter → HTTP server → ReadyGate → AC-9 自动恢复 → 可选浏览器自动打开。 |
 | 应用配置（UI 服务自身） | `internal/appconf/config.go` | `AppConfig{UIBindAddr,UIPort,DataDir,LogDir}`；Load/Validate/ListenAddr；frp_easy.toml 不存在时写默认。 |
 | 嵌入前端资源（占位） | `internal/assets/assets.go` | dev 阶段返回 404 占位；Round 2 改成 `//go:embed all:dist`。 |
 | 密码哈希 / 限流 | `internal/auth/` | `HashPassword`(argon2id m=64MiB/t=3/p=2) / `VerifyPassword` / `GenerateSessionToken` / `GenerateCSRFToken` / `RateLimiter`(5次/60s per IP 基于 kv)。 |
@@ -133,6 +137,8 @@ frp_easy/
 | HTTP 中间件（全套） | 是 | `internal/httpapi/middleware.go` | ReadyGate(C-3) / Recover / RequestID / Logger(C-5) / CORS / SessionAuth / CSRF。 |
 | 日志尾读 | 是 | `internal/logtail/tail.go` | TailLines / ReadFrom 增量。 |
 | 子进程管理 | 是 | `internal/procmgr/manager.go` | Start/Stop/Restart/Status/Shutdown/ApplyConfigChange。 |
+| ui.log 轮转 | 是 | `internal/logrotate/logrotate.go` | `New(opts)` 返回 io.WriteCloser；环境变量 `FRP_EASY_LOG_MAX_SIZE_MB/_BACKUPS/_AGE_DAYS` 覆盖默认（10/5/30）；权限恒 0o600。 |
+| 浏览器自动打开 | 是 | `internal/browseropen/browseropen.go` | `ShouldOpen(noBrowserFlag) bool` + `Open(url) error`；TTY 检测 + env `FRP_EASY_NO_BROWSER` opt-out；Linux 缺 xdg-open 自动跳过。 |
 
 ## 要遵循的模式
 

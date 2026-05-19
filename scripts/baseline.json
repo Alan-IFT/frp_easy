@@ -1,11 +1,11 @@
 {
-  "version": 3,
+  "version": 4,
   "created": "2026-05-16",
   "updated": "2026-05-19",
-  "test_count": 213,
-  "passing_count": 213,
-  "go_tests": 156,
+  "test_count": 223,
+  "passing_count": 218,
+  "go_tests": 166,
   "frontend_tests": 57,
   "warnings_baseline": 0,
-  "notes": "T-007 hardening-pass-audit QA phase. Go: 156 (+37 from T-005 119 baseline; +24 dev tests for AC-1/4/5/6 + AC-3 middleware + AC-6 handlers + storage proxies + 13 QA adversarial tests across frpconf/storage/httpapi/logtail/procmgr). Frontend Vitest: 57 (+12 from T-005 45 baseline; +7 dev tests for AC-9 ProxyForm watch coverage + 5 QA adversarial tests for AC-9 reentrancy / oldType short-circuit / sync atomicity). Baseline raised by QA Tester stage; verify_all.sh PASS 18/18."
+  "notes": "T-010 deploy-polish-and-ci QA phase. Go: 166 (+10 from T-007 baseline 156; +4 logrotate + 6 browseropen incl 1 platform-conditional SKIP). Frontend Vitest: 57 (unchanged; cleaned 29 stale .js residue files in web/src per T-009 insight — vitest 模块解析 .ts/.js 共存优先 .js 问题彻底消除，测试发现数从 114 → 57 与 .ts 源文件一致). Baseline raised by T-010 verify_all PASS 18/18 (PowerShell + Git Bash 双 shell)."
 }

@@ -112,7 +112,7 @@ cat > "$TMP_UNIT" <<EOF
 [Unit]
 Description=FRP Easy — frp 可视化管理 UI
 After=network.target
-Documentation=https://github.com/<ORG>/frp_easy
+Documentation=https://github.com/Alan-IFT/frp_easy
 
 [Service]
 Type=simple

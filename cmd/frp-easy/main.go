@@ -38,9 +38,11 @@ import (
 	"github.com/frp-easy/frp-easy/internal/appconf"
 	"github.com/frp-easy/frp-easy/internal/auth"
 	"github.com/frp-easy/frp-easy/internal/binloc"
+	"github.com/frp-easy/frp-easy/internal/browseropen"
 	"github.com/frp-easy/frp-easy/internal/downloader"
 	"github.com/frp-easy/frp-easy/internal/frpcadmin"
 	"github.com/frp-easy/frp-easy/internal/httpapi"
+	"github.com/frp-easy/frp-easy/internal/logrotate"
 	"github.com/frp-easy/frp-easy/internal/procmgr"
 	"github.com/frp-easy/frp-easy/internal/storage"
 )
@@ -57,13 +59,21 @@ const usageText = `用法: frp-easy [选项]
 frp-easy 是 FRP 可视化管理 UI 的单二进制服务进程。
 
 选项:
-  -h, --help       显示本帮助并退出
-  -v, --version    显示版本号并退出
+  -h, --help         显示本帮助并退出
+  -v, --version      显示版本号并退出
+      --no-browser   启动后不自动打开浏览器（默认 TTY 启动时打开）
 
 配置:
-  配置文件         frp_easy.toml（与本程序同目录；可通过环境变量 FRP_EASY_CONFIG 覆盖路径）
-  UI 默认地址      http://127.0.0.1:8080
-  数据目录默认     ./.frp_easy
+  配置文件           frp_easy.toml（与本程序同目录；可通过环境变量 FRP_EASY_CONFIG 覆盖路径）
+  UI 默认地址        http://127.0.0.1:8080
+  数据目录默认       ./.frp_easy
+
+环境变量:
+  FRP_EASY_CONFIG              配置文件路径（默认 ./frp_easy.toml）
+  FRP_EASY_NO_BROWSER          设为非空值禁用自动打开浏览器（等价于 --no-browser）
+  FRP_EASY_LOG_MAX_SIZE_MB     单 ui.log 上限 MB（默认 10）
+  FRP_EASY_LOG_MAX_BACKUPS     ui.log 历史份数（默认 5）
+  FRP_EASY_LOG_MAX_AGE_DAYS    ui.log 最长保留天数（默认 30）
 
 退出码:
   0   正常退出
@@ -91,11 +101,13 @@ func run() error {
 	var (
 		showVersion bool
 		showHelp    bool
+		noBrowser   bool
 	)
 	fs.BoolVar(&showVersion, "version", false, "")
 	fs.BoolVar(&showVersion, "v", false, "")
 	fs.BoolVar(&showHelp, "help", false, "")
 	fs.BoolVar(&showHelp, "h", false, "")
+	fs.BoolVar(&noBrowser, "no-browser", false, "")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			fmt.Fprint(os.Stdout, usageText)
@@ -148,16 +160,20 @@ func run() error {
 
 	// 3. logger（slog → 同时写 ui.log 与 stderr）
 	//
-	// 【T-007 AC-2】ui.log 权限收紧到 0o600：仅 owner 可读写，避免多用户主机上
-	// 同主机其它本地用户读取日志中的 redact 后请求体 / frpc 错误回环。OpenFile
-	// 的 mode 仅在新建文件时生效；如果是从老版本升级，文件已存在权限仍是
-	// 0o644 → 显式 Chmod 一次幂等收紧。
+	// 【T-007 AC-2】ui.log 权限收紧到 0o600：仅 owner 可读写。
+	// 【T-010 AC-3】通过 internal/logrotate 接入 lumberjack 做 size+age+count 三轴轮转，
+	// 长跑 systemd / Windows Service 不再爆盘。失败时降级到 stderr-only。
 	uiLogPath := filepath.Join(logDir, "ui.log")
-	logFile, _ := os.OpenFile(uiLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if logFile != nil {
-		_ = os.Chmod(uiLogPath, 0o600)
+	logWriter, lwErr := logrotate.New(logrotate.LoadOptionsFromEnv(uiLogPath))
+	if lwErr != nil {
+		fmt.Fprintf(os.Stderr, "WARN: 日志轮转初始化失败 %v；将仅写 stderr。\n", lwErr)
 	}
-	logger := newLogger(logFile)
+	defer func() {
+		if logWriter != nil {
+			_ = logWriter.Close()
+		}
+	}()
+	logger := newLogger(logWriter)
 	if errors.Is(openErr, storage.ErrCorruptReset) {
 		logger.Warn("data.db corrupt detected; renamed and reset", "dataDir", dataDir)
 	}
@@ -245,6 +261,20 @@ func run() error {
 	ready.Store(true)
 	logger.Info("ready gate opened")
 
+	// 【T-010 AC-2】TTY 启动时自动打开浏览器；systemd / service 模式天然被 TTY 检测排除。
+	// 0.0.0.0 / :: 绑定时把 URL 改写为 127.0.0.1，浏览器无法访问 unspecified address。
+	if browseropen.ShouldOpen(noBrowser) {
+		openURL := fmt.Sprintf("http://%s", addr)
+		if cfg.UIBindAddr == "0.0.0.0" || cfg.UIBindAddr == "::" {
+			openURL = fmt.Sprintf("http://127.0.0.1:%d", cfg.UIPort)
+		}
+		if bErr := browseropen.Open(openURL); bErr != nil {
+			logger.Warn("auto-open browser failed", "err", bErr, "url", openURL)
+		} else {
+			logger.Info("opened browser", "url", openURL)
+		}
+	}
+
 	// 7. 信号
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -296,10 +326,11 @@ func isAddrInUse(err error) bool {
 	return false
 }
 
-// newLogger 构造 slog logger：tee 到 logFile（若 nil 则仅 stderr）。
-func newLogger(logFile *os.File) *slog.Logger {
-	if logFile != nil {
-		w := io.MultiWriter(logFile, os.Stderr)
+// newLogger 构造 slog logger：tee 到 logWriter（若 nil 则仅 stderr）。
+// logWriter 实际是 *lumberjack.Logger 的 io.WriteCloser 包装（T-010 logrotate）。
+func newLogger(logWriter io.Writer) *slog.Logger {
+	if logWriter != nil {
+		w := io.MultiWriter(logWriter, os.Stderr)
 		return slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))

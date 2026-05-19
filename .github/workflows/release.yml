@@ -1,0 +1,65 @@
+# T-010 deploy-polish-and-ci · GitHub Actions release workflow
+#
+# 触发：push v* tag（如 v0.1.0），自动构建 Linux + Windows 发布包并上传到 GitHub Releases。
+# 不在 PR / 普通 push 上触发，避免占用免费额度。
+#
+# 复用现有 scripts/build.sh + scripts/package.sh（不在 workflow 里复刻构建逻辑，
+# 让本地 release 和 CI release 走同一条路径）。
+#
+# 发版步骤（人工）：
+#   git tag v0.1.0
+#   git push origin v0.1.0
+# GitHub UI 进入 Actions 看 build 状态；2-3 分钟后 Releases 页面有 .tar.gz + .zip。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # 上传 release assets 必需
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          # 与 go.mod 顶部 `go 1.25.0` 对齐；避免 setup-go 在每次 CI 跑时下载 1.22
+          # 后又被 GOTOOLCHAIN=auto 拉 1.25 的双下载浪费。
+          go-version: '1.25'
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build (Linux + Windows cross)
+        run: bash scripts/build.sh --all
+
+      - name: Package (tar.gz + zip)
+        run: bash scripts/package.sh --windows --skip-build
+
+      - name: Compute release name from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release & upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.version }}
+          files: |
+            bin/release/*.tar.gz
+            bin/release/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true

@@ -114,7 +114,11 @@ Step "B.1" "Install / typecheck" {
     try {
         $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
         & $pkgMgr install --frozen-lockfile 2>&1 | Out-Null
-        if (Test-Path "tsconfig.json") { & $pkgMgr exec tsc --noEmit }
+        # `npm exec -- tsc --noEmit` 中 `--` 分隔符必需：缺它 npm 会把 --noEmit
+        # 当自身 flag 吞掉（"npm warn Unknown cli config"），tsc fallback 到 tsconfig
+        # 默认 emit，污染 web/src 写出 .js。T-010 同时给 tsconfig.json 加 noEmit:true
+        # 做第二层防御；这里也修正调用形式以让 typecheck 真的只 typecheck。
+        if (Test-Path "tsconfig.json") { & $pkgMgr exec -- tsc --noEmit }
     } finally {
         Pop-Location
     }
@@ -151,6 +155,23 @@ Step "B.4" "Test count >= baseline" {
     $baseline = Get-Content (Join-Path $root "scripts/baseline.json") | ConvertFrom-Json
     if ($baseline.test_count -eq 0) { return "SKIP" }
     # CUSTOMIZE: read your test runner output to get actual count vs baseline.
+}
+
+# B.5 — anti-residue sentinel（T-010）：
+# tsc 早期未启用 noEmit 时会在 web/src/ 里写下 .js / .js.map 与 .ts 同名共存，
+# 让 vitest 模块解析按 .js 优先（insight-index 2026-05-19），改 .ts 测试看似无效果。
+# tsconfig.json 已加 "noEmit": true 但旧 tooling / IDE 仍可能误触；本步是闸门。
+# env.d.ts 是 Vite 类型声明，例外保留。
+Step "B.5" "No tsc residue in web/src/" {
+    $srcDir = Join-Path $root "web\src"
+    if (-not (Test-Path $srcDir)) { return "SKIP" }
+    $residue = Get-ChildItem -Path $srcDir -Recurse -File -Include '*.js','*.js.map' |
+               Where-Object { $_.Name -ne 'env.d.ts' } |
+               Select-Object -First 10
+    if ($residue) {
+        $names = ($residue | ForEach-Object { $_.FullName.Substring($root.Length + 1) }) -join ', '
+        throw "found tsc residue: $names"
+    }
 }
 
 # --- C. End-to-end (require playwright config) ---

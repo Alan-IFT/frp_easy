@@ -6,6 +6,8 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/pelletier/go-toml/v2 v2.3.1
 	golang.org/x/crypto v0.51.0
+	golang.org/x/term v0.43.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	modernc.org/sqlite v1.29.10
 )
 
