@@ -17,7 +17,7 @@ frp_easy/
 ├── docs/           ← SPEC、feature 文档、本导航、任务看板
 │   ├── DEPLOYMENT.md       ← 部署权威文档：路径 A 发布包 / 路径 B 源码 / 路径 C 系统服务（T-008 新增）
 │   └── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增）
-├── scripts/        ← verify_all、start、build、baseline、sync 辅助；start-e2e-server.sh（T-006）；
+├── scripts/        ← verify_all、start、build、baseline、sync 辅助；start-e2e-server.{sh,ps1}（T-006 sh / T-009 ps1，PowerShell 调用路径）；
 │                     package.{sh,ps1} / install-service.{sh,ps1} / uninstall-service.{sh,ps1}（T-008 新增）
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
@@ -48,12 +48,12 @@ frp_easy/
     │       └── fixtures/
     │           └── auth.ts         ← programmaticLogin / bypassWizard / setupAccount / programmaticLogout
     └── src/
-        ├── main.ts         ← app 入口；Pinia・Router 組み立て・CSRF トークンゲッター登録
-        ├── App.vue         ← ルートコンポーネント（NConfigProvider + NMessageProvider ラップ；T-006 修正）
-        ├── router.ts       ← Vue Router 4 (history mode)；ナビゲーションガード
-        ├── types.ts        ← バックエンド API 契約と一致する型定義（Proxy / ProcessInfo 等）
-        ├── api/            ← axios クライアント + エンドポイント別ラッパー
-        │   ├── client.ts   ← axios インスタンス；CSRF インターセプター；401 リダイレクト
+        ├── main.ts         ← app 入口；组合 Pinia / Router；注册 CSRF token getter
+        ├── App.vue         ← 根组件（NConfigProvider + NMessageProvider 包裹；T-006 修复）
+        ├── router.ts       ← Vue Router 4（history mode）；导航守卫
+        ├── types.ts        ← 与后端 API 契约一致的类型定义（Proxy / ProcessInfo 等）
+        ├── api/            ← axios 客户端 + 按端点分组的封装
+        │   ├── client.ts   ← axios 实例；CSRF 拦截器；401 重定向
         │   ├── auth.ts     ← /api/v1/auth/* / /api/v1/setup
         │   ├── system.ts   ← /api/v1/system/ready, /api/v1/system/public-ip
         │   ├── proxies.ts  ← /api/v1/proxies CRUD
@@ -64,36 +64,36 @@ frp_easy/
         │   ├── mode.ts     ← /api/v1/mode
         │   ├── downloader.ts← /api/v1/system/download-bin + download-status/{kind}
         │   └── wizard.ts   ← /api/v1/wizard/status + /wizard/complete
-        ├── stores/         ← Pinia ストア
+        ├── stores/         ← Pinia store
         │   ├── auth.ts     ← user / csrfToken；login / logout / checkMe / fetchCsrf
-        │   ├── proc.ts     ← frpc/frps ProcessInfo；2s ポーリング
+        │   ├── proc.ts     ← frpc/frps ProcessInfo；2s 轮询
         │   ├── proxies.ts  ← Proxy[] CRUD
         │   ├── app.ts      ← initialized / binMissing / version
-        │   ├── downloader.ts← frpc/frps DownloadState；1s ポーリング；downloadBin/startPolling
+        │   ├── downloader.ts← frpc/frps DownloadState；1s 轮询；downloadBin/startPolling
         │   ├── wizard.ts   ← wizardHandled / shouldShow / checked；checkWizard / completeWizard
-        │   └── __tests__/  ← Vitest ストアテスト
-        ├── composables/    ← 再利用ロジック
-        │   ├── statusUtils.ts  ← getTagType / getStateLabel (ProcessState → Naive UI 色)
-        │   └── useProxyForm.ts ← ProxyForm フォームロジック (isTcpUdp / isHttpHttps 等)
+        │   └── __tests__/  ← Vitest store 测试
+        ├── composables/    ← 可复用逻辑
+        │   ├── statusUtils.ts  ← getTagType / getStateLabel（ProcessState → Naive UI 颜色）
+        │   └── useProxyForm.ts ← ProxyForm 表单逻辑（isTcpUdp / isHttpHttps 等）
         ├── components/
-        │   ├── AppLayout.vue    ← サイドナビ + ヘッダ + コンテンツ共通レイアウト（T-002: 下載ボタン追加）
-        │   ├── StatusBadge.vue  ← ProcessState → 色付き NTag
-        │   ├── ProxyForm.vue    ← Proxy 新規/編集フォーム（type 連動フィールド切り替え）
-        │   ├── ConfirmDialog.vue← 破壊的操作の二次確認モーダル
-        │   ├── LogViewer.vue    ← ログ表示（TailLines 初期表示 + 2s 増分ポーリング）
-        │   ├── FirewallHint.vue ← T-002: Linux ufw/iptables コマンドヒント（ports[] props）
-        │   ├── PublicIpDetector.vue← T-002: 公網 IP 検出ボタン + 結果表示
-        │   └── __tests__/      ← Vitest コンポーネントテスト
+        │   ├── AppLayout.vue    ← 侧边导航 + 头部 + 内容公用布局（T-002: 新增下载按钮）
+        │   ├── StatusBadge.vue  ← ProcessState → 带颜色的 NTag
+        │   ├── ProxyForm.vue    ← Proxy 新增/编辑表单（type 联动字段切换）
+        │   ├── ConfirmDialog.vue← 破坏性操作二次确认弹窗
+        │   ├── LogViewer.vue    ← 日志显示（TailLines 首次显示 + 2s 增量轮询）
+        │   ├── FirewallHint.vue ← T-002: Linux ufw/iptables 命令提示（ports[] props）
+        │   ├── PublicIpDetector.vue← T-002: 公网 IP 检测按钮 + 结果显示
+        │   └── __tests__/      ← Vitest 组件测试
         └── pages/
-            ├── Setup.vue     ← 初回セットアップ（username + password）
-            ├── Login.vue     ← ログイン（429 カウントダウン対応）
-            ├── Dashboard.vue ← frpc/frps 状態バッジ + 起動/停止/再起動ボタン
-            ├── Proxies.vue   ← Proxy 一覧 + 新規/編集/削除（T-002: FirewallHint 追加）
-            ├── Server.vue    ← frps 設定フォーム（T-002: PublicIpDetector + FirewallHint 追加）
-            ├── Client.vue    ← frpc 接続設定フォーム（serverAddr / serverPort / authToken）
-            ├── Logs.vue      ← ログビューア（LogViewer コンポーネント利用）
-            ├── Settings.vue  ← パスワード変更フォーム
-            └── Wizard.vue    ← T-002: 部署向导（トップレベルルート /wizard，3ステップ）
+            ├── Setup.vue     ← 首次安装（username + password）
+            ├── Login.vue     ← 登录（429 倒计时支持）
+            ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮
+            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint）
+            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint）
+            ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken）
+            ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）
+            ├── Settings.vue  ← 修改密码表单
+            └── Wizard.vue    ← T-002: 部署向导（顶级路由 /wizard，3 步）
 ```
 
 ## 功能在哪里
