@@ -57,7 +57,12 @@ frp_easy.toml
 
 # Test coverage
 coverage/
+coverage
 coverage.out
+
+# Playwright artifacts
+web/test-results/
+web/playwright-report/
 
 # Secrets
 .env
