@@ -6,6 +6,26 @@
 
 ---
 
+## 快速开始 / 部署
+
+> 详细部署指南见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。本节是 30 秒决策表 + 最短示例。
+
+| 我是 | 推荐路径 |
+|---|---|
+| 非开发者 / 普通用户 | [路径 A — 下载发布产物](docs/DEPLOYMENT.md#路径-a--下载发布产物) |
+| 开发者 / 贡献者 | [路径 B — 源码构建](docs/DEPLOYMENT.md#路径-b--源码构建) |
+| 运维 / 生产长驻 | [路径 C — 作为系统服务](docs/DEPLOYMENT.md#路径-c--作为系统服务) |
+
+最短示例（Linux 下载发布包）：
+
+```bash
+tar xzf frp-easy-<VERSION>-linux-amd64.tar.gz && cd frp-easy-<VERSION>-linux-amd64 && ./frp-easy
+```
+
+启动后浏览器打开 <http://127.0.0.1:8080>。
+
+---
+
 ## 功能列表
 
 ### T-001 核心功能
@@ -38,42 +58,6 @@
 | npm | 随 Node.js | 前端包管理 |
 
 > **重要**：项目根目录的 `.gitignore` 包含 `dist/` 规则，`internal/assets/dist/`（Go embed 的输入目录）不在 git 中。克隆后**必须先运行 `npm run build`**（或直接使用 `scripts/build.sh`）才能 `go build`，否则缺少 dist 目录导致编译失败。
-
----
-
-## 快速开始
-
-### Linux
-
-```bash
-# 步骤一：克隆项目
-git clone https://github.com/your-org/frp_easy.git
-cd frp_easy
-
-# 步骤二：构建（自动执行 npm install + npm run build + go build）
-bash scripts/build.sh
-
-# 步骤三：运行二进制
-./bin/frp-easy
-```
-
-浏览器打开 <http://127.0.0.1:8080>，首次启动进入 setup 向导。
-
-> **macOS 说明**：`scripts/build.sh` 默认目标为 `linux/amd64`，macOS 用户可修改 `build.sh` 中 `GOOS=linux` 为 `GOOS=darwin` 自行编译；或使用 `scripts/start.sh` 在本地进行开发调试（Go API + Vite dev server 均为本机原生进程，无需编译分发二进制）。
-
-### Windows
-
-```powershell
-# 步骤一：克隆项目
-git clone https://github.com/your-org/frp_easy.git
-cd frp_easy
-
-# 步骤二：构建（自动执行 npm install + npm run build + go build）
-.\scripts\build.ps1
-
-# 步骤三：运行二进制
-.\bin\frp-easy.exe
-```
 
 ---
 
@@ -116,62 +100,29 @@ LogDir     = "./.frp_easy/logs"
 
 ---
 
-## 更新流程
+## 升级
 
-> **警告：仅执行 `git pull` + 重启旧二进制是不够的**，更新不会生效。
+升级流程详见 [DEPLOYMENT.md](docs/DEPLOYMENT.md#升级)（路径 A 见 A.4；路径 C 见 C.2.4 / C.3.4）。
 
-完整更新步骤：
-
-```bash
-# Linux / macOS
-git pull
-bash scripts/build.sh
-# 用新二进制替换旧进程并重启
-```
-
-```powershell
-# Windows
-git pull
-.\scripts\build.ps1
-# 用新二进制替换旧进程并重启
-```
-
-**为什么需要重新构建？**
-
-1. **前端需重建**：`internal/assets/dist/` 被 `.gitignore` 的 `dist/` 规则排除，`git pull` 不会更新前端产物。前端 SPA 通过 `//go:embed all:dist` 嵌入 Go 二进制，`build.sh` 会自动执行 `npm run build` 将新前端嵌入。若仅 `go build` 跳过前端构建，二进制中嵌入的前端仍为旧版本。
-
-2. **数据库迁移自动运行**：`storage.Open()` 在启动时对所有未应用的迁移执行 `applyOne()`，用户无需手动执行任何 SQL。新版本的迁移文件会在首次启动新二进制时自动应用。
-
-3. **配置文件向后兼容**：`appconf.Load()` 对现有 `frp_easy.toml` 中缺失的字段自动补默认值，升级不会破坏现有配置。`frp_easy.toml` 在 `.gitignore` 中，`git pull` 不会覆盖用户配置。
-
-4. **仅后端变更的简化路径**（可选）：若明确只有 Go 代码变更（无前端改动），可执行以下命令后重启，前端不需要重新构建：
-   ```bash
-   git pull
-   CGO_ENABLED=0 go build -o bin/frp-easy ./cmd/frp-easy
-   ```
-   在不能确定是否有前端变更时，**始终使用 `scripts/build.sh`**。
-
-**明确不足够的情形：**
-
-- `git pull` + 直接重启旧二进制：二进制不变，更新不生效
-- `git pull` + 仅 `go build`（跳过 `npm run build`）：后端更新，但前端仍为旧版本
+要点：**始终先停服，再覆盖二进制；`frp_easy.toml` 与 `.frp_easy/` 永不覆盖**；数据库 schema 迁移由 `storage.Open()` 启动时自动应用。
 
 ---
 
-## 开发模式
+## 开发模式（面向贡献者）
 
-开发模式使用双进程：Go API（端口 8080）+ Vite dev server（端口 5173）独立运行，Go 侧开启 CORS 允许 Vite 代理。
+> 完整构建 / 调试 / 打包流程见 [DEPLOYMENT.md 路径 B](docs/DEPLOYMENT.md#路径-b--源码构建)。本节是开发者最常用的一条命令。
+
+双进程开发：Go API + Vite dev server 同时启动，前端热重载、Go 侧开启 CORS 允许 Vite 代理。
 
 ```bash
-bash scripts/start.sh
+bash scripts/start.sh     # Linux / macOS
+.\scripts\start.ps1       # Windows
 ```
 
-- Go API 在 <http://127.0.0.1:8080> 提供 REST 接口
-- Vite dev server 在 <http://127.0.0.1:5173> 提供热重载前端
+- Go API 在 <http://127.0.0.1:8080>
+- Vite dev server 在 <http://127.0.0.1:5173>
 
-按 Ctrl+C 停止所有进程。
-
-> **注意**：开发模式下 `go run ./cmd/frp-easy` 不读取 `internal/assets/dist/`（dev 阶段资源层返回 404 占位），前端请求全部由 Vite dev server 处理。
+按 Ctrl+C 同时停止两个进程。开发模式下 `go run ./cmd/frp-easy` 不读取嵌入资源（dev 阶段资源层返回 404 占位），前端请求全部由 Vite dev server 处理。
 
 ---
 

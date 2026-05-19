@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-008 | deploy-kit | DELIVERED | 2026-05-19 | `docs/features/_archived/deploy-kit/` |
 | T-007 | hardening-pass-audit | DELIVERED | 2026-05-19 | `docs/features/_archived/hardening-pass-audit/` |
 | T-006 | e2e-smoke-tests | DELIVERED | 2026-05-17 | `docs/features/_archived/e2e-smoke-tests/` |
 | T-005 | docs-and-api-schema | DELIVERED | 2026-05-16 | `docs/features/_archived/docs-and-api-schema/` |

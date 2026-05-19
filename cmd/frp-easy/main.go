@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -47,6 +48,31 @@ import (
 // Version 由构建脚本通过 -ldflags 注入；MVP 阶段写死 0.1.0。
 var Version = "0.1.0"
 
+// usageText 是 --help / -h 打印的中文帮助文本（T-008 FR-3.2 / AC-12）。
+// 必须覆盖：用法、flag 列表、配置文件位置、UI 默认地址、退出码语义。
+// 注意：示例不写任何引号包裹的 8+ 字符敏感字符串，避免 verify_all A.1
+// secrets scan 正则误中（T-008 03_GATE_REVIEW MINOR-4）。
+const usageText = `用法: frp-easy [选项]
+
+frp-easy 是 FRP 可视化管理 UI 的单二进制服务进程。
+
+选项:
+  -h, --help       显示本帮助并退出
+  -v, --version    显示版本号并退出
+
+配置:
+  配置文件         frp_easy.toml（与本程序同目录；可通过环境变量 FRP_EASY_CONFIG 覆盖路径）
+  UI 默认地址      http://127.0.0.1:8080
+  数据目录默认     ./.frp_easy
+
+退出码:
+  0   正常退出
+  1   一般错误（启动失败、配置错误等）
+  2   端口被占用 / 未知 flag
+
+更多文档：docs/DEPLOYMENT.md
+`
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -55,6 +81,38 @@ func main() {
 }
 
 func run() error {
+	// 0. flag 解析（T-008 FR-3 / AC-11/12/13/14）
+	//
+	// 必须早于 appconf.Load：用户即使没有 frp_easy.toml 也能跑 --version / --help。
+	// 用 ContinueOnError + 自定义 stderr 中文化，避免污染 flag.CommandLine。
+	// 03_GATE_REVIEW MINOR-1：显式分流 flag.ErrHelp 与"真未知 flag"两种 err。
+	fs := flag.NewFlagSet("frp-easy", flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // 让我们接管 stderr/stdout 输出
+	var (
+		showVersion bool
+		showHelp    bool
+	)
+	fs.BoolVar(&showVersion, "version", false, "")
+	fs.BoolVar(&showVersion, "v", false, "")
+	fs.BoolVar(&showHelp, "help", false, "")
+	fs.BoolVar(&showHelp, "h", false, "")
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprint(os.Stdout, usageText)
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "frp-easy: 未识别的参数。运行 'frp-easy --help' 查看用法。\n")
+		os.Exit(2)
+	}
+	if showHelp {
+		fmt.Fprint(os.Stdout, usageText)
+		return nil
+	}
+	if showVersion {
+		fmt.Fprintf(os.Stdout, "frp-easy %s\n", Version)
+		return nil
+	}
+
 	// 1. appconf
 	cfgPath := envOr("FRP_EASY_CONFIG", "frp_easy.toml")
 	cfg, err := appconf.Load(cfgPath)

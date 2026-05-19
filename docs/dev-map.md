@@ -11,12 +11,14 @@
 ```
 frp_easy/
 ├── (项目根目录)
-├── README.md       ← 用户入口文档（安装、配置、更新、开发，T-003 新增）
+├── README.md       ← 用户入口文档（顶部决策表 + 开发模式概念；T-008 重排）
 ├── openapi.yaml    ← REST API OpenAPI 3.0.3 规范（28 条路由，T-005 新增）
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
 ├── docs/           ← SPEC、feature 文档、本导航、任务看板
+│   ├── DEPLOYMENT.md       ← 部署权威文档：路径 A 发布包 / 路径 B 源码 / 路径 C 系统服务（T-008 新增）
 │   └── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增）
-├── scripts/        ← verify_all、start、build、baseline、sync 辅助；start-e2e-server.sh（T-006）
+├── scripts/        ← verify_all、start、build、baseline、sync 辅助；start-e2e-server.sh（T-006）；
+│                     package.{sh,ps1} / install-service.{sh,ps1} / uninstall-service.{sh,ps1}（T-008 新增）
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
 ├── bin/            ← 构建产物（gitignore；build.ps1/build.sh 输出到这里）
