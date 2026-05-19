@@ -124,7 +124,7 @@ PASS: 19 / WARN: 0 / FAIL: 0 / SKIP: 0
 
 PowerShell 与 Git Bash 双 shell 结果一致。
 
-## 4. Adversarial tests
+## Adversarial tests
 
 > 不是简单跑 happy path；试图打破每条 AC 的边界。
 
