@@ -74,10 +74,14 @@ cd .\frp-easy-<VERSION>-windows-amd64
 启动后 stderr 会打印：
 
 ```
-frp_easy UI 已启动：http://127.0.0.1:8080 （Ctrl+C 退出）
+frp_easy UI 已启动：http://0.0.0.0:7800 （Ctrl+C 退出）
 ```
 
-浏览器打开 <http://127.0.0.1:8080>，按 setup 向导创建管理员账号并完成首启配置。
+> 默认 `UIBindAddr = "0.0.0.0"` 监听所有网卡，stderr 还会打印一条安全提示。
+> 本机访问用 <http://127.0.0.1:7800>；同局域网其他设备用 `http://<本机IP>:7800`。
+> 仅需本机访问时，把 `frp_easy.toml` 的 `UIBindAddr` 改为 `127.0.0.1` 后重启。
+
+浏览器打开 <http://127.0.0.1:7800>，按 setup 向导创建管理员账号并完成首启配置。
 
 > 自检命令：
 >
@@ -139,7 +143,7 @@ Remove-Item -Recurse -Force C:\path\to\frp-easy-<VERSION>-windows-amd64\
 
 | 工具 | 最低版本 | 说明 |
 |---|---|---|
-| Go | 1.22+ | 编译 Go 后端 |
+| Go | 1.25+ | 编译 Go 后端（与 `go.mod` 的 `go 1.25.0` 一致） |
 | Node.js | 18+ | 编译 Vue 3 前端 |
 | npm | 随 Node.js | 前端包管理 |
 | git | 任意近期版本 | clone + `git describe` 版本注入 |
@@ -188,7 +192,7 @@ bash scripts/build.sh --all    # 同时交叉编译 Windows amd64
 .\bin\frp-easy.exe        # Windows
 ```
 
-浏览器开 <http://127.0.0.1:8080>。
+浏览器开 <http://127.0.0.1:7800>。
 
 ### B.5 开发模式（双进程：Go API + Vite dev server）
 
@@ -202,7 +206,7 @@ bash scripts/start.sh     # Linux / macOS
 .\scripts\start.ps1       # Windows
 ```
 
-- Go API 在 <http://127.0.0.1:8080>
+- Go API 在 <http://127.0.0.1:7800>
 - Vite dev server 在 <http://127.0.0.1:5173>
 
 按 Ctrl+C 同时停止两个进程。
@@ -389,42 +393,42 @@ sc.exe start frp-easy
 **症状**：启动后立即退出，stderr 出现：
 
 ```
-frp_easy UI 启动失败：端口 8080 已被占用。请关闭占用进程，或编辑 frp_easy.toml 中 UIPort = 8081 后重试。
+frp_easy UI 启动失败：端口 7800 已被占用。请关闭占用进程，或编辑 frp_easy.toml 中 UIPort = 7801 后重试。
 ```
 
 **排查**：
 
 ```bash
 # Linux
-ss -ltnp 'sport = :8080' || lsof -iTCP:8080 -sTCP:LISTEN
+ss -ltnp 'sport = :7800' || lsof -iTCP:7800 -sTCP:LISTEN
 ```
 
 ```powershell
 # Windows
-Get-NetTCPConnection -LocalPort 8080 -State Listen | Select-Object -Property OwningProcess
+Get-NetTCPConnection -LocalPort 7800 -State Listen | Select-Object -Property OwningProcess
 Get-Process -Id <上一行 OwningProcess>
 ```
 
-**修复**：编辑 `frp_easy.toml`，把 `UIPort` 改成其它端口（如 `8081`），保存后重启。`frp-easy` 启动退出码为 `2`（与 `--help` 中"退出码"小节一致）。
+**修复**：编辑 `frp_easy.toml`，把 `UIPort` 改成其它端口（如 `7801`），保存后重启。`frp-easy` 启动退出码为 `2`（与 `--help` 中"退出码"小节一致）。
 
 ### F.2 UI 打不开
 
-**症状**：浏览器访问 `http://127.0.0.1:8080` 报 503 / 连接失败 / 转圈。
+**症状**：浏览器访问 `http://127.0.0.1:7800` 报 503 / 连接失败 / 转圈。
 
 **排查**：
 
 ```bash
 # Linux / macOS
-curl -i http://127.0.0.1:8080/api/v1/system/ready
+curl -i http://127.0.0.1:7800/api/v1/system/ready
 ```
 
 ```powershell
 # Windows
-Invoke-WebRequest -Uri http://127.0.0.1:8080/api/v1/system/ready -UseBasicParsing
+Invoke-WebRequest -Uri http://127.0.0.1:7800/api/v1/system/ready -UseBasicParsing
 ```
 
 - 返回 `HTTP/1.1 503` + `Retry-After: 2`：启动序列未完成（数据迁移、子进程初始化中），等几秒重试；
-- 返回 `Connection refused`：进程未启动或绑定到非 `127.0.0.1` 的地址，看 stderr 与 `<INSTALL_DIR>/.frp_easy/logs/ui.log`；
+- 返回 `Connection refused`：进程未启动，或 `UIBindAddr` 被改成了一个本机不持有的地址，看 stderr 与 `<INSTALL_DIR>/.frp_easy/logs/ui.log`（默认 `0.0.0.0` 监听所有网卡，回环访问总是可达）；
 - 返回 200：UI 已就绪，可能是浏览器缓存 / proxy 问题。
 
 **日志位置**：`<INSTALL_DIR>/.frp_easy/logs/ui.log`（权限 `0o600`，仅 owner 可读）。

@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: 'http://localhost:7800',
     trace: 'off',
   },
   projects: [
@@ -21,7 +21,7 @@ export default defineConfig({
     command: process.platform === 'win32'
       ? 'pwsh -NoProfile -ExecutionPolicy Bypass -File ../scripts/start-e2e-server.ps1'
       : 'bash ../scripts/start-e2e-server.sh',
-    url: 'http://127.0.0.1:8080/api/v1/health',
+    url: 'http://127.0.0.1:7800/api/v1/health',
     timeout: 120_000,
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',

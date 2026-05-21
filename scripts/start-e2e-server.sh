@@ -50,7 +50,7 @@ echo "[e2e-server] using E2E_TMP: $E2E_TMP" >&2
 
 cat > "$E2E_TMP/frp_easy.toml" <<EOF
 UIBindAddr = "127.0.0.1"
-UIPort     = 8080
+UIPort     = 7800
 DataDir    = "$E2E_TMP/data"
 LogDir     = "$E2E_TMP/logs"
 EOF

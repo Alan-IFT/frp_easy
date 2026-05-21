@@ -141,8 +141,8 @@ make_toml_example() {
 # frp_easy 自身的配置文件示例（与 frpc.toml / frps.toml 不同）
 # 复制为 frp_easy.toml 后按需修改。首次启动若无此文件，frp-easy 会自动写入默认值。
 
-UIBindAddr = "127.0.0.1"
-UIPort     = 8080
+UIBindAddr = "0.0.0.0"
+UIPort     = 7800
 DataDir    = "./.frp_easy"
 LogDir     = "./.frp_easy/logs"
 EOF
@@ -165,7 +165,7 @@ frp_easy ${ver} — 部署快速开始（Linux）
 
   3. 启动 UI 服务：
        ./frp-easy
-     看到 stderr 提示 "frp_easy UI 已启动：http://127.0.0.1:8080" 后，浏览器打开该地址。
+     看到 stderr 提示 "frp_easy UI 已启动" 后，用浏览器打开 http://127.0.0.1:7800。
 
 可选（作为系统服务运行）：
   sudo ./scripts/install-service.sh
@@ -178,7 +178,7 @@ frp_easy ${ver} — 部署快速开始（Linux）
   ./frp-easy --help       # 显示帮助
 
 文档：详见 docs/DEPLOYMENT.md（GitHub 仓库内）。
-默认配置：UI 监听 127.0.0.1:8080；数据目录 ./.frp_easy；日志 ./.frp_easy/logs/。
+默认配置：UI 监听 0.0.0.0:7800（局域网可访问，本机用 http://127.0.0.1:7800）；数据目录 ./.frp_easy；日志 ./.frp_easy/logs/。
 EOF
 }
 
@@ -197,7 +197,7 @@ frp_easy ${ver} — 部署快速开始（Windows）
 
   3. 启动 UI 服务：
        .\frp-easy.exe
-     看到 stderr 提示 "frp_easy UI 已启动：http://127.0.0.1:8080" 后，浏览器打开该地址。
+     看到 stderr 提示 "frp_easy UI 已启动" 后，用浏览器打开 http://127.0.0.1:7800。
 
 可选（作为 Windows 服务运行）：
   以管理员身份打开 PowerShell，然后：
@@ -210,7 +210,7 @@ frp_easy ${ver} — 部署快速开始（Windows）
   .\frp-easy.exe --help       # 显示帮助
 
 文档：详见 docs/DEPLOYMENT.md（GitHub 仓库内）。
-默认配置：UI 监听 127.0.0.1:8080；数据目录 .\.frp_easy；日志 .\.frp_easy\logs\。
+默认配置：UI 监听 0.0.0.0:7800（局域网可访问，本机用 http://127.0.0.1:7800）；数据目录 .\.frp_easy；日志 .\.frp_easy\logs\。
 EOF
 }
 

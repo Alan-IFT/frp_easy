@@ -1,6 +1,6 @@
 # start.ps1 — frp_easy 开发模式启动脚本（Windows）
 #
-# 开发模式：Go API (port 8080) + Vite dev (port 5173) 独立运行，
+# 开发模式：Go API (port 7800) + Vite dev (port 5173) 独立运行，
 # Go 侧以 DevMode=true 开 CORS 允许 vite 代理。
 #
 # 用法：.\scripts\start.ps1
@@ -17,7 +17,7 @@ $goExe = "go"
 if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
     $candidate = "C:\Program Files\Go\bin\go.exe"
     if (Test-Path $candidate) { $goExe = $candidate }
-    else { Write-Error "找不到 go 命令，请先安装 Go 1.22+"; exit 1 }
+    else { Write-Error "找不到 go 命令，请先安装 Go 1.25+"; exit 1 }
 }
 
 if ($Prod) {

@@ -13,7 +13,9 @@
 // net.Listen 报 "address already in use" / "bind: ..." 时 stderr 打中文文案后
 // os.Exit(2)，**不**自动换端口（Q-10 决策：确定性优于随机，避免用户找不到入口）。
 //
-// 【NF-S4】UIBindAddr != "127.0.0.1" 时 stderr 打 WARN。
+// 【安全提示 · T-011】UIBindAddr 为对外可达地址（0.0.0.0/::）时 stderr 打印
+// 一条中性安全提示，引导用户尽快完成 setup 创建管理员账号、并说明如何改回
+// 仅本机访问；绑定回环地址（127.0.0.1/::1/localhost）时不打印。
 package main
 
 import (
@@ -65,7 +67,7 @@ frp-easy 是 FRP 可视化管理 UI 的单二进制服务进程。
 
 配置:
   配置文件           frp_easy.toml（与本程序同目录；可通过环境变量 FRP_EASY_CONFIG 覆盖路径）
-  UI 默认地址        http://127.0.0.1:8080
+  UI 默认地址        http://127.0.0.1:7800
   数据目录默认       ./.frp_easy
 
 环境变量:
@@ -131,11 +133,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("加载 %s 失败：%w", cfgPath, err)
 	}
-	// NF-S4 警告
-	if cfg.UIBindAddr != "127.0.0.1" && cfg.UIBindAddr != "::1" && cfg.UIBindAddr != "localhost" {
-		fmt.Fprintf(os.Stderr,
-			"WARN: frp_easy UI 绑定地址 %q 不是 127.0.0.1，UI 将对外可达，请确认本地网络环境。\n",
-			cfg.UIBindAddr)
+	// 安全提示：UI 绑定对外可达地址（0.0.0.0/::）时，引导用户尽快完成 setup。
+	// 正向枚举两个 unspecified 地址，不误伤用户自填的具体局域网 IP（高级用法）。
+	if cfg.UIBindAddr == "0.0.0.0" || cfg.UIBindAddr == "::" {
+		fmt.Fprint(os.Stderr, exposureNotice(cfg.UIPort, cfgPath))
 	}
 
 	// 解析数据目录绝对路径
@@ -295,6 +296,18 @@ func run() error {
 	pm.Shutdown()
 	_ = srv.Shutdown(ctx)
 	return nil
+}
+
+// exposureNotice 构造 UI 绑定对外地址时打印到 stderr 的中文安全提示。
+// 三要素：① 对局域网/公网可达的事实；② 引导尽快完成 setup（明示 setup 前
+// 界面无密码保护）；③ 给出改回仅本机访问的精确操作。措辞中性、建设性，
+// 不用 WARN 级别字样 —— 新默认值下每次启动都触发，WARN 会误导为配置出错。
+func exposureNotice(port int, cfgPath string) string {
+	return fmt.Sprintf(`提示：frp_easy UI 当前监听 0.0.0.0:%d，局域网/公网内的设备均可访问本管理界面。
+  · 请尽快用浏览器打开 UI 完成 setup 向导，创建管理员账号（完成 setup 前界面无密码保护）。
+  · frp_easy 已内置认证加固：argon2id 密码哈希、会话 Cookie、CSRF 防护、登录失败限流。
+  · 如仅需本机访问，可编辑 %s，将 UIBindAddr 改为 "127.0.0.1" 后重启。
+`, port, cfgPath)
 }
 
 func envOr(key, dflt string) string {

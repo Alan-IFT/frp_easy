@@ -220,7 +220,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 <header class="site-header">
   <h1>frp_easy 项目状况总览 <span class="version-badge">v0.1.0</span></h1>
-  <div class="meta">更新日期：2026-05-16 &nbsp;|&nbsp; Go + Vue 3 + SQLite 单二进制 FRP Web 管理 UI</div>
+  <div class="meta">更新日期：2026-05-21 &nbsp;|&nbsp; Go + Vue 3 + SQLite 单二进制 FRP Web 管理 UI &nbsp;|&nbsp; 进度：T-011 交付</div>
 </header>
 
 <div class="layout">
@@ -318,6 +318,46 @@ tbody tr:last-child td { border-bottom: none; }
           <tr><td>4</td><td>防火墙提示 UI</td><td>FirewallHint 组件，按协议（tcp/udp）过滤 ufw + iptables 命令，含"复制全部"按钮，http/https 不显示</td></tr>
         </tbody>
       </table>
+
+      <h3>T-003 ~ T-005 · 文档与 API 规范</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>功能</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>README + 健康报告（T-003）</td><td>面向用户的 README.md 与本项目状况总览页（project-status.html）首版</td></tr>
+          <tr><td>2</td><td>技术债清理（T-004）</td><td>TD-1～TD-7 与 OPT-1～OPT-8 全部清偿，详见 §5 / §6</td></tr>
+          <tr><td>3</td><td>OpenAPI 3.0.3 规范（T-005）</td><td>根 openapi.yaml 描述全部 REST 路由，verify_all D.1 schema 检查从 SKIP 转 PASS</td></tr>
+        </tbody>
+      </table>
+
+      <h3>T-006 ~ T-010 · 测试、安全与部署套件</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>功能</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>E2E 烟雾测试（T-006）</td><td>Playwright 端到端测试覆盖 setup / 登录 / dashboard / 退出登录流程；verify_all C.1 从 SKIP 转 PASS</td></tr>
+          <tr><td>2</td><td>安全加固（T-007）</td><td>ui.log 权限收紧到 0600；新增 SQL 注入 / 并发 / 超长输入 / 越界等对抗性测试</td></tr>
+          <tr><td>3</td><td>部署套件（T-008）</td><td>package.{sh,ps1} 一键打包发布包、DEPLOYMENT.md 部署权威文档、--help 中文帮助、systemd / Windows Service 安装脚本</td></tr>
+          <tr><td>4</td><td>跨 shell parity（T-009）</td><td>verify_all 与 E2E 启动脚本在 PowerShell 与 Git Bash 双 shell 下行为对齐</td></tr>
+          <tr><td>5</td><td>浏览器自动打开（T-010）</td><td>TTY 启动时自动打开浏览器（rundll32 / open / xdg-open），--no-browser 与 FRP_EASY_NO_BROWSER 可退出</td></tr>
+          <tr><td>6</td><td>日志轮转（T-010）</td><td>internal/logrotate 基于 lumberjack 做 ui.log 按大小 / 份数 / 天数三轴轮转，长跑服务不爆盘</td></tr>
+          <tr><td>7</td><td>GitHub Actions CI（T-010）</td><td>push v* tag 时自动构建并上传 GitHub Releases 资产</td></tr>
+        </tbody>
+      </table>
+
+      <h3>T-011 · README 刷新与网络默认值变更</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>功能</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>UI 默认端口 8080 → 7800</td><td>8080 是最常见冲突端口；7800 与 frp 端口族（7000/7400/7500）同段、便于记忆且冲突概率低</td></tr>
+          <tr><td>2</td><td>UI 默认绑定 127.0.0.1 → 0.0.0.0</td><td>frp_easy 是远程穿透管理工具，运维场景天然需跨设备访问；绑定对外地址时启动期 stderr 打印中性安全提示，引导尽快完成 setup</td></tr>
+          <tr><td>3</td><td>README 重写 + 文档刷新</td><td>README 重写为标准开源结构（简介 / 亮点 / 快速开始 / 配置 / 端口 / 许可证）；project-status.html、architecture.html、DEPLOYMENT.md 等刷新到 T-010 实际状态</td></tr>
+        </tbody>
+      </table>
     </section>
 
     <!-- §3 架构模块表 -->
@@ -329,7 +369,7 @@ tbody tr:last-child td { border-bottom: none; }
           <tr><th>功能区域</th><th>文件</th><th>约定</th></tr>
         </thead>
         <tbody>
-          <tr><td>程序入口</td><td>cmd/frp-easy/main.go</td><td>启动序列：appconf → storage → binloc/procmgr/ratelimiter → HTTP server → ReadyGate → 自动恢复</td></tr>
+          <tr><td>程序入口</td><td>cmd/frp-easy/main.go</td><td>启动序列：appconf → storage → logrotate(ui.log) → binloc/procmgr/ratelimiter → HTTP server → ReadyGate → 自动恢复 → 可选浏览器自动打开；中文 --help / --version</td></tr>
           <tr><td>应用配置（UI 服务自身）</td><td>internal/appconf/config.go</td><td>AppConfig{UIBindAddr, UIPort, DataDir, LogDir}；Load/Validate/ListenAddr；toml 不存在时写默认</td></tr>
           <tr><td>嵌入前端资源</td><td>internal/assets/assets.go</td><td>//go:embed all:dist 嵌入 Vue SPA；dev 阶段返回 404 占位</td></tr>
           <tr><td>密码哈希 / 限流</td><td>internal/auth/</td><td>argon2id / VerifyPassword / GenerateSessionToken / GenerateCSRFToken / RateLimiter</td></tr>
@@ -339,6 +379,8 @@ tbody tr:last-child td { border-bottom: none; }
           <tr><td>DB→TOML 渲染</td><td>internal/frpconf/render.go</td><td>RenderFrpc / RenderFrps / AtomicWrite；字段名严格对齐 FRP camelCase TOML 上游</td></tr>
           <tr><td>HTTP 路由层</td><td>internal/httpapi/router.go</td><td>chi router；中间件链 ReadyGate→Recover→RequestID→Logger→CORS→SessionAuth→CSRF；T-001: 22 条路由；T-002: +5 条</td></tr>
           <tr><td>日志尾部读取</td><td>internal/logtail/tail.go</td><td>TailLines(path, n) / ReadFrom(path, offset) 增量 + 新 offset</td></tr>
+          <tr><td>ui.log 轮转（T-010）</td><td>internal/logrotate/logrotate.go</td><td>基于 lumberjack 的三轴轮转（size/backups/age）；FRP_EASY_LOG_MAX_* env 覆盖；权限恒 0o600</td></tr>
+          <tr><td>浏览器自动打开（T-010）</td><td>internal/browseropen/browseropen.go</td><td>ShouldOpen(noBrowser) + Open(url)；TTY 检测；0.0.0.0/:: 绑定时打开 URL 改写为 127.0.0.1</td></tr>
           <tr><td>子进程生命周期</td><td>internal/procmgr/manager.go</td><td>Manager；Start/Stop/Restart/Status/Shutdown；supervisor goroutine；ApplyConfigChange</td></tr>
           <tr><td>数据库迁移（权威 SQL）</td><td>migrations/*.up.sql</td><td>文件名 NNNN_slug.up.sql / .down.sql；绝不修改已合并迁移；新改动 = 新文件</td></tr>
           <tr><td>持久化层（连接 / 迁移引擎 / DAO）</td><td>internal/storage/*.go</td><td>Open / Close / GetAdmin / SetAdmin / CreateSession / GetSession / ListProxies / UpsertProxy / KVGet / KVSet 等</td></tr>
@@ -350,18 +392,18 @@ tbody tr:last-child td { border-bottom: none; }
     <!-- §4 测试基线 -->
     <section class="section" id="sec-4">
       <h2>§4 测试基线</h2>
-      <p>截至 T-005 交付（2026-05-16）：</p>
+      <p>截至 T-011 交付（数字以 <code>scripts/baseline.json</code> 为唯一真相源）：</p>
       <div class="baseline-grid">
         <div class="baseline-card">
-          <div class="number">119</div>
+          <div class="number">167</div>
           <div class="label">Go 测试（全部 PASS）</div>
         </div>
         <div class="baseline-card">
-          <div class="number">45</div>
+          <div class="number">57</div>
           <div class="label">前端测试（Vitest，PASS）</div>
         </div>
         <div class="baseline-card">
-          <div class="number">164</div>
+          <div class="number">224</div>
           <div class="label">合计测试用例</div>
         </div>
       </div>
@@ -371,11 +413,12 @@ tbody tr:last-child td { border-bottom: none; }
           <tr><th>verify_all 项</th><th>状态</th><th>说明</th></tr>
         </thead>
         <tbody>
-          <tr><td>PASS</td><td><span class="badge badge-green">17</span></td><td>Go 静态检查、测试、构建；前端 typecheck/lint/tests；harness 合规；OpenAPI schema；配置文件检查等</td></tr>
-          <tr><td>SKIP</td><td><span class="badge badge-low">1</span></td><td>C.1（E2E，待 T-006 实现 Playwright 后从 SKIP 变 PASS）</td></tr>
+          <tr><td>PASS</td><td><span class="badge badge-green">19</span></td><td>Go 静态检查 / 测试 / 构建；前端 typecheck/lint/tests + tsc 残留检查；Playwright E2E；OpenAPI schema；harness 合规；密钥扫描等</td></tr>
+          <tr><td>WARN</td><td><span class="badge badge-low">0</span></td><td>无告警项</td></tr>
           <tr><td>FAIL</td><td><span class="badge badge-green">0</span></td><td>无失败项</td></tr>
         </tbody>
       </table>
+      <p style="font-size:0.85rem;color:#6c757d;">verify_all 在 PowerShell 与 Git Bash 双 shell 下均 19 项 PASS（T-009/T-010 建立的跨 shell parity 约束）。</p>
 
       <table>
         <thead>
@@ -384,8 +427,11 @@ tbody tr:last-child td { border-bottom: none; }
         <tbody>
           <tr><td>T-001 结束</td><td>101</td><td>45</td><td>146</td></tr>
           <tr><td>T-002 结束</td><td>117</td><td>45</td><td>162</td></tr>
-          <tr><td>T-004 结束（+2 Go 测试）</td><td>119</td><td>45</td><td>164</td></tr>
-          <tr><td>T-005 结束（当前）</td><td>119</td><td>45</td><td>164</td></tr>
+          <tr><td>T-004 结束</td><td>119</td><td>45</td><td>164</td></tr>
+          <tr><td>T-005 结束</td><td>119</td><td>45</td><td>164</td></tr>
+          <tr><td>T-007 结束</td><td>156</td><td>45</td><td>201</td></tr>
+          <tr><td>T-010 结束（前端清理 .js 残留后用例数对齐 .ts 源文件）</td><td>166</td><td>57</td><td>223</td></tr>
+          <tr><td>T-011 结束（当前，+1 Go 测试覆盖网络默认值兼容性）</td><td>167</td><td>57</td><td>224</td></tr>
         </tbody>
       </table>
     </section>
@@ -557,7 +603,21 @@ tbody tr:last-child td { border-bottom: none; }
     <!-- §7 已知后续事项 -->
     <section class="section" id="sec-7">
       <h2>§7 已知后续事项</h2>
-      <p>T-004 已清偿全部已知后续事项（OPT-2 向导路由守卫已修复，OPT-6 IP 解析重复代码已统一）。当前无待处理后续事项。</p>
+      <p>T-004 已清偿全部历史技术债（OPT-2 向导路由守卫、OPT-6 IP 解析重复代码等）。T-005～T-010 期间无新增遗留债务。当前无待处理代码债。</p>
+
+      <h3>T-011 网络默认值变更的取舍说明</h3>
+      <p>T-011 把 UI 默认绑定地址从 <code>127.0.0.1</code> 改为 <code>0.0.0.0</code>，是一次有意识的取舍，理由与配套保障如下：</p>
+      <table>
+        <thead>
+          <tr><th>维度</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>为何改</td><td>frp_easy 本质是远程内网穿透管理工具，运维场景天然需要从其他设备访问 Web UI；旧默认 127.0.0.1 迫使每个用户首启后手动改配置</td></tr>
+          <tr><td>认证加固</td><td>0.0.0.0 不等于"无认证暴露"——项目已内置 argon2id 密码哈希、会话 Cookie（HttpOnly + SameSite）、CSRF 防护、登录失败 IP 限流</td></tr>
+          <tr><td>暴露窗口</td><td>最危险的是 setup 完成前（界面尚无管理员账号）；启动期 stderr 会打印中性安全提示，引导用户尽快完成 setup</td></tr>
+          <tr><td>如何改回</td><td>仅需本机访问的用户，把 <code>frp_easy.toml</code> 的 <code>UIBindAddr</code> 改为 <code>127.0.0.1</code> 后重启即可；老用户显式写过的配置不会被升级静默改写</td></tr>
+        </tbody>
+      </table>
     </section>
 
     <!-- §8 更新流程说明 -->

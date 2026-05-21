@@ -1,11 +1,11 @@
 {
-  "version": 4,
+  "version": 5,
   "created": "2026-05-16",
-  "updated": "2026-05-19",
-  "test_count": 223,
-  "passing_count": 218,
-  "go_tests": 166,
+  "updated": "2026-05-21",
+  "test_count": 224,
+  "passing_count": 219,
+  "go_tests": 167,
   "frontend_tests": 57,
   "warnings_baseline": 0,
-  "notes": "T-010 deploy-polish-and-ci QA phase. Go: 166 (+10 from T-007 baseline 156; +4 logrotate + 6 browseropen incl 1 platform-conditional SKIP). Frontend Vitest: 57 (unchanged; cleaned 29 stale .js residue files in web/src per T-009 insight — vitest 模块解析 .ts/.js 共存优先 .js 问题彻底消除，测试发现数从 114 → 57 与 .ts 源文件一致). Baseline raised by T-010 verify_all PASS 18/18 (PowerShell + Git Bash 双 shell)."
+  "notes": "T-011 readme-refresh-and-network-defaults dev phase. Go: 167 (+1 from T-010 baseline 166; new TestLoad_ExplicitLoopbackNotOverwritten in internal/appconf 覆盖 AC-20 网络默认值兼容性 NF-2). Frontend Vitest: 57 (unchanged). Baseline raised by T-011 verify_all PASS 19/19 (PowerShell + Git Bash 双 shell)."
 }

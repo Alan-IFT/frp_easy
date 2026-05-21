@@ -144,11 +144,12 @@
   <div class="hero" id="overview">
     <h1>frp_easy 架构总览</h1>
     <p class="subtitle">单 Go 二进制 + Vue 3 SPA，通过 Web UI 管理 frpc（客户端）和 frps（服务端）进程的生命周期与配置。</p>
+    <p style="color:var(--text3);font-size:.85rem;margin-bottom:1.2rem;">更新日期：2026-05-21 · 对应进度：T-010 交付后（含浏览器自动打开 / 日志轮转 / CI）</p>
     <div class="badge-row">
-      <span class="badge go">● Go 1.22</span>
+      <span class="badge go">● Go 1.25</span>
       <span class="badge vue">● Vue 3 + TypeScript</span>
       <span class="badge sq">● SQLite (纯Go)</span>
-      <span class="badge ver">v0.1.0 MVP</span>
+      <span class="badge ver">v0.1.0</span>
     </div>
   </div>
 
@@ -371,6 +372,36 @@
           <li>GET /api/v1/logs/{kind}?offset=X（增量）</li>
         </ul>
       </div>
+      <div class="card">
+        <h3>downloader <span style="font-size:.7rem;color:var(--accent4)">T-002</span></h3>
+        <div class="path">internal/downloader/</div>
+        <ul>
+          <li>frp 二进制缺失时从 GitHub Releases 异步下载</li>
+          <li>io.TeeReader 追踪进度 0–100%</li>
+          <li>原子 rename 安装 · Zip Slip 防御</li>
+          <li>POST /api/v1/system/download-bin</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>browseropen <span style="font-size:.7rem;color:var(--accent4)">T-010</span></h3>
+        <div class="path">internal/browseropen/</div>
+        <ul>
+          <li>跨平台浏览器自动打开（rundll32 / open / xdg-open）</li>
+          <li>TTY 检测：systemd / 服务模式天然跳过</li>
+          <li>--no-browser 与 FRP_EASY_NO_BROWSER 可选退出</li>
+          <li>0.0.0.0/:: 绑定时打开 URL 改写为 127.0.0.1</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>logrotate <span style="font-size:.7rem;color:var(--accent4)">T-010</span></h3>
+        <div class="path">internal/logrotate/</div>
+        <ul>
+          <li>基于 lumberjack 的 ui.log 三轴轮转</li>
+          <li>按大小 / 历史份数 / 保留天数三维触发</li>
+          <li>FRP_EASY_LOG_MAX_SIZE_MB/_BACKUPS/_AGE_DAYS 覆盖</li>
+          <li>权限恒 0o600 · 长跑服务不爆盘</li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -383,11 +414,13 @@
         <ul>
           <li>Setup.vue — 首次初始化向导</li>
           <li>Login.vue — 登录（含限速倒计时）</li>
+          <li>Wizard.vue — 部署向导（T-002，顶级路由 3 步）</li>
           <li>Dashboard.vue — 进程状态 + 模式开关</li>
           <li>Proxies.vue — 代理规则管理</li>
           <li>Server.vue — frps 服务端配置</li>
           <li>Client.vue — frpc 连接配置</li>
           <li>Logs.vue — 日志查看</li>
+          <li>Settings.vue — 修改密码</li>
         </ul>
       </div>
       <div class="card">
@@ -514,6 +547,7 @@
       <table class="api-table">
         <thead><tr><th>方法</th><th>路径</th><th>功能</th><th>认证</th></tr></thead>
         <tbody>
+          <tr><td><span class="method get">GET</span></td><td><code>/health</code></td><td>健康检查（绕过 ReadyGate，启动中也可访问）</td><td><span class="auth-badge auth-open">公开</span></td></tr>
           <tr><td><span class="method get">GET</span></td><td><code>/system/ready</code></td><td>系统状态 + 二进制缺失列表</td><td><span class="auth-badge auth-open">公开</span></td></tr>
           <tr><td><span class="method post">POST</span></td><td><code>/setup</code></td><td>初始化管理员账户</td><td><span class="auth-badge auth-open">公开</span></td></tr>
           <tr><td><span class="method post">POST</span></td><td><code>/auth/login</code></td><td>登录（限速 5次/IP）</td><td><span class="auth-badge auth-open">公开</span></td></tr>
@@ -536,6 +570,11 @@
           <tr><td><span class="method post">POST</span></td><td><code>/proc/{kind}/restart</code></td><td>重启 frpc 或 frps</td><td><span class="auth-badge">需登录</span></td></tr>
           <tr><td><span class="method get">GET</span></td><td><code>/proc/status</code></td><td>全部进程状态（含 PID）</td><td><span class="auth-badge">需登录</span></td></tr>
           <tr><td><span class="method get">GET</span></td><td><code>/logs/{kind}</code></td><td>日志 tail / 增量读取</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/system/public-ip</code></td><td>探测公网 IP（进程内缓存）</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/system/download-bin</code></td><td>异步下载 frp 二进制（T-002）</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/system/download-status/{kind}</code></td><td>查询二进制下载进度 0–100%</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/wizard/status</code></td><td>读取部署向导状态</td><td><span class="auth-badge">需登录</span></td></tr>
+          <tr><td><span class="method post">POST</span></td><td><code>/wizard/complete</code></td><td>标记部署向导完成</td><td><span class="auth-badge">需登录</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -575,8 +614,8 @@
       </div>
       <div class="sec-item">
         <div class="icon">🌐</div>
-        <h3>默认仅本机</h3>
-        <p>UIBindAddr 默认 127.0.0.1，对外暴露时 stderr 打 WARN。</p>
+        <h3>对外绑定 + 安全提示</h3>
+        <p>UIBindAddr 默认 0.0.0.0（便于跨设备运维）；绑定对外地址时 stderr 打印安全提示，引导尽快完成 setup。仅本机用可改回 127.0.0.1。</p>
       </div>
       <div class="sec-item">
         <div class="icon">🔒</div>
@@ -647,9 +686,9 @@
       <div class="card" style="border-top:3px solid var(--accent2);">
         <h3>开发模式</h3>
         <ul>
-          <li><code>go run ./cmd/frp-easy</code>（后端，端口 8080）</li>
+          <li><code>go run ./cmd/frp-easy</code>（后端，端口 7800）</li>
           <li><code>cd web && npm run dev</code>（Vite，端口 5173）</li>
-          <li>Vite proxy：<code>/api → http://127.0.0.1:8080</code></li>
+          <li>Vite proxy：<code>/api → http://127.0.0.1:7800</code></li>
           <li><code>scripts/start.sh</code> 或 <code>start.ps1</code> 一键启动</li>
         </ul>
       </div>
@@ -665,15 +704,15 @@
     <div class="cards" style="grid-template-columns:repeat(3,1fr)">
       <div class="card">
         <h3>Go 集成测试</h3>
-        <p style="font-size:.88rem"><strong style="color:var(--accent);font-size:1.4rem">101</strong> 个测试用例，覆盖全部 14 个 AC，含 DB→TOML 管道、进程模式持久化、乐观锁冲突等场景。</p>
+        <p style="font-size:.88rem"><strong style="color:var(--accent);font-size:1.4rem">167</strong> 个测试用例，覆盖核心 AC 与对抗性场景，含 DB→TOML 管道、进程模式持久化、乐观锁冲突、二进制下载、日志轮转、网络默认值兼容性等。</p>
       </div>
       <div class="card">
         <h3>Vitest 前端测试</h3>
-        <p style="font-size:.88rem"><strong style="color:var(--vue);font-size:1.4rem">45</strong> 个测试用例，覆盖 stores（auth/app/proc）、API 层（mode 等）、组件（StatusBadge/ProxyForm）。</p>
+        <p style="font-size:.88rem"><strong style="color:var(--vue);font-size:1.4rem">57</strong> 个测试用例，覆盖 stores（auth/app/proc/downloader/wizard）、API 层、组件（StatusBadge/ProxyForm/FirewallHint 等）。</p>
       </div>
       <div class="card">
-        <h3>对抗性测试</h3>
-        <p style="font-size:.88rem">SQL 注入 6 pattern、并发写入 UNIQUE 约束、超长输入（65字符名称）、不合法 JSON、端口越界等场景。</p>
+        <h3>对抗性 + E2E 测试</h3>
+        <p style="font-size:.88rem">对抗性：SQL 注入 6 pattern、并发写入 UNIQUE 约束、超长输入、不合法 JSON、端口越界等。E2E：Playwright 烟雾测试（setup / 登录 / dashboard）。verify_all 共 19 项检查，PowerShell + Git Bash 双 shell 全 PASS。</p>
       </div>
     </div>
   </section>

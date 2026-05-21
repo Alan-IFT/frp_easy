@@ -56,7 +56,7 @@ $logDir  = ($E2E_TMP + "\logs") -replace '\\', '/'
 $tomlPath = Join-Path $E2E_TMP "frp_easy.toml"
 $tomlContent = @"
 UIBindAddr = "127.0.0.1"
-UIPort     = 8080
+UIPort     = 7800
 DataDir    = "$dataDir"
 LogDir     = "$logDir"
 "@

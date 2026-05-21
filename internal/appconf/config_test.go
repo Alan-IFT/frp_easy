@@ -15,7 +15,7 @@ func TestLoad_DefaultsWrittenOnMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.UIBindAddr != "127.0.0.1" || cfg.UIPort != 8080 {
+	if cfg.UIBindAddr != "0.0.0.0" || cfg.UIPort != 7800 {
 		t.Fatalf("unexpected default: %+v", cfg)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -46,6 +46,32 @@ LogDir = "/tmp/logs"
 	}
 }
 
+// TestLoad_ExplicitLoopbackNotOverwritten 验证 AC-20 / NF-2：
+// 用户在 frp_easy.toml 中显式写了回环地址 127.0.0.1（与新出厂默认值
+// 0.0.0.0 不同），Load() 不得把它静默改写成新默认值；UIPort 同理。
+func TestLoad_ExplicitLoopbackNotOverwritten(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "frp_easy.toml")
+	content := `UIBindAddr = "127.0.0.1"
+UIPort = 8080
+DataDir = "/tmp/data"
+LogDir = "/tmp/logs"
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.UIBindAddr != "127.0.0.1" {
+		t.Fatalf("UIBindAddr 被静默改写：got %q, want 127.0.0.1", cfg.UIBindAddr)
+	}
+	if cfg.UIPort != 8080 {
+		t.Fatalf("UIPort 被静默改写：got %d, want 8080", cfg.UIPort)
+	}
+}
+
 func TestLoad_InvalidTOMLDoesNotOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "frp_easy.toml")
@@ -68,12 +94,12 @@ func TestValidate(t *testing.T) {
 		cfg  AppConfig
 		ok   bool
 	}{
-		{"default", AppConfig{UIBindAddr: "127.0.0.1", UIPort: 8080, DataDir: "x", LogDir: "y"}, true},
+		{"default", AppConfig{UIBindAddr: "127.0.0.1", UIPort: 7800, DataDir: "x", LogDir: "y"}, true},
 		{"port too low", AppConfig{UIBindAddr: "127.0.0.1", UIPort: 0, DataDir: "x", LogDir: "y"}, false},
 		{"port too high", AppConfig{UIBindAddr: "127.0.0.1", UIPort: 70000, DataDir: "x", LogDir: "y"}, false},
-		{"empty bind", AppConfig{UIBindAddr: "", UIPort: 8080, DataDir: "x", LogDir: "y"}, false},
-		{"bind with port", AppConfig{UIBindAddr: "127.0.0.1:8080", UIPort: 8080, DataDir: "x", LogDir: "y"}, false},
-		{"empty datadir", AppConfig{UIBindAddr: "127.0.0.1", UIPort: 8080, DataDir: "", LogDir: "y"}, false},
+		{"empty bind", AppConfig{UIBindAddr: "", UIPort: 7800, DataDir: "x", LogDir: "y"}, false},
+		{"bind with port", AppConfig{UIBindAddr: "127.0.0.1:7800", UIPort: 7800, DataDir: "x", LogDir: "y"}, false},
+		{"empty datadir", AppConfig{UIBindAddr: "127.0.0.1", UIPort: 7800, DataDir: "", LogDir: "y"}, false},
 	}
 	for _, c := range cases {
 		err := c.cfg.Validate()
@@ -87,13 +113,13 @@ func TestValidate(t *testing.T) {
 }
 
 func TestListenAddr(t *testing.T) {
-	c := &AppConfig{UIBindAddr: "127.0.0.1", UIPort: 8080}
-	if a := c.ListenAddr(); a != "127.0.0.1:8080" {
+	c := &AppConfig{UIBindAddr: "127.0.0.1", UIPort: 7800}
+	if a := c.ListenAddr(); a != "127.0.0.1:7800" {
 		t.Fatalf("got %s", a)
 	}
-	c2 := &AppConfig{UIBindAddr: "::1", UIPort: 8080}
+	c2 := &AppConfig{UIBindAddr: "::1", UIPort: 7800}
 	a := c2.ListenAddr()
-	if !strings.Contains(a, "8080") {
+	if !strings.Contains(a, "7800") {
 		t.Fatalf("got %s", a)
 	}
 }
@@ -105,7 +131,7 @@ func TestDoc_PortTablePresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(data)
-	for _, must := range []string{"8080", "7400", "7500", "7000"} {
+	for _, must := range []string{"7800", "7400", "7500", "7000"} {
 		if !strings.Contains(s, must) {
 			t.Errorf("config.go doc-comment missing port %s in 内部占用端口表", must)
 		}

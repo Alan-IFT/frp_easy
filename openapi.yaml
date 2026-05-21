@@ -9,7 +9,7 @@ info:
     该令牌由 GET /api/v1/auth/csrf 获取。
 
 servers:
-  - url: http://127.0.0.1:8080
+  - url: http://127.0.0.1:7800
     description: 默认本地服务器
 
 security:

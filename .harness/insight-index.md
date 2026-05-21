@@ -28,3 +28,4 @@
 - **2026-05-19** · `tsconfig.json` 设 `"noEmit": true` 是真正一劳永逸防 tsc 误 emit 的方式；调用方加 `--noEmit` flag 是 belt，tsconfig 是 suspenders。新项目应当默认两者都有 · evidence: T-010 deploy-polish-and-ci
 - **2026-05-19** · Go 跨平台 `runtime.GOOS switch` 的单测如果直接读 `runtime.GOOS`，不论分支多漂亮都只能测当前主机的那一支 —— 必须用 `var goosFunc = func() string { return runtime.GOOS }` 这种可注入 seam 配 stubGOOS helper 才能 table-driven 跑遍三平台。其他平台不变量同理（`os.Getenv` → `getenvFunc`、`os.Stdin.Fd()` → `stdinFd`） · evidence: T-010 deploy-polish-and-ci
 - **2026-05-19** · GitHub Actions `actions/setup-go@v5` 的 `go-version` 应当与 `go.mod` 顶部 `go X.Y` 对齐；不对齐时 setup-go 拉指定版本后又被 `GOTOOLCHAIN=auto`（默认 Go 1.21+ 行为）二次拉真实版本，CI 时间翻倍 · evidence: T-010 deploy-polish-and-ci
+- verify_all E.6 要求已完成任务的 06_TEST_REPORT.md 含**精确英文标题** `## Adversarial tests`；即使项目输出语言规则为中文，该段标题也必须用英文（可在英文标题后括注中文）。QA 若写 `## 对抗性测试` 会导致 E.6 FAIL、pass_count 掉到 18。证据：本任务 stage 7 首次 verify_all。

@@ -8,7 +8,7 @@
 //
 //	| 用途                          | 端口（默认） | 由谁监听            |
 //	| ----------------------------- | ----------- | ------------------- |
-//	| 本 UI 服务（HTTP）            | 8080        | cmd/frp-easy（本进程） |
+//	| 本 UI 服务（HTTP）            | 7800        | cmd/frp-easy（本进程） |
 //	| frpc admin API（reload/status）| 7400        | frpc 子进程         |
 //	| frps dashboard（web UI 自带） | 7500        | frps 子进程         |
 //	| frps bindPort（FRP 控制通道） | 7000        | frps 子进程         |
@@ -39,14 +39,16 @@ type AppConfig struct {
 	LogDir     string `toml:"LogDir"`
 }
 
-// Default 返回出厂默认值（02 §3.1 / Q-10 决策）。
+// Default 返回出厂默认值（02 §3.1 / Q-10 决策 · T-011 网络默认值变更）。
 //
-// 默认仅监听 127.0.0.1（NF-S4）。修改 UIBindAddr 为 0.0.0.0 等公网地址时，
-// main.go 会在 stderr 打 WARN。
+// 默认监听 0.0.0.0（所有网卡），便于从其他设备访问 Web UI —— frp_easy 本质是
+// 远程内网穿透管理工具，运维场景天然需要跨设备访问。仅需本机访问时，可把
+// UIBindAddr 改为 127.0.0.1。绑定对外地址（0.0.0.0/::）时 main.go 会在 stderr
+// 打印一条安全提示，引导用户尽快完成 setup。
 func Default() *AppConfig {
 	return &AppConfig{
-		UIBindAddr: "127.0.0.1",
-		UIPort:     8080,
+		UIBindAddr: "0.0.0.0",
+		UIPort:     7800,
 		DataDir:    "./.frp_easy",
 		LogDir:     "./.frp_easy/logs",
 	}
@@ -93,10 +95,10 @@ func Load(path string) (*AppConfig, error) {
 	}
 	// 补默认（避免用户把字段留空）。
 	if cfg.UIBindAddr == "" {
-		cfg.UIBindAddr = "127.0.0.1"
+		cfg.UIBindAddr = "0.0.0.0"
 	}
 	if cfg.UIPort == 0 {
-		cfg.UIPort = 8080
+		cfg.UIPort = 7800
 	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = "./.frp_easy"

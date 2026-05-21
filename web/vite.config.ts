@@ -5,5 +5,5 @@ export default defineConfig({
   plugins: [vue()],
   base: './',
   build: { outDir: '../internal/assets/dist', emptyOutDir: true },
-  server: { proxy: { '/api': 'http://127.0.0.1:8080' } },
+  server: { proxy: { '/api': 'http://127.0.0.1:7800' } },
 })

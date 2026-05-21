@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-011 | readme-refresh-and-network-defaults | DELIVERED | 2026-05-21 | `docs/features/_archived/readme-refresh-and-network-defaults/` |
 | T-010 | deploy-polish-and-ci | DELIVERED | 2026-05-19 | `docs/features/_archived/deploy-polish-and-ci/` |
 | T-009 | polish-pass | DELIVERED | 2026-05-19 | `docs/features/_archived/polish-pass/` |
 | T-008 | deploy-kit | DELIVERED | 2026-05-19 | `docs/features/_archived/deploy-kit/` |

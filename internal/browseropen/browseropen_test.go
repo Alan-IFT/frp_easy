@@ -113,7 +113,7 @@ func TestOpen_CommandSelection(t *testing.T) {
 		t.Run(c.goos, func(t *testing.T) {
 			stubGOOS(t, c.goos)
 			captured := stubCommand(t)
-			_ = Open("http://127.0.0.1:8080")
+			_ = Open("http://127.0.0.1:7800")
 			if len(*captured) < 1 {
 				t.Fatalf("commandFunc not called")
 			}
@@ -124,7 +124,7 @@ func TestOpen_CommandSelection(t *testing.T) {
 			// 最后一个参数必须是 URL（windows 上是 url.dll,FileProtocolHandler 后面那个，
 			// 即 args 中的最后一个；非 windows 上是 args[0]）
 			last := (*captured)[len(*captured)-1]
-			if last != "http://127.0.0.1:8080" {
+			if last != "http://127.0.0.1:7800" {
 				t.Errorf("last arg = %q, want URL", last)
 			}
 		})
