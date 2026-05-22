@@ -33,7 +33,54 @@
 
 最快的部署方式，适合大多数普通用户。**无需安装 Go / Node / git**。
 
-### A.1 下载
+### A.0 一键安装（推荐）
+
+最省事的方式，下面一条命令完成下载、安装、注册开机自启。
+
+**Linux / macOS**（需 root / sudo）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash
+```
+
+**Windows**（以管理员身份运行 PowerShell）：
+
+```powershell
+irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
+```
+
+> 安全提示：`curl | bash` 会以 root 执行远程脚本。谨慎用户可先下载脚本审阅后再运行：
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh -o install.sh
+> # 审阅 install.sh 内容后
+> sudo bash install.sh
+> ```
+
+> 安全提示：`irm | iex` 会在当前会话执行远程脚本。谨慎用户可先下载脚本审阅：
+>
+> ```powershell
+> irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 -OutFile install.ps1
+> # 审阅 install.ps1 内容后（以管理员身份运行 PowerShell）
+> .\install.ps1
+> ```
+
+一键安装等价于「本路径 A 的下载解压 + 路径 C 的服务注册」的合并：
+
+- 固定安装目录：Linux/macOS `/opt/frp-easy`，Windows `C:\Program Files\frp-easy`
+  （高级用户可用环境变量 `FRP_EASY_INSTALL_DIR` 覆盖）。
+- 自动注册 systemd / Windows 服务并启动，实现开机自启。
+- 安装完成后脚本会打印 UI 访问地址（`http://127.0.0.1:7800` 与 `http://<本机IP>:7800`）。
+
+> 说明：一键安装已自动完成路径 C 的服务注册，**无需再手动执行 install-service**；
+> 若想了解服务的状态查询 / 日志 / 卸载命令，见下方[路径 C](#路径-c--作为系统服务)。
+> macOS 因无 systemd / launchd 模板，一键安装会下载安装后提示手动启动，不注册服务。
+
+> 不想用一键安装？下方 **A.1–A.3 手动安装（备选）** 是不使用一键安装时的备选路径。
+
+### A.1 下载（手动安装 — 备选）
+
+> 以下 A.1 / A.2 / A.3 是不使用 A.0 一键安装时的手动备选路径。
 
 到发布页面下载与你操作系统匹配的压缩包：
 
@@ -91,6 +138,10 @@ frp_easy UI 已启动：http://0.0.0.0:7800 （Ctrl+C 退出）
 > ```
 
 ### A.4 升级
+
+> 若通过 [A.0 一键安装](#a0-一键安装推荐)，升级只需**重跑一键安装命令**：脚本会自动识别
+> 为升级，停服 → 覆盖二进制与脚本 → 重跑服务注册（幂等、安全），并完整保留你的
+> `frp_easy.toml` 与 `.frp_easy/`。下方手动升级步骤仅适用于手动安装（A.1–A.3）的场景。
 
 发布新版本后：
 
@@ -294,6 +345,11 @@ sudo systemctl start frp-easy
 ```
 
 > 升级时**无需重跑 install-service.sh**（除非要改 unit 字段如 `--user`）。
+>
+> 说明：若你最初是通过 [A.0 一键安装](#a0-一键安装推荐) 部署的，重跑一键安装命令时脚本
+> 会自动重跑服务注册（`install-service.sh`）。这与本节"手动升级无需重跑"并不冲突——
+> `install-service.sh` 本身是幂等的，重跑只会刷新 unit 并重启服务，不会破坏配置或数据；
+> 一键安装为保证服务定义始终与新版本一致而总是重跑它，是有意为之的安全设计。
 
 #### C.2.5 卸载
 

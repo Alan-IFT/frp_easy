@@ -11,7 +11,9 @@
 ```
 frp_easy/
 ├── (项目根目录)
-├── README.md       ← 用户入口文档（标准开源结构：简介/亮点/快速开始/配置/端口/许可证；T-011 重写）
+├── README.md       ← 用户入口文档（标准开源结构：简介/亮点/快速开始/配置/端口/许可证；T-011 重写；T-012 快速开始置顶一键安装、许可证改 MIT）
+├── LICENSE         ← MIT 许可证全文（T-012 新增；Copyright (c) 2026 Alan_IFT）
+├── NOTICE          ← 上游 frp 二进制 Apache-2.0 归属说明（T-012 新增；中文）
 ├── openapi.yaml    ← REST API OpenAPI 3.0.3 规范（28 条路由，T-005 新增）
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
 ├── .github/
@@ -21,7 +23,8 @@ frp_easy/
 │   ├── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增；T-011 刷新到 T-010 实际）
 │   └── architecture.html    ← 架构总览（分层架构/模块详解/数据流/API，T-005 新增；T-011 刷新到 T-010 实际）
 ├── scripts/        ← verify_all、start、build、baseline、sync 辅助；start-e2e-server.{sh,ps1}（T-006 sh / T-009 ps1，PowerShell 调用路径）；
-│                     package.{sh,ps1} / install-service.{sh,ps1} / uninstall-service.{sh,ps1}（T-008 新增）
+│                     package.{sh,ps1} / install-service.{sh,ps1} / uninstall-service.{sh,ps1}（T-008 新增）；
+│                     install.{sh,ps1}（T-012 新增：一键安装编排脚本，curl|bash / irm|iex 形态；下载 latest release → 解压 → 调 install-service.* 注册服务）
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
 ├── bin/            ← 构建产物（gitignore；build.ps1/build.sh 输出到这里）

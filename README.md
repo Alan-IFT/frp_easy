@@ -48,6 +48,28 @@
 
 ## 快速开始
 
+### 一键安装（推荐）
+
+一条命令完成下载、安装、注册开机自启服务。
+
+**Linux / macOS**（需 root / sudo）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash
+```
+
+**Windows**（管理员 PowerShell）：
+
+```powershell
+irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
+```
+
+> 安全提示：`curl | bash` / `irm | iex` 会以高权限执行远程脚本。谨慎用户可先下载脚本审阅后再运行，详见 **[docs/DEPLOYMENT.md A.0 一键安装](docs/DEPLOYMENT.md)**。
+
+一键安装会把 frp_easy 装到固定目录（Linux/macOS `/opt/frp-easy`、Windows `C:\Program Files\frp-easy`）并注册为系统服务。
+
+### 或：手动下载发布包（备选）
+
 最短上手路径（以 Linux 发布包为例）：
 
 ```bash
@@ -65,7 +87,7 @@ cd frp-easy-<VERSION>-linux-amd64
 - 同局域网其他设备访问：`http://<本机IP>:7800`（默认绑定 `0.0.0.0`，见下方"配置说明"与"从其他设备访问")。
 - 首次进入会引导你完成 setup 向导，创建管理员账号。
 
-> 完整部署指南（发布包 / 源码构建 / 系统服务三条路径）见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
+> 完整部署指南（一键安装 / 发布包 / 源码构建 / 系统服务）见 **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**。
 
 ---
 
@@ -196,6 +218,8 @@ frp_easy/
 
 ## 许可证
 
-本项目尚未确定开源许可证 —— **开源许可证待项目维护者确定**。许可证选择属于项目维护者的法律决策，在维护者明确选定并添加 `LICENSE` 文件之前，请勿假定本仓库代码采用任何特定许可证。
+本项目（frp_easy）采用 [MIT 许可证](LICENSE)。Copyright (c) 2026 Alan_IFT。
 
-> 注意：`frp_linux/` 与 `frp_win/` 目录下随附的 frp 二进制（frpc / frps）属于上游项目 [`fatedier/frp`](https://github.com/fatedier/frp)，遵循其 **Apache-2.0** 许可证，与 frp_easy 本身的许可证相互独立。
+> 注意：`frp_linux/` 与 `frp_win/` 目录下随附的 frp 二进制（frpc / frps）属于上游项目
+> [`fatedier/frp`](https://github.com/fatedier/frp)，遵循其 **Apache-2.0** 许可证，与
+> frp_easy 本身的 MIT 许可证相互独立。详见仓库根的 [`NOTICE`](NOTICE) 文件。

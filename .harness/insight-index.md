@@ -29,3 +29,5 @@
 - **2026-05-19** · Go 跨平台 `runtime.GOOS switch` 的单测如果直接读 `runtime.GOOS`，不论分支多漂亮都只能测当前主机的那一支 —— 必须用 `var goosFunc = func() string { return runtime.GOOS }` 这种可注入 seam 配 stubGOOS helper 才能 table-driven 跑遍三平台。其他平台不变量同理（`os.Getenv` → `getenvFunc`、`os.Stdin.Fd()` → `stdinFd`） · evidence: T-010 deploy-polish-and-ci
 - **2026-05-19** · GitHub Actions `actions/setup-go@v5` 的 `go-version` 应当与 `go.mod` 顶部 `go X.Y` 对齐；不对齐时 setup-go 拉指定版本后又被 `GOTOOLCHAIN=auto`（默认 Go 1.21+ 行为）二次拉真实版本，CI 时间翻倍 · evidence: T-010 deploy-polish-and-ci
 - verify_all E.6 要求已完成任务的 06_TEST_REPORT.md 含**精确英文标题** `## Adversarial tests`；即使项目输出语言规则为中文，该段标题也必须用英文（可在英文标题后括注中文）。QA 若写 `## 对抗性测试` 会导致 E.6 FAIL、pass_count 掉到 18。证据：本任务 stage 7 首次 verify_all。
+- `curl|bash` / `irm|iex` 管道形态下脚本无磁盘路径，禁用 `$0`/`${BASH_SOURCE[0]}`/`$PSScriptRoot` 自定位；正确做法是一切路径锚定"固定安装目录 + mktemp 临时目录"两个显式绝对路径，被复用的子脚本（install-service.*）则因是磁盘文件可正常自定位。证据：本任务 install.sh/install.ps1 设计。
+- GitHub API 未认证请求的限流响应（HTTP 403）响应体是合法 JSON；查询 release 必须"先判 HTTP 状态码、后解析 JSON"，且查询步骤不能用 `curl -f`（否则 403/404 直接变 curl 错误，丢失分流能力）。证据：本任务 install.sh API 步骤。
