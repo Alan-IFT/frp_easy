@@ -17,14 +17,14 @@ frp_easy/
 ├── openapi.yaml    ← REST API OpenAPI 3.0.3 规范（28 条路由，T-005 新增）
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
 ├── .github/
-│   └── workflows/release.yml  ← T-010 新增：push v* tag 时自动 build + 上传 GitHub Releases 资产
+│   └── workflows/release.yml  ← T-010 新增 / T-013 改造：push main → 刷新固定 tag `rolling` 滚动发布；push v* tag → 版本化发布（两路径共存）
 ├── docs/           ← SPEC、feature 文档、本导航、任务看板
 │   ├── DEPLOYMENT.md       ← 部署权威文档：路径 A 发布包 / 路径 B 源码 / 路径 C 系统服务（T-008 新增）
 │   ├── project-status.html  ← 项目状况总览（技术栈/功能/债务/建议，T-003 新增；T-011 刷新到 T-010 实际）
 │   └── architecture.html    ← 架构总览（分层架构/模块详解/数据流/API，T-005 新增；T-011 刷新到 T-010 实际）
 ├── scripts/        ← verify_all、start、build、baseline、sync 辅助；start-e2e-server.{sh,ps1}（T-006 sh / T-009 ps1，PowerShell 调用路径）；
 │                     package.{sh,ps1} / install-service.{sh,ps1} / uninstall-service.{sh,ps1}（T-008 新增）；
-│                     install.{sh,ps1}（T-012 新增：一键安装编排脚本，curl|bash / irm|iex 形态；下载 latest release → 解压 → 调 install-service.* 注册服务）
+│                     install.{sh,ps1}（T-012 新增 / T-013 改：一键安装编排脚本，curl|bash / irm|iex 形态；查 releases/tags/rolling 滚动发布 → 解压 → 调 install-service.* 注册服务）
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
 ├── bin/            ← 构建产物（gitignore；build.ps1/build.sh 输出到这里）

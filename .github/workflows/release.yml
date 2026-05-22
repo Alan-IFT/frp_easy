@@ -1,25 +1,39 @@
-# T-010 deploy-polish-and-ci · GitHub Actions release workflow
+# T-013 rolling-release-install · GitHub Actions release workflow
 #
-# 触发：push v* tag（如 v0.1.0），自动构建 Linux + Windows 发布包并上传到 GitHub Releases。
-# 不在 PR / 普通 push 上触发，避免占用免费额度。
-#
-# 复用现有 scripts/build.sh + scripts/package.sh（不在 workflow 里复刻构建逻辑，
-# 让本地 release 和 CI release 走同一条路径）。
+# 两条触发路径：
+#   1) push 到 main 分支  → 滚动发布（rolling release）
+#      - 复用 build.sh --all + package.sh 构建 Linux + Windows 包
+#      - 创建/刷新固定 tag `rolling` 的正式 Release（非 prerelease），替换其全部旧资产
+#      - install.sh / install.ps1 一键安装下载的即为此发布
+#   2) push v* tag（如 v0.1.0） → 版本化发布
+#      - 行为与改造前一致，产出以去 v 前缀版本号命名的正式 Release
+#      - 为将来正式发版保留，可选；不影响滚动发布
 #
 # 发版步骤（人工）：
-#   git tag v0.1.0
-#   git push origin v0.1.0
-# GitHub UI 进入 Actions 看 build 状态；2-3 分钟后 Releases 页面有 .tar.gz + .zip。
+#   常规情形：把代码推到 main 即自动刷新滚动发布，维护者无需任何手动发版动作。
+#   正式版本化发布（可选）：
+#     git tag v0.1.0 && git push origin v0.1.0
+#
+# 复用 scripts/build.sh + scripts/package.sh，不在 workflow 里复刻构建逻辑，
+# 让本地 release 和 CI release 走同一条路径。
 
 name: Release
 
 on:
   push:
+    branches:
+      - main          # 滚动发布路径
     tags:
-      - 'v*'
+      - 'v*'          # 版本化发布路径（保留）
 
 permissions:
-  contents: write  # 上传 release assets 必需
+  contents: write  # 创建 release / 移动 rolling tag / 上传资产均需
+
+# 并发组含 ${{ github.ref }}：main 多次 push 互相取消（只发最新构建），
+# 而各个 v* tag 各自独立成组、与滚动发布互不取消（保护既有版本化发布）。
+concurrency:
+  group: rolling-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-release:
@@ -50,11 +64,58 @@ jobs:
       - name: Package (tar.gz + zip)
         run: bash scripts/package.sh --windows --skip-build
 
+      # ---- 滚动发布路径（仅 main push）----
+      # 移动固定 tag `rolling` 到本次 commit。softprops/action-gh-release@v2
+      # 默认不移动已存在 tag 的 ref（须显式 target_commitish，且 github.token 对
+      # 旧 commit 建 ref 有 403 风险）。这里改用 git 直接强制移动 tag——tag 处理由
+      # 本步骤独占，下方 Publish 步骤不再传 target_commitish，二者不重复。
+      - name: Move rolling tag to current commit
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git tag -f rolling "$GITHUB_SHA"
+          git push origin -f "refs/tags/rolling"
+
+      # action-gh-release@v2 不提供 clean_release_attachments，且滚动发布资产名
+      # 含短 sha（每次 commit 不同名），overwrite_files 只覆盖同名 → 旧资产会残留。
+      # 故在发布前显式清空 rolling release 上的全部现存资产。首次发布时 rolling
+      # release 尚不存在，gh release view 会失败，忽略即可。
+      - name: Purge old rolling assets
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view rolling >/dev/null 2>&1; then
+            gh release view rolling --json assets -q '.assets[].name' \
+              | while read -r a; do
+                  [ -n "$a" ] && gh release delete-asset rolling "$a" -y || true
+                done
+          fi
+
+      - name: Publish rolling release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: rolling
+          name: 最新构建（rolling）
+          body: |
+            与 main 分支同步的滚动发布（自动刷新）。
+            本次构建 commit：${{ github.sha }}
+            install.sh / install.ps1 一键安装下载的即为本发布的资产。
+          prerelease: false
+          make_latest: false
+          files: |
+            bin/release/*.tar.gz
+            bin/release/*.zip
+          fail_on_unmatched_files: true
+
+      # ---- 版本化发布路径（仅 v* tag push，行为与改造前一致）----
       - name: Compute release name from tag
         id: ver
+        if: startsWith(github.ref, 'refs/tags/v')
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release & upload assets
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.ver.outputs.version }}

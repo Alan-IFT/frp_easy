@@ -67,6 +67,9 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 
 一键安装等价于「本路径 A 的下载解压 + 路径 C 的服务注册」的合并：
 
+- 一键安装下载的是与 `main` 分支同步的**滚动发布**（rolling release）预编译包：
+  维护者每次 push `main`，GitHub Actions 会自动重新编译并刷新这个滚动发布，
+  因此一键安装拿到的始终是最新一次 `main` 构建，无需维护者手动打 tag 发版。
 - 固定安装目录：Linux/macOS `/opt/frp-easy`，Windows `C:\Program Files\frp-easy`
   （高级用户可用环境变量 `FRP_EASY_INSTALL_DIR` 覆盖）。
 - 自动注册 systemd / Windows 服务并启动，实现开机自启。
@@ -84,7 +87,8 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 
 到发布页面下载与你操作系统匹配的压缩包：
 
-- 下载地址：<https://github.com/Alan-IFT/frp_easy/releases/latest>
+- 下载地址：<https://github.com/Alan-IFT/frp_easy/releases/tag/rolling>
+  该地址始终指向与 `main` 分支同步的最新滚动发布构建（每次 push `main` 自动刷新）。
 - Linux 用户：`frp-easy-<VERSION>-linux-amd64.tar.gz`
 - Windows 用户：`frp-easy-<VERSION>-windows-amd64.zip`
 

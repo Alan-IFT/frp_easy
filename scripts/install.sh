@@ -2,8 +2,9 @@
 # install.sh — frp_easy 一键安装脚本（Linux / macOS）
 #
 # 用途：一条命令完成 frp_easy 的下载、安装与开机自启配置。自动探测 OS/架构，
-#       调用 GitHub Releases API 取最新 release，下载并校验发布包，解压到固定
-#       安装目录，再调用解压包内的 install-service.sh 注册 systemd 服务。
+#       调用 GitHub Releases API 取固定标签 `rolling` 的滚动发布（与 main 分支
+#       同步、每次 push main 自动刷新），下载并校验发布包，解压到固定安装目录，
+#       再调用解压包内的 install-service.sh 注册 systemd 服务。
 # 用法：
 #   推荐（curl | bash 形态，需 root/sudo）：
 #     curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash
@@ -22,7 +23,7 @@
 set -euo pipefail
 
 # ---- 全局常量 ----
-API_URL="https://api.github.com/repos/Alan-IFT/frp_easy/releases/latest"
+API_URL="https://api.github.com/repos/Alan-IFT/frp_easy/releases/tags/rolling"
 INSTALL_DIR="${FRP_EASY_INSTALL_DIR:-/opt/frp-easy}"
 TMP_DIR=""
 
@@ -33,8 +34,8 @@ while [[ $# -gt 0 ]]; do
             cat <<'EOF'
 用法: install.sh [-h|--help]
 
-frp_easy 一键安装脚本（Linux / macOS）—— 下载最新发布包、安装到固定目录、
-注册 systemd 开机自启。
+frp_easy 一键安装脚本（Linux / macOS）—— 下载滚动发布包（与 main 分支同步）、
+安装到固定目录、注册 systemd 开机自启。
 
 推荐用法（curl | bash 形态，需 root / sudo 权限）:
   curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash
@@ -120,7 +121,7 @@ PLATFORM="${OS}-${ARCH}"
 echo "    检测到平台：${PLATFORM}"
 
 # ---- 步骤 3：查询 GitHub Releases API ----
-echo "==> [3/8] 查询 GitHub 最新 release..."
+echo "==> [3/8] 查询 GitHub 滚动发布..."
 # 一次请求同时拿响应体与 HTTP 状态码：去掉 -f，让 curl 在 4xx/5xx 下仍返回 0，
 # 仅网络层失败（DNS / 连接）才让 curl 非 0；据此分流 BC-1（网络）与 BC-2/BC-4（状态码）。
 api_curl_ok=1
@@ -144,7 +145,7 @@ case "$http_code" in
         exit 1
         ;;
     404)
-        echo "错误：仓库尚未发布任何 release，无法一键安装；请改用源码构建（docs/DEPLOYMENT.md 路径 B）或等待首个 release。" >&2
+        echo "错误：滚动发布尚未生成（维护者尚未首次 push main），暂无法一键安装；请改用源码构建（docs/DEPLOYMENT.md 路径 B）或等待维护者首次 push。" >&2
         exit 1
         ;;
     *)
@@ -170,16 +171,16 @@ ASSET_URL="$(printf '%s' "$body" \
 if [[ -z "$ASSET_URL" ]]; then
     if [[ "$OS" == "darwin" ]]; then
         # macOS 定制文案：release.yml 当前不产 darwin-amd64 资产，macOS 为次要平台。
-        echo "提示：当前 release 未提供 macOS 专用包，frp_easy 的 macOS 支持为次要平台。" >&2
-        echo "错误：最新 release 未包含当前平台（${PLATFORM}）的发布包，请用源码构建（见 docs/DEPLOYMENT.md 路径 B）。" >&2
+        echo "提示：滚动发布未提供 macOS 专用包，frp_easy 的 macOS 支持为次要平台。" >&2
+        echo "错误：滚动发布未包含当前平台（${PLATFORM}）的发布包，请用源码构建（见 docs/DEPLOYMENT.md 路径 B）。" >&2
         exit 1
     fi
-    echo "错误：最新 release 未包含当前平台（${PLATFORM}）的发布包。" >&2
+    echo "错误：滚动发布未包含当前平台（${PLATFORM}）的发布包。" >&2
     exit 1
 fi
 
 if [[ -n "$VERSION" ]]; then
-    echo "    最新版本：${VERSION}"
+    echo "    滚动发布版本：${VERSION}"
 fi
 
 # ---- 步骤 5：下载、校验、解压 ----

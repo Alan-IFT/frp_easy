@@ -42,7 +42,7 @@
 - **安全加固**（T-007）：`ui.log` 权限收紧至 0600，附带 SQL 注入 / 并发 / 越界等对抗性测试。
 - **部署套件**（T-008）：一键打包脚本、部署权威文档、中文 `--help`、systemd 与 Windows Service 安装脚本。
 - **跨 shell parity**（T-009）：verify_all 与测试脚本在 PowerShell 与 Git Bash 下行为一致。
-- **GitHub Actions CI**（T-010）：push `v*` tag 自动构建并上传 GitHub Releases 资产。
+- **GitHub Actions CI**：push 到 `main` 自动构建并刷新滚动发布（rolling release，一键安装的下载源）；push `v*` tag 产出版本化正式发布。
 
 ---
 

@@ -1,8 +1,9 @@
 # install.ps1 — frp_easy 一键安装脚本（Windows）
 #
 # 用途：一条命令完成 frp_easy 的下载、安装与 Windows 服务注册。自动探测架构，
-#       调用 GitHub Releases API 取最新 release，下载并校验 zip 发布包，解压到
-#       固定安装目录，再调用解压包内的 install-service.ps1 注册 Windows 服务。
+#       调用 GitHub Releases API 取固定标签 `rolling` 的滚动发布（与 main 分支
+#       同步、每次 push main 自动刷新），下载并校验 zip 发布包，解压到固定安装
+#       目录，再调用解压包内的 install-service.ps1 注册 Windows 服务。
 # 用法：
 #   推荐（irm | iex 形态，需以管理员身份运行 PowerShell）：
 #     irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
@@ -27,7 +28,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # ---- 全局常量 ----
-$ApiUrl = "https://api.github.com/repos/Alan-IFT/frp_easy/releases/latest"
+$ApiUrl = "https://api.github.com/repos/Alan-IFT/frp_easy/releases/tags/rolling"
 $InstallDir = if ($env:FRP_EASY_INSTALL_DIR) { $env:FRP_EASY_INSTALL_DIR } else { "C:\Program Files\frp-easy" }
 
 # ---- 步骤 0：-Help（必须在依赖检测之前）----
@@ -35,8 +36,8 @@ if ($Help) {
     @"
 用法: install.ps1 [-Help]
 
-frp_easy 一键安装脚本（Windows）—— 下载最新发布包、安装到固定目录、
-注册 Windows 服务实现开机自启。
+frp_easy 一键安装脚本（Windows）—— 下载滚动发布包（与 main 分支同步）、
+安装到固定目录、注册 Windows 服务实现开机自启。
 
 推荐用法（irm | iex 形态，需以管理员身份运行 PowerShell）:
   irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
@@ -94,7 +95,7 @@ $platform = "windows-amd64"
 Write-Host "    检测到平台：$platform"
 
 # ---- 步骤 3：查询 GitHub Releases API ----
-Write-Host "==> [3/8] 查询 GitHub 最新 release..."
+Write-Host "==> [3/8] 查询 GitHub 滚动发布..."
 # Invoke-WebRequest 对 4xx/5xx 默认抛异常（$ErrorActionPreference=Stop）。
 # 在 catch 里区分网络层失败（无 Response）与 HTTP 错误状态码。
 $apiContent = $null
@@ -113,7 +114,7 @@ try {
         Write-Error "GitHub API 触发限流（未认证请求 60 次/小时/IP），请稍后重试，或改用 docs/DEPLOYMENT.md 路径 A 手动下载。"
         exit 1
     } elseif ($statusCode -eq 404) {
-        Write-Error "仓库尚未发布任何 release，无法一键安装；请改用源码构建（docs/DEPLOYMENT.md 路径 B）或等待首个 release。"
+        Write-Error "滚动发布尚未生成（维护者尚未首次 push main），暂无法一键安装；请改用源码构建（docs/DEPLOYMENT.md 路径 B）或等待维护者首次 push。"
         exit 1
     } else {
         Write-Error "GitHub API 返回异常状态 $statusCode，请稍后重试。"
@@ -133,12 +134,12 @@ try {
 $version = $json.tag_name
 $asset = $json.assets | Where-Object { $_.name -match "frp-easy-.*-windows-amd64\.zip$" } | Select-Object -First 1
 if (-not $asset) {
-    Write-Error "最新 release 未包含 Windows 平台（$platform）的发布包。"
+    Write-Error "滚动发布未包含 Windows 平台（$platform）的发布包。"
     exit 1
 }
 $assetUrl = $asset.browser_download_url
 if ($version) {
-    Write-Host "    最新版本：$version"
+    Write-Host "    滚动发布版本：$version"
 }
 
 # ---- 步骤 5：下载、校验、解压 ----

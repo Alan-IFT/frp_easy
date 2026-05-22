@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-013 | rolling-release-install | DELIVERED | 2026-05-22 | `docs/features/_archived/rolling-release-install/` |
 | T-012 | one-click-install-and-mit-license | DELIVERED | 2026-05-22 | `docs/features/_archived/one-click-install-and-mit-license/` |
 | T-011 | readme-refresh-and-network-defaults | DELIVERED | 2026-05-21 | `docs/features/_archived/readme-refresh-and-network-defaults/` |
 | T-010 | deploy-polish-and-ci | DELIVERED | 2026-05-19 | `docs/features/_archived/deploy-polish-and-ci/` |
