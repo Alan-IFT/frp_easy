@@ -10,7 +10,9 @@
 #       --skip-build  跳过 build.sh 调用（要求 bin/frp-easy[.exe] 已存在）
 #       -h | --help   显示本帮助
 # 输出：stdout 中文进度；产物落在 bin/release/frp-easy-<version>-<os>-amd64.<ext>
-# 退出码：0 成功 / 1 前置缺失（bin/frp-easy / frp_linux/frpc / frp_linux/frps 等）/ 2 build.sh 调用失败
+# 退出码：0 成功 / 1 前置缺失（bin/frp-easy）/ 2 build.sh 调用失败
+# 说明（T-014）：frp 二进制不再内置、不随发布包分发，运行时由 frp_easy 从 fatedier/frp
+#                自动下载；本脚本不再校验/打包 frp_linux/、frp_win/ 下的 frpc/frps。
 
 set -euo pipefail
 
@@ -112,23 +114,8 @@ if $DO_LINUX && [[ -x "$ROOT/bin/frp-easy" ]]; then
     fi
 fi
 
-# 校验 frp 子二进制完整性
-if $DO_LINUX; then
-    for f in frp_linux/frpc frp_linux/frps; do
-        if [[ ! -s "$ROOT/$f" ]]; then
-            echo "错误：缺少 $f；请确认 frp_linux/ 子目录完整。" >&2
-            exit 1
-        fi
-    done
-fi
-if $DO_WINDOWS; then
-    for f in frp_win/frpc.exe frp_win/frps.exe; do
-        if [[ ! -s "$ROOT/$f" ]]; then
-            echo "错误：缺少 $f；请确认 frp_win/ 子目录完整。" >&2
-            exit 1
-        fi
-    done
-fi
+# T-014：frp 子二进制不再内置、不打进发布包，运行时由 frp_easy 自动下载，
+# 故此处不再校验 frp_linux/frpc、frp_win/frpc.exe 等是否存在。
 
 RELEASE_DIR="$ROOT/bin/release"
 mkdir -p "$RELEASE_DIR"
@@ -225,20 +212,16 @@ build_package() {
     rm -rf "$staging"
     mkdir -p "$top/scripts"
 
+    # T-014：发布包不再含 frp_linux/、frp_win/ —— frp 二进制运行时由 frp_easy 自动下载。
     if [[ "$os" == "linux" ]]; then
         cp "$ROOT/bin/frp-easy" "$top/frp-easy"
         chmod 0755 "$top/frp-easy"
-        mkdir -p "$top/frp_linux"
-        cp -a "$ROOT/frp_linux/." "$top/frp_linux/"
-        chmod 0755 "$top/frp_linux/frpc" "$top/frp_linux/frps"
         cp "$ROOT/scripts/install-service.sh" "$top/scripts/install-service.sh"
         cp "$ROOT/scripts/uninstall-service.sh" "$top/scripts/uninstall-service.sh"
         chmod 0755 "$top/scripts/install-service.sh" "$top/scripts/uninstall-service.sh"
         make_readme_linux "$top/README.txt" "$VERSION"
     else
         cp "$ROOT/bin/frp-easy.exe" "$top/frp-easy.exe"
-        mkdir -p "$top/frp_win"
-        cp -a "$ROOT/frp_win/." "$top/frp_win/"
         cp "$ROOT/scripts/install-service.ps1" "$top/scripts/install-service.ps1"
         cp "$ROOT/scripts/uninstall-service.ps1" "$top/scripts/uninstall-service.ps1"
         make_readme_windows "$top/README.txt" "$VERSION"

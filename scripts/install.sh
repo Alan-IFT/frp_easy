@@ -223,12 +223,10 @@ if [[ -e "$INSTALL_DIR/frp-easy" ]]; then
     if command -v systemctl >/dev/null 2>&1; then
         systemctl stop frp-easy >/dev/null 2>&1 || true
     fi
-    # 白名单逐项覆盖：绝不触碰 frp_easy.toml 与 .frp_easy/。
+    # 白名单逐项覆盖：绝不触碰 frp_easy.toml、.frp_easy/，以及用户运行时下载的 frp_linux/。
     cp -a "$EXTRACTED/frp-easy" "$INSTALL_DIR/frp-easy"
-    if [[ -d "$EXTRACTED/frp_linux" ]]; then
-        rm -rf "$INSTALL_DIR/frp_linux"
-        cp -a "$EXTRACTED/frp_linux" "$INSTALL_DIR/"
-    fi
+    # T-014：升级不再覆盖/删除 frp_linux/ —— 发布包已不含 frp 二进制，
+    # frp_linux/ 下的 frpc/frps 由用户经 UI 横幅按需下载，升级须原样保留。
     if [[ -d "$EXTRACTED/scripts" ]]; then
         rm -rf "$INSTALL_DIR/scripts"
         cp -a "$EXTRACTED/scripts" "$INSTALL_DIR/"
@@ -294,6 +292,12 @@ frp_easy 一键安装完成！
   systemctl status frp-easy        # 查看服务状态
   systemctl is-active frp-easy     # 仅查 active 状态
   journalctl -u frp-easy -f        # 实时日志
+
+更新：
+  重新运行同一条一键安装命令即可升级到最新版：
+    curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash
+  升级会保留你的配置（frp_easy.toml）与数据（.frp_easy/），
+  以及已下载的 frp 二进制（frp_linux/）。
 
 卸载：
   sudo ${INSTALL_DIR}/scripts/uninstall-service.sh

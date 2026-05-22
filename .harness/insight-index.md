@@ -33,3 +33,5 @@
 - GitHub API 未认证请求的限流响应（HTTP 403）响应体是合法 JSON；查询 release 必须"先判 HTTP 状态码、后解析 JSON"，且查询步骤不能用 `curl -f`（否则 403/404 直接变 curl 错误，丢失分流能力）。证据：本任务 install.sh API 步骤。
 - `softprops/action-gh-release@v2`（实测 v2.6.2）**没有** `clean_release_attachments` 输入参数，且对已存在的 release 不会自动把底层 git tag ref 移到新 commit。滚动发布（固定 tag 反复移动 + 资产名含 commit hash 每次不同名）必须自己加 `git tag -f` step 移 tag、加 `gh release delete-asset` step 清旧资产。证据：本任务 04 对 action 的源码级核实。
 - GitHub Actions `concurrency.group` 用于滚动发布时必须含 `${{ github.ref }}`；否则 main 分支触发与 `v*` tag 触发会落入同一并发组、`cancel-in-progress` 会让两类发布互相取消。证据：本任务 release.yml 设计。
+- 改为下载 frp "latest" 后，frp 版本不再受 frp_easy 控制。未来 frp 大版本若变更 TOML schema，`internal/frpconf` 渲染的 frpc.toml/frps.toml 可能被新版 frpc/frps 拒绝、导致子进程启动失败。本期按 out-of-scope 不做版本适配；后续若出现兼容性问题，需引入 frp 版本探测/适配或锁定已知兼容版本。证据：T-014 设计 §5 R-2。
+- GitHub API 查询 `fatedier/frp` releases 必须带 `User-Agent` 头，否则被 GitHub 拒为 403；且 `http.Client`（不同于 curl）对 4xx/5xx 不返回 error，可天然"先判 resp.StatusCode 再解析 JSON"。证据：T-014 downloader.go resolveLatestAsset。

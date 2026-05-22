@@ -28,8 +28,8 @@ frp_easy/
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
 ├── bin/            ← 构建产物（gitignore；build.ps1/build.sh 输出到这里）
-├── frp_win/        ← Windows FRP 二进制（vendored，git 保留）
-├── frp_linux/      ← Linux FRP 二进制（vendored，git 保留）
+├── frp_win/        ← frp 二进制运行时下载落地目录（T-014：不再内置，仅 LICENSE 占位；downloader 下载落地于此）
+├── frp_linux/      ← frp 二进制运行时下载落地目录（T-014：不再内置，仅 LICENSE 占位；downloader 下载落地于此）
 ├── internal/       ← Go 业务代码（按子包分区，私有于本模块）
 │   ├── appconf/    ← 读写 frp_easy.toml（UI 服务自身配置，非 FRP 配置）
 │   ├── assets/     ← embed.FS 占位（dev 模式返回 404；Round 2 挂 dist/）
@@ -113,7 +113,7 @@ frp_easy/
 | 嵌入前端资源（占位） | `internal/assets/assets.go` | dev 阶段返回 404 占位；Round 2 改成 `//go:embed all:dist`。 |
 | 密码哈希 / 限流 | `internal/auth/` | `HashPassword`(argon2id m=64MiB/t=3/p=2) / `VerifyPassword` / `GenerateSessionToken` / `GenerateCSRFToken` / `RateLimiter`(5次/60s per IP 基于 kv)。 |
 | FRP 二进制定位 | `internal/binloc/binloc.go` | `NewDefault(root)` 按 `runtime.GOOS` 选 frp_win/frp_linux；Missing() 反馈缺失项（AC-13）。 |
-| FRP 二进制自动下载（T-002） | `internal/downloader/downloader.go` | `New(root, logger) *Manager`；`Start(kind) error`；`Status(kind) (DownloadState, bool)`。异步 goroutine 下载 tar.gz/zip，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御（R-2）。 |
+| FRP 二进制自动下载（T-002 / T-014） | `internal/downloader/downloader.go` | `New(root, logger) *Manager`；`Start(kind) error`；`Status(kind) (DownloadState, bool)`。异步 goroutine 下载 tar.gz/zip，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御（R-2）。T-014：改为下载 fatedier/frp 最新 release（GitHub API 解析 latest tag，`resolveLatestAsset`），不再用写死的 `FRPVersion`。 |
 | frpc admin 客户端 | `internal/frpcadmin/client.go` | `Reload(ctx, strictConfig)` / `Status(ctx)`；5s 超时；basic auth。 |
 | DB → TOML 渲染 | `internal/frpconf/render.go` | `RenderFrpc` / `RenderFrps` / `AtomicWrite`；字段名严格对齐 FRP camelCase TOML 上游（见 02 附录 A）。 |
 | HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）。 |

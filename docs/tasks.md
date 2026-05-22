@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-014 | frp-binary-auto-download | DELIVERED | 2026-05-22 | `docs/features/_archived/frp-binary-auto-download/` |
 | T-013 | rolling-release-install | DELIVERED | 2026-05-22 | `docs/features/_archived/rolling-release-install/` |
 | T-012 | one-click-install-and-mit-license | DELIVERED | 2026-05-22 | `docs/features/_archived/one-click-install-and-mit-license/` |
 | T-011 | readme-refresh-and-network-defaults | DELIVERED | 2026-05-21 | `docs/features/_archived/readme-refresh-and-network-defaults/` |

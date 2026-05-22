@@ -29,7 +29,7 @@
 
 ### 零配置与运维体验
 
-- **frp 二进制自动下载**：检测到 frpc / frps 缺失时，UI 顶部弹横幅，一键从 GitHub Releases 异步下载，进度条实时显示 0–100%。
+- **frp 二进制自动下载**：首次使用时检测到 frpc / frps 缺失，UI 顶部弹横幅，一键从 `fatedier/frp` GitHub Releases 异步下载**最新版**，进度条实时显示 0–100%。frp 二进制不内置在仓库 / 发布包中，由 frp_easy 运行时按需获取。
 - **公网 IP 检测**：服务端配置页一键检测公网 IP，结果仅展示不自动填充。
 - **防火墙提示**：按代理协议生成 ufw / iptables 命令，可一键复制。
 - **浏览器自动打开**（T-010）：TTY 启动时自动打开浏览器；`--no-browser` 或环境变量 `FRP_EASY_NO_BROWSER` 可关闭，systemd / 服务模式自动跳过。
@@ -65,6 +65,10 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 ```
 
 > 安全提示：`curl | bash` / `irm | iex` 会以高权限执行远程脚本。谨慎用户可先下载脚本审阅后再运行，详见 **[docs/DEPLOYMENT.md A.0 一键安装](docs/DEPLOYMENT.md)**。
+
+#### 如何更新
+
+重新运行上方**同一条**一键安装命令即可升级到最新版。升级会停服、覆盖主二进制与脚本、重注册服务，并完整保留你的配置（`frp_easy.toml`）、数据目录（`.frp_easy/`），以及 `frp_linux/`/`frp_win/` 下你已下载的 frp 二进制。
 
 一键安装会把 frp_easy 装到固定目录（Linux/macOS `/opt/frp-easy`、Windows `C:\Program Files\frp-easy`）并注册为系统服务。
 
@@ -205,8 +209,8 @@ frp_easy/
 │   └── storage/    — SQLite 句柄 + 迁移引擎 + DAO
 ├── migrations/     — SQLite 迁移文件（权威源）
 ├── web/            — 前端 Vue 3 + Vite（src/ 目录）
-├── frp_win/        — Windows FRP 二进制（vendored）
-├── frp_linux/      — Linux FRP 二进制（vendored）
+├── frp_win/        — frp 二进制运行时下载落地目录（不内置；仅 LICENSE 占位）
+├── frp_linux/      — frp 二进制运行时下载落地目录（不内置；仅 LICENSE 占位）
 ├── scripts/        — verify_all、start、build、package 等辅助脚本
 ├── docs/           — 部署文档、架构 / 状况 HTML、本导航、任务记录
 └── bin/            — 构建产物（gitignore）
@@ -220,6 +224,6 @@ frp_easy/
 
 本项目（frp_easy）采用 [MIT 许可证](LICENSE)。Copyright (c) 2026 Alan_IFT。
 
-> 注意：`frp_linux/` 与 `frp_win/` 目录下随附的 frp 二进制（frpc / frps）属于上游项目
-> [`fatedier/frp`](https://github.com/fatedier/frp)，遵循其 **Apache-2.0** 许可证，与
-> frp_easy 本身的 MIT 许可证相互独立。详见仓库根的 [`NOTICE`](NOTICE) 文件。
+> 注意：frp_easy 在运行时按需从上游项目 [`fatedier/frp`](https://github.com/fatedier/frp)
+> 下载 frpc / frps 二进制（不随本仓库或发布包分发）。这些 frp 二进制遵循上游的
+> **Apache-2.0** 许可证，与 frp_easy 本身的 MIT 许可证相互独立。详见仓库根的 [`NOTICE`](NOTICE) 文件。

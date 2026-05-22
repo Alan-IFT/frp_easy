@@ -15,9 +15,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// frpTestVersion 是测试归档内条目使用的版本号字面量。
+// T-014：FRPVersion 常量已移除，下载 URL 改由 GitHub Release API 解析；
+// 测试归档内条目路径只需任意稳定字面量即可（extractFromTarGz/Zip 用 filepath.Base 匹配）。
+const frpTestVersion = "0.68.1"
 
 // --- helpers ---
 
@@ -90,25 +96,51 @@ func waitForDone(t *testing.T, m *Manager, kind string, timeout time.Duration) D
 	return DownloadState{}
 }
 
+// releaseJSON builds a GitHub Release API JSON body for a single asset whose
+// browser_download_url points at archivePath on the same test server.
+func releaseJSON(tag, assetName, assetURL string) string {
+	return `{"tag_name":"` + tag + `","assets":[{"name":"` + assetName +
+		`","browser_download_url":"` + assetURL + `"}]}`
+}
+
+// newFRPServer spins up an httptest server that serves both the GitHub Release
+// API endpoint (/repos/fatedier/frp/releases/latest) and the archive download
+// path (/archive). assetName decides which platform suffix the API advertises.
+func newFRPServer(t *testing.T, assetName string, archive []byte) *httptest.Server {
+	t.Helper()
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(releaseJSON("v"+frpTestVersion, assetName, srv.URL+"/archive")))
+		case r.URL.Path == "/archive":
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Length", itoa(len(archive)))
+			w.WriteHeader(http.StatusOK)
+			w.Write(archive)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	return srv
+}
+
 // --- Test 1: tar.gz download success + progress 0→100 ---
 
 func TestDownload_TarGz_Success_Progress(t *testing.T) {
 	// Create a valid tar.gz archive containing frpc (linux layout).
 	archiveContent := buildTarGz(t, map[string]string{
-		"frp_" + FRPVersion + "_linux_amd64/frpc": "#!/bin/sh\necho frpc binary",
+		"frp_" + frpTestVersion + "_linux_amd64/frpc": "#!/bin/sh\necho frpc binary",
 	})
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Length", itoa(len(archiveContent)))
-		w.WriteHeader(http.StatusOK)
-		w.Write(archiveContent)
-	}))
+	srv := newFRPServer(t, "frp_"+frpTestVersion+"_linux_amd64.tar.gz", archiveContent)
 	defer srv.Close()
 
 	root := t.TempDir()
 	m := New(root, discardLogger())
-	m.baseURL = srv.URL
+	m.apiBaseURL = srv.URL
 	m.goos = "linux"
 
 	if err := m.Start("frpc"); err != nil {
@@ -136,19 +168,15 @@ func TestDownload_TarGz_Success_Progress(t *testing.T) {
 func TestDownload_Zip_Success(t *testing.T) {
 	// Create a valid zip archive containing frpc.exe (windows layout).
 	archiveContent := buildZip(t, map[string]string{
-		"frp_" + FRPVersion + "_windows_amd64/frpc.exe": "fake frpc exe content",
+		"frp_" + frpTestVersion + "_windows_amd64/frpc.exe": "fake frpc exe content",
 	})
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		w.WriteHeader(http.StatusOK)
-		w.Write(archiveContent)
-	}))
+	srv := newFRPServer(t, "frp_"+frpTestVersion+"_windows_amd64.zip", archiveContent)
 	defer srv.Close()
 
 	root := t.TempDir()
 	m := New(root, discardLogger())
-	m.baseURL = srv.URL
+	m.apiBaseURL = srv.URL
 	m.goos = "windows"
 
 	if err := m.Start("frpc"); err != nil {
@@ -174,12 +202,12 @@ func TestDownload_Zip_Success(t *testing.T) {
 // --- Test 3: ErrAlreadyInProgress (concurrent Start) ---
 
 func TestDownload_ErrAlreadyInProgress(t *testing.T) {
-	// Blocking server: hangs until unblock is closed.
+	// Blocking server: the API endpoint hangs until unblock is closed.
 	unblock := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-unblock:
-			// Server unblocked; respond with nothing (extraction will fail, that's OK).
+			// Server unblocked; respond with nothing (resolution will fail, that's OK).
 			w.WriteHeader(http.StatusOK)
 		case <-r.Context().Done():
 			// Request was cancelled (e.g., server closed).
@@ -196,7 +224,7 @@ func TestDownload_ErrAlreadyInProgress(t *testing.T) {
 
 	root := t.TempDir()
 	m := New(root, discardLogger())
-	m.baseURL = srv.URL
+	m.apiBaseURL = srv.URL
 	m.goos = "linux"
 	m.client = &http.Client{Timeout: 5 * time.Second}
 
@@ -224,17 +252,26 @@ func TestDownload_ErrAlreadyInProgress(t *testing.T) {
 	waitForDone(t, m, "frpc", 3*time.Second)
 }
 
-// --- Test 4: HTTP non-2xx → StatusFailed ---
+// --- Test 4: HTTP non-2xx on archive download → StatusFailed ---
 
 func TestDownload_HTTP404_StatusFailed(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// API endpoint resolves fine, but the archive path returns 404.
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/releases/latest") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(releaseJSON("v"+frpTestVersion,
+				"frp_"+frpTestVersion+"_linux_amd64.tar.gz", srv.URL+"/missing")))
+			return
+		}
 		http.NotFound(w, r)
 	}))
 	defer srv.Close()
 
 	root := t.TempDir()
 	m := New(root, discardLogger())
-	m.baseURL = srv.URL
+	m.apiBaseURL = srv.URL
 	m.goos = "linux"
 
 	if err := m.Start("frpc"); err != nil {
@@ -259,18 +296,15 @@ func TestDownload_ZipSlip_MaliciousEntryFiltered(t *testing.T) {
 	//   - malicious entry: "../evil.txt" (contains "..")
 	//   - legitimate entry: "frp_dir/frpc.exe" (valid)
 	archiveContent := buildZip(t, map[string]string{
-		"../evil.txt":           "evil content",
-		"frp_dir/frpc.exe":      "legit frpc content",
+		"../evil.txt":      "evil content",
+		"frp_dir/frpc.exe": "legit frpc content",
 	})
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write(archiveContent)
-	}))
+	srv := newFRPServer(t, "frp_"+frpTestVersion+"_windows_amd64.zip", archiveContent)
 	defer srv.Close()
 
 	m := New(root, discardLogger())
-	m.baseURL = srv.URL
+	m.apiBaseURL = srv.URL
 	m.goos = "windows"
 
 	if err := m.Start("frpc"); err != nil {
@@ -298,14 +332,22 @@ func TestDownload_ZipSlip_MaliciousEntryFiltered(t *testing.T) {
 	}
 }
 
-// --- Test 6: Network timeout → StatusFailed ---
+// --- Test 6: Network timeout on archive download → StatusFailed ---
 
 func TestDownload_NetworkTimeout_StatusFailed(t *testing.T) {
-	// Server hangs indefinitely; client has a very short timeout.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// API endpoint resolves fine; the archive path hangs until client timeout.
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/releases/latest") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(releaseJSON("v"+frpTestVersion,
+				"frp_"+frpTestVersion+"_linux_amd64.tar.gz", srv.URL+"/archive")))
+			return
+		}
+		// /archive hangs indefinitely.
 		select {
 		case <-r.Context().Done():
-			// Connection closed by client timeout.
 		case <-time.After(10 * time.Second):
 			w.WriteHeader(http.StatusOK)
 		}
@@ -314,7 +356,7 @@ func TestDownload_NetworkTimeout_StatusFailed(t *testing.T) {
 
 	root := t.TempDir()
 	m := New(root, discardLogger())
-	m.baseURL = srv.URL
+	m.apiBaseURL = srv.URL
 	m.goos = "linux"
 	// Short timeout so the test completes quickly.
 	m.client = &http.Client{Timeout: 50 * time.Millisecond}
@@ -371,5 +413,128 @@ func TestParseIPFromJSON(t *testing.T) {
 	_, err = ParseIPFromJSON([]byte(`not json`))
 	if err == nil {
 		t.Error("want error for invalid json")
+	}
+}
+
+// --- Test 9 (T-014 AC-6): latest 解析成功 —— API 返回最新 tag + 匹配资产 ---
+
+func TestResolveLatest_Success(t *testing.T) {
+	// 归档内条目用任意版本字面量；下载 URL 由 API 响应解析得到。
+	archiveContent := buildTarGz(t, map[string]string{
+		"frp_9.9.9_linux_amd64/frps": "#!/bin/sh\necho frps binary",
+	})
+	// API 响应里 tag 故意用一个"新"版本号，验证下载 URL 完全来自 API、不依赖任何写死常量。
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(releaseJSON("v9.9.9", "frp_9.9.9_linux_amd64.tar.gz", srv.URL+"/dl")))
+		case r.URL.Path == "/dl":
+			w.Header().Set("Content-Length", itoa(len(archiveContent)))
+			w.WriteHeader(http.StatusOK)
+			w.Write(archiveContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	root := t.TempDir()
+	m := New(root, discardLogger())
+	m.apiBaseURL = srv.URL
+	m.goos = "linux"
+
+	if err := m.Start("frps"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	st := waitForDone(t, m, "frps", 5*time.Second)
+	if st.Status != StatusSuccess {
+		t.Errorf("expected status=%s, got %s (error=%q)", StatusSuccess, st.Status, st.Error)
+	}
+	if _, err := os.Stat(filepath.Join(root, "frp_linux", "frps")); err != nil {
+		t.Errorf("expected frps binary installed: %v", err)
+	}
+}
+
+// --- Test 10 (T-014 AC-6): API 限流 403 → failed + 中文"限流"消息 ---
+
+func TestResolveLatest_RateLimited403(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 限流响应体也是合法 JSON（实现必须先判状态码、后解析 JSON）。
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"message":"API rate limit exceeded"}`))
+	}))
+	defer srv.Close()
+
+	m := New(t.TempDir(), discardLogger())
+	m.apiBaseURL = srv.URL
+	m.goos = "linux"
+
+	if err := m.Start("frpc"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	st := waitForDone(t, m, "frpc", 5*time.Second)
+	if st.Status != StatusFailed {
+		t.Errorf("expected status=%s, got %s", StatusFailed, st.Status)
+	}
+	if !strings.Contains(st.Error, "限流") {
+		t.Errorf("expected error to mention 限流, got %q", st.Error)
+	}
+}
+
+// --- Test 11 (T-014 AC-6): 资产未匹配 → failed + 中文"未找到匹配"消息 ---
+
+func TestResolveLatest_AssetNotMatched(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// assets[] 里只有 arm64 / darwin 资产，无 linux amd64 后缀项。
+		w.Write([]byte(`{"tag_name":"v1.0.0","assets":[` +
+			`{"name":"frp_1.0.0_linux_arm64.tar.gz","browser_download_url":"http://x/a"},` +
+			`{"name":"frp_1.0.0_darwin_amd64.tar.gz","browser_download_url":"http://x/b"}]}`))
+	}))
+	defer srv.Close()
+
+	m := New(t.TempDir(), discardLogger())
+	m.apiBaseURL = srv.URL
+	m.goos = "linux"
+
+	if err := m.Start("frpc"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	st := waitForDone(t, m, "frpc", 5*time.Second)
+	if st.Status != StatusFailed {
+		t.Errorf("expected status=%s, got %s", StatusFailed, st.Status)
+	}
+	if !strings.Contains(st.Error, "未找到匹配") {
+		t.Errorf("expected error to mention 未找到匹配, got %q", st.Error)
+	}
+}
+
+// --- Test 12 (T-014 AC-6): latest API 网络失败 → failed ---
+
+func TestResolveLatest_NetworkFailure(t *testing.T) {
+	// 启动后立即关闭 server，使 API 查询请求遭遇连接失败。
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	apiURL := srv.URL
+	srv.Close() // 此后 apiURL 不可达
+
+	m := New(t.TempDir(), discardLogger())
+	m.apiBaseURL = apiURL
+	m.goos = "linux"
+	m.client = &http.Client{Timeout: 2 * time.Second}
+
+	if err := m.Start("frpc"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	st := waitForDone(t, m, "frpc", 5*time.Second)
+	if st.Status != StatusFailed {
+		t.Errorf("expected status=%s, got %s", StatusFailed, st.Status)
+	}
+	if !strings.Contains(st.Error, "无法访问 GitHub") {
+		t.Errorf("expected error to mention 无法访问 GitHub, got %q", st.Error)
 	}
 }

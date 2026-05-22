@@ -3,16 +3,16 @@ Copyright (c) 2026 Alan_IFT
 
 本项目（frp_easy）自身的源代码与脚本采用 MIT 许可证，详见同目录下的 LICENSE 文件。
 
-== 关于随附的第三方二进制 ==
+== 关于运行时下载的第三方二进制 ==
 
-本仓库的 frp_linux/ 与 frp_win/ 目录下随附的 frpc、frps 可执行文件，
-不属于 frp_easy，而是来自上游开源项目 fatedier/frp：
+frp_easy 在运行时按需从上游开源项目 fatedier/frp 的官方 GitHub Release
+下载 frpc、frps 可执行文件（首次使用时由 UI 触发下载）：
 
   项目地址：https://github.com/fatedier/frp
   许可证：  Apache License 2.0（Apache-2.0）
 
-这些 frp 二进制以原样（未修改）形式随附，仅为方便用户开箱即用。
-它们的版权与许可证归上游 fatedier/frp 项目所有，遵循 Apache-2.0，
-与 frp_easy 自身的 MIT 许可证相互独立、互不影响。
+这些 frp 二进制不属于 frp_easy，未随本仓库或发布包分发；它们由用户在运行时
+直接从 fatedier/frp 上游获取，版权与许可证归上游 fatedier/frp 项目所有，
+遵循 Apache-2.0，与 frp_easy 自身的 MIT 许可证相互独立、互不影响。
 
 Apache-2.0 许可证全文见：https://www.apache.org/licenses/LICENSE-2.0

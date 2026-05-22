@@ -79,6 +79,8 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 > 若想了解服务的状态查询 / 日志 / 卸载命令，见下方[路径 C](#路径-c--作为系统服务)。
 > macOS 因无 systemd / launchd 模板，一键安装会下载安装后提示手动启动，不注册服务。
 
+**如何更新**：重新运行上方**同一条**一键安装命令即可升级。升级会停服 → 覆盖主二进制与脚本 → 重注册服务，并完整保留 `frp_easy.toml`、`.frp_easy/` 数据目录，以及 `frp_linux/`/`frp_win/` 下你已下载的 frp 二进制（升级不触碰它们）。
+
 > 不想用一键安装？下方 **A.1–A.3 手动安装（备选）** 是不使用一键安装时的备选路径。
 
 ### A.1 下载（手动安装 — 备选）
@@ -340,13 +342,17 @@ frpc / frps 子进程的日志另存于 `<INSTALL_DIR>/.frp_easy/logs/frpc.log` 
 
 ```bash
 sudo systemctl stop frp-easy
-# 解压新版本到当前 <INSTALL_DIR>（覆盖二进制；保留 frp_easy.toml 与 .frp_easy/）
+# 解压新版本到当前 <INSTALL_DIR>（覆盖主二进制 frp-easy；
+# 保留 frp_easy.toml、.frp_easy/，以及 frp_linux/ 下你运行时下载的 frpc/frps）
 tar xzf frp-easy-<新VERSION>-linux-amd64.tar.gz \
     --strip-components=1 -C <INSTALL_DIR> \
-    frp-easy-<新VERSION>-linux-amd64/frp-easy \
-    frp-easy-<新VERSION>-linux-amd64/frp_linux
+    frp-easy-<新VERSION>-linux-amd64/frp-easy
 sudo systemctl start frp-easy
 ```
+
+> 发布包仅含主二进制 `frp-easy`，**不再附带** `frp_linux/` 下的 frpc/frps；
+> 上面只解压 `frp-easy` 这一个成员，故升级不会覆盖或删除你已下载的 frp 二进制
+> （与 [A.0](#a0-一键安装推荐) "升级保留已下载二进制"一致）。
 
 > 升级时**无需重跑 install-service.sh**（除非要改 unit 字段如 `--user`）。
 >
@@ -413,12 +419,16 @@ Get-Service frp-easy
 
 ```powershell
 sc.exe stop frp-easy
-# 解压新版本覆盖到 <INSTALL_DIR>（保留 frp_easy.toml 与 .frp_easy）
+# 解压新版本（保留 frp_easy.toml、.frp_easy，以及 frp_win\ 下运行时下载的 frpc/frps）
 Expand-Archive -Force -Path .\frp-easy-<新VERSION>-windows-amd64.zip -DestinationPath .
+# 仅覆盖主二进制 frp-easy.exe，不动 frp_win\
 Copy-Item -Force .\frp-easy-<新VERSION>-windows-amd64\frp-easy.exe <INSTALL_DIR>\frp-easy.exe
-Copy-Item -Recurse -Force .\frp-easy-<新VERSION>-windows-amd64\frp_win <INSTALL_DIR>\
 sc.exe start frp-easy
 ```
+
+> 发布包仅含主二进制 `frp-easy.exe`，**不再附带** `frp_win\` 下的 frpc/frps；
+> 上面只拷贝 `frp-easy.exe` 一个文件，故升级不会覆盖或删除你已下载的 frp 二进制
+> （与 [A.0](#a0-一键安装推荐) "升级保留已下载二进制"一致）。
 
 #### C.3.5 卸载
 
@@ -538,6 +548,9 @@ Get-Content <INSTALL_DIR>\.frp_easy\logs\ui.log -Tail 200 -Wait
 
 ### F.5 frp 子二进制缺失
 
+frp 二进制（frpc / frps）不随 frp_easy 内置，**首次使用时需下载一次**（之后持久保留）。
+全新安装后初次打开 UI 时看到下方"症状"属正常现象，按"修复"里的常规路径下载一次即可。
+
 **症状**：UI 顶部红色横幅 "frpc / frps 二进制未找到"；点"启动 frpc / frps"按钮报错。
 
 **排查**：
@@ -554,7 +567,7 @@ Get-Item <INSTALL_DIR>\frp_win\frpc.exe, <INSTALL_DIR>\frp_win\frps.exe
 
 **修复**：
 
-- **在线**：UI 顶部横幅点"一键下载"，frp_easy 会从 GitHub Releases 自动下载并解压到对应目录（T-002 功能）；
+- **常规方式（在线）**：打开 UI，顶部横幅点"下载"，frp_easy 会从 `fatedier/frp` 的 GitHub Releases 自动下载**最新版** frpc / frps 并解压到对应目录。这是首次使用的标准一步。
 - **离线**：手动到 <https://github.com/fatedier/frp/releases> 下载对应平台压缩包，解压后把 `frpc` / `frps`（或 `.exe`）放回 `<INSTALL_DIR>/frp_linux/` 或 `<INSTALL_DIR>/frp_win/`，赋可执行位（Linux: `chmod 0755`）。
 
 UI 顶部横幅会自动消失，按钮重新可点。

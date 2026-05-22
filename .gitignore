@@ -55,6 +55,19 @@ frp_easy.toml
 /frp-easy.exe
 /frp-easy
 
+# frp 二进制运行时下载落地产物（T-014：不再内置，运行时从 fatedier/frp 下载）
+# frp_linux/ 与 frp_win/ 目录保留作下载落地目标，仅 LICENSE 被跟踪。
+# 用根锚定（前导 /）精确忽略这 4 个文件名，不写通配，以免误伤 LICENSE。
+/frp_linux/frpc
+/frp_linux/frps
+/frp_win/frpc.exe
+/frp_win/frps.exe
+# downloader 的临时文件（os.CreateTemp 前缀，见 downloader.go）
+/frp_linux/.dl-archive-*.tmp
+/frp_linux/.dl-bin-*.tmp
+/frp_win/.dl-archive-*.tmp
+/frp_win/.dl-bin-*.tmp
+
 # Test coverage
 coverage/
 coverage

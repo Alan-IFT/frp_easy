@@ -178,9 +178,11 @@ try {
         # 先停服（服务不存在不影响）。
         & sc.exe stop frp-easy 2>&1 | Out-Null
         Start-Sleep -Milliseconds 500
-        # 白名单逐项覆盖：绝不触碰 frp_easy.toml 与 .frp_easy\。
+        # 白名单逐项覆盖：绝不触碰 frp_easy.toml、.frp_easy\，以及用户运行时下载的 frp_win\。
         Copy-Item -Force (Join-Path $extracted.FullName "frp-easy.exe") (Join-Path $InstallDir "frp-easy.exe")
-        foreach ($sub in @("frp_win", "scripts")) {
+        # T-014：升级不再覆盖/删除 frp_win\ —— 发布包已不含 frp 二进制，
+        # frp_win\ 下的 frpc.exe/frps.exe 由用户经 UI 横幅按需下载，升级须原样保留。
+        foreach ($sub in @("scripts")) {
             $src = Join-Path $extracted.FullName $sub
             if (Test-Path $src) {
                 $dst = Join-Path $InstallDir $sub
@@ -246,6 +248,12 @@ frp_easy 一键安装完成！
   sc query frp-easy        # 查看服务状态
   sc stop  frp-easy        # 手动停止
   sc start frp-easy        # 手动启动
+
+更新：
+  重新运行同一条一键安装命令即可升级到最新版：
+    irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
+  升级会保留你的配置（frp_easy.toml）与数据（.frp_easy\），
+  以及已下载的 frp 二进制（frp_win\）。
 
 卸载：
   以管理员身份运行 PowerShell 执行：

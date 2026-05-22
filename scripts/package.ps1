@@ -8,7 +8,9 @@
 #       -Version     显式覆盖版本号
 #       -SkipBuild   跳过 build.ps1 调用
 # 输出：stdout 中文进度；产物落在 bin\release\frp-easy-<version>-<os>-amd64.<ext>
-# 退出码：0 成功 / 1 前置缺失 / 2 build.ps1 调用失败
+# 退出码：0 成功 / 1 前置缺失（bin\frp-easy.exe）/ 2 build.ps1 调用失败
+# 说明（T-014）：frp 二进制不再内置、不随发布包分发，运行时由 frp_easy 从 fatedier/frp
+#                自动下载；本脚本不再校验/打包 frp_win\、frp_linux\ 下的 frpc/frps。
 
 [CmdletBinding()]
 param(
@@ -77,25 +79,8 @@ if ($Windows) {
     }
 }
 
-# 校验 frp 子二进制完整性
-if ($Windows) {
-    foreach ($f in @("frp_win\frpc.exe", "frp_win\frps.exe")) {
-        $p = Join-Path $ROOT $f
-        if (-not (Test-Path -PathType Leaf $p) -or (Get-Item $p).Length -eq 0) {
-            Write-Error "缺少 $f；请确认 frp_win\ 子目录完整。"
-            exit 1
-        }
-    }
-}
-if ($Linux) {
-    foreach ($f in @("frp_linux\frpc", "frp_linux\frps")) {
-        $p = Join-Path $ROOT $f
-        if (-not (Test-Path -PathType Leaf $p) -or (Get-Item $p).Length -eq 0) {
-            Write-Error "缺少 $f；请确认 frp_linux\ 子目录完整。"
-            exit 1
-        }
-    }
-}
+# T-014：frp 子二进制不再内置、不打进发布包，运行时由 frp_easy 自动下载，
+# 故此处不再校验 frp_win\frpc.exe、frp_linux\frpc 等是否存在。
 
 $ReleaseDir = Join-Path $ROOT "bin\release"
 $null = New-Item -ItemType Directory -Path $ReleaseDir -Force
@@ -199,15 +184,14 @@ function Build-Package {
     if (Test-Path $staging) { Remove-Item -Recurse -Force $staging }
     $null = New-Item -ItemType Directory -Path (Join-Path $top "scripts") -Force
 
+    # T-014：发布包不再含 frp_win\、frp_linux\ —— frp 二进制运行时由 frp_easy 自动下载。
     if ($Os -eq "windows") {
         Copy-Item (Join-Path $ROOT "bin\frp-easy.exe") (Join-Path $top "frp-easy.exe")
-        Copy-Item (Join-Path $ROOT "frp_win") (Join-Path $top "frp_win") -Recurse
         Copy-Item (Join-Path $ROOT "scripts\install-service.ps1") (Join-Path $top "scripts\install-service.ps1")
         Copy-Item (Join-Path $ROOT "scripts\uninstall-service.ps1") (Join-Path $top "scripts\uninstall-service.ps1")
         Write-ReadmeWindows -Path (Join-Path $top "README.txt") -Ver $Version
     } else {
         Copy-Item (Join-Path $ROOT "bin\frp-easy-linux") (Join-Path $top "frp-easy")
-        Copy-Item (Join-Path $ROOT "frp_linux") (Join-Path $top "frp_linux") -Recurse
         Copy-Item (Join-Path $ROOT "scripts\install-service.sh") (Join-Path $top "scripts\install-service.sh")
         Copy-Item (Join-Path $ROOT "scripts\uninstall-service.sh") (Join-Path $top "scripts\uninstall-service.sh")
         Write-ReadmeLinux -Path (Join-Path $top "README.txt") -Ver $Version

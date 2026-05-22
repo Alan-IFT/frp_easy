@@ -23,10 +23,6 @@ import (
 	"time"
 )
 
-// FRPVersion is the target FRP binary version.
-// Verified by running frp_win/frpc.exe --version on the vendored binary.
-const FRPVersion = "0.68.1"
-
 // Download state constants.
 const (
 	StatusIdle        = "idle"
@@ -59,8 +55,8 @@ type Manager struct {
 	logger *slog.Logger
 
 	// Unexported override fields for package-internal tests (C-4).
-	baseURL string // empty = use GitHub CDN
-	goos    string // empty = runtime.GOOS
+	apiBaseURL string // empty = use https://api.github.com（T-014 测试注入 seam）
+	goos       string // empty = runtime.GOOS
 }
 
 // New creates a Manager.
@@ -123,14 +119,21 @@ func (m *Manager) Status(kind string) (DownloadState, bool) {
 func (m *Manager) doDownload(kind, goos string) {
 	startTime := time.Now()
 
-	targetDir, targetPath, downloadURL, archiveExt, entryName, err := m.resolveParams(kind, goos)
+	targetDir, targetPath, archiveExt, entryName, err := m.resolveParams(kind, goos)
 	if err != nil {
 		m.setFailed(kind, err.Error())
 		return
 	}
 
+	// T-014：解析 fatedier/frp 最新 release 资产 URL（不再用写死的 FRPVersion 构造）。
+	downloadURL, version, err := m.resolveLatestAsset(goos)
+	if err != nil {
+		m.setFailed(kind, err.Error()) // err 已是面向用户的中文消息
+		return
+	}
+
 	m.logger.Info("download started",
-		"kind", kind, "goos", goos, "url", downloadURL)
+		"kind", kind, "goos", goos, "version", version, "url", downloadURL)
 
 	// C-2: Ensure target directory exists before creating temp files.
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
@@ -259,18 +262,12 @@ func (m *Manager) doDownload(kind, goos string) {
 	m.mu.Unlock()
 }
 
-// resolveParams computes all path/URL parameters for a given kind + GOOS.
-func (m *Manager) resolveParams(kind, goos string) (targetDir, targetPath, downloadURL, archiveExt, entryName string, err error) {
-	base := m.baseURL
-	if base == "" {
-		base = "https://github.com/fatedier/frp/releases/download"
-	}
-
+// resolveParams 计算路径与格式参数（不含 downloadURL —— 后者由 resolveLatestAsset 提供）。
+func (m *Manager) resolveParams(kind, goos string) (targetDir, targetPath, archiveExt, entryName string, err error) {
 	switch goos {
 	case "linux":
 		targetDir = filepath.Join(m.root, "frp_linux")
 		archiveExt = ".tar.gz"
-		downloadURL = fmt.Sprintf("%s/v%s/frp_%s_linux_amd64.tar.gz", base, FRPVersion, FRPVersion)
 		switch kind {
 		case "frpc":
 			targetPath = filepath.Join(targetDir, "frpc")
@@ -283,7 +280,6 @@ func (m *Manager) resolveParams(kind, goos string) (targetDir, targetPath, downl
 	case "windows":
 		targetDir = filepath.Join(m.root, "frp_win")
 		archiveExt = ".zip"
-		downloadURL = fmt.Sprintf("%s/v%s/frp_%s_windows_amd64.zip", base, FRPVersion, FRPVersion)
 		switch kind {
 		case "frpc":
 			targetPath = filepath.Join(targetDir, "frpc.exe")
@@ -297,6 +293,83 @@ func (m *Manager) resolveParams(kind, goos string) (targetDir, targetPath, downl
 		err = ErrUnsupportedOS
 	}
 	return
+}
+
+// ghRelease 是 GitHub Release API 响应的最小子集。
+type ghRelease struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name        string `json:"name"`
+		DownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
+// resolveLatestAsset 查询 fatedier/frp 最新 release，返回匹配 goos 的资产下载 URL 与版本号。
+// 失败时返回的 error 已是面向用户的中文消息（可直接进 setFailed）。
+//
+// 实现要点：
+//   - 设 User-Agent 头（GitHub API 对无 UA 的请求返回 403，会被误判为限流）。
+//   - 先判 HTTP 状态码、再解析 JSON（限流 403 响应体也是合法 JSON）。
+//   - 按平台后缀匹配 assets[]（_linux_amd64.tar.gz / _windows_amd64.zip），
+//     比硬拼文件名鲁棒，且能精确实现"资产未匹配 → failed"分支。
+func (m *Manager) resolveLatestAsset(goos string) (downloadURL, version string, err error) {
+	apiBase := m.apiBaseURL
+	if apiBase == "" {
+		apiBase = "https://api.github.com"
+	}
+	url := apiBase + "/repos/fatedier/frp/releases/latest"
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("构建查询请求失败: %v", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "frp_easy")
+
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("无法访问 GitHub（请检查网络或代理）: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 先判状态码、后解析 JSON（限流 403 响应体也是合法 JSON）。
+	switch resp.StatusCode {
+	case http.StatusOK:
+		// 继续
+	case http.StatusForbidden:
+		return "", "", fmt.Errorf("GitHub API 触发限流（未认证请求 60 次/小时/IP），请稍后重试，或按文档手动下载 frp 二进制")
+	default:
+		return "", "", fmt.Errorf("查询 frp 最新版本失败：HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB 上限，防御超大响应
+	if err != nil {
+		return "", "", fmt.Errorf("读取 GitHub 响应失败: %v", err)
+	}
+	var rel ghRelease
+	if err := json.Unmarshal(body, &rel); err != nil {
+		return "", "", fmt.Errorf("解析 GitHub 响应失败: %v", err)
+	}
+	if rel.TagName == "" {
+		return "", "", fmt.Errorf("GitHub 响应缺少版本号字段")
+	}
+
+	// 按平台后缀匹配资产。
+	var suffix string
+	switch goos {
+	case "linux":
+		suffix = "_linux_amd64.tar.gz"
+	case "windows":
+		suffix = "_windows_amd64.zip"
+	default:
+		return "", "", ErrUnsupportedOS
+	}
+	for _, a := range rel.Assets {
+		if strings.HasSuffix(a.Name, suffix) && a.DownloadURL != "" {
+			return a.DownloadURL, rel.TagName, nil
+		}
+	}
+	return "", "", fmt.Errorf("未找到匹配当前平台的 frp 资产（%s），请按文档手动下载", suffix)
 }
 
 // setProgress updates progress for kind (called from progressWriter).
