@@ -23,7 +23,9 @@ if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
 if (Test-Path (Join-Path $root "web\package.json")) {
     Write-Host "构建前端（npm run build）..." -ForegroundColor Cyan
     Push-Location (Join-Path $root "web")
-    npm install --frozen-lockfile 2>&1 | Out-Null
+    # npm ci：CI 专用、严格按 package-lock.json 安装、绝不改写 lockfile。
+    # 详见 build.sh 同处注释（避免发布产物被 git describe --dirty 标成 -dirty）。
+    npm ci 2>&1 | Out-Null
     npm run build
     Pop-Location
     Write-Host "前端构建完成" -ForegroundColor Green

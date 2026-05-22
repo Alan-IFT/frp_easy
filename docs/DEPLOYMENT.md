@@ -236,7 +236,7 @@ bash scripts/build.sh --all    # 同时交叉编译 Windows amd64
 
 构建会自动执行：
 
-1. `npm install --frozen-lockfile`
+1. `npm ci`（严格按 `package-lock.json` 安装，不改写 lockfile）
 2. `npm run build`（产出 `internal/assets/dist/`，被 `//go:embed` 嵌入 Go 二进制）
 3. `go build -ldflags "-X main.Version=..." ./cmd/frp-easy`
 

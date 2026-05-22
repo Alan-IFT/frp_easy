@@ -22,7 +22,11 @@ LDFLAGS="-X main.Version=${VERSION} -s -w"
 # 前端构建（若 web/ 存在且有 package.json）
 if [[ -f "$ROOT/web/package.json" ]]; then
     echo "构建前端（npm run build）..."
-    (cd "$ROOT/web" && npm install --frozen-lockfile >/dev/null && npm run build)
+    # npm ci：CI 专用、严格按 package-lock.json 安装、绝不改写 lockfile。
+    # 不用 `npm install --frozen-lockfile`——`--frozen-lockfile` 是 Yarn 的 flag，
+    # npm 不识别会静默忽略、退化成普通 npm install，在 CI 冷环境从零安装时
+    # 可能改写 package-lock.json，使 `git describe --dirty` 把发布产物标成 -dirty。
+    (cd "$ROOT/web" && npm ci >/dev/null && npm run build)
     echo "前端构建完成"
 fi
 
