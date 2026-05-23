@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -51,7 +52,13 @@ type Manager struct {
 	mu     sync.Mutex
 	states map[string]*DownloadState
 	root   string
-	client *http.Client
+
+	// T-025：拆分 HTTP client。apiClient 走短超时（60s 总）适合 GitHub Release API
+	// JSON 查询；downloadClient 不设 Client.Timeout，由 Transport 阶段性上限
+	// （dial / TLS / ResponseHeader）兜底，适合 archive 长链路下载。
+	apiClient      *http.Client
+	downloadClient *http.Client
+
 	logger *slog.Logger
 
 	// Unexported override fields for package-internal tests (C-4).
@@ -67,9 +74,40 @@ func New(root string, logger *slog.Logger) *Manager {
 			"frpc": {Status: StatusIdle},
 			"frps": {Status: StatusIdle},
 		},
-		root:   root,
-		client: &http.Client{Timeout: 60 * time.Second},
-		logger: logger,
+		root:           root,
+		apiClient:      &http.Client{Timeout: 60 * time.Second},
+		downloadClient: newDownloadHTTPClient(),
+		logger:         logger,
+	}
+}
+
+// newDownloadHTTPClient 返回 archive 下载专用 *http.Client。
+//
+// T-025: Client.Timeout 故意设为 0（无总超时）—— Transport 层的 dial / TLS /
+// ResponseHeaderTimeout 已防御死连接。若未来想改成有总超时，请先读 T-025
+// 02_SOLUTION_DESIGN.md §6 R-1（位于 docs/features/download-bin-timeout-fix/
+// 或归档后 docs/features/_archived/download-bin-timeout-fix/）。
+//
+// 字段值来源：dial / KeepAlive / IdleConnTimeout / ForceAttemptHTTP2 / MaxIdleConns /
+// ExpectContinueTimeout 沿用 stdlib DefaultTransport；显式新增
+// TLSHandshakeTimeout=30s（国内 GitHub CDN TLS 偶慢于 stdlib 默认 10s）
+// 与 ResponseHeaderTimeout=60s（RA D-2）。
+func newDownloadHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 0, // 显式 0，文档化"无总超时"决策
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          10,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   30 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second,
+		},
 	}
 }
 
@@ -159,7 +197,7 @@ func (m *Manager) doDownload(kind, goos string) {
 		return
 	}
 
-	resp, err := m.client.Do(req)
+	resp, err := m.downloadClient.Do(req)
 	if err != nil {
 		m.setFailed(kind, fmt.Sprintf("下载超时: %v", err))
 		return
@@ -314,7 +352,7 @@ func (m *Manager) resolveLatestAsset(goos string) (downloadURL, version string, 
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "frp_easy")
 
-	resp, err := m.client.Do(req)
+	resp, err := m.apiClient.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("无法访问 GitHub（请检查网络或代理）: %v", err)
 	}

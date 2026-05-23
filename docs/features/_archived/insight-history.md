@@ -37,3 +37,16 @@ T-016 已用此真相替换主索引第 18 行。
 - **2026-05-19** · Windows Service 通过 sc.exe 创建时，binPath 指向 wrapper.cmd 包装而非 .exe 本身可锁定 cwd（`cd /d "$InstallDir" && "$BinaryPath"`），但 `Set-Content -Encoding ASCII` 写 .cmd 会让中文路径乱码，需 `-Encoding Default`（host codepage） · evidence: T-008 deploy-kit
 - **2026-05-19** · Go stdlib `flag.NewFlagSet(name, flag.ContinueOnError)` + `fs.SetOutput(io.Discard)` 是中文化 / 自定义错误输出的标准范式；显式 `errors.Is(err, flag.ErrHelp)` 分流 `-help` 单 dash 形式仍可触发（非死代码），与已注册 `-h`/`--help` BoolVar 不冲突 · evidence: T-008 deploy-kit
 - **2026-05-19** · verify_all A.1 secrets scan 正则 `(api_key|secret|password|token)[\s]*[:=][\s]*["'][^"']{8,}["']` 会误中文档/脚本内的样例字面量；写 `frp_easy.toml.example` 之类时只列字段名 = 默认值，避免任何 8+ 字符引号串 · evidence: T-008 deploy-kit
+
+## Rotated 2026-05-23
+
+- **2026-05-19** · `sudo` 调用 bash 脚本时 `id -un` 返回 root；要拿到真实调用者用 `${SUDO_USER:-$(id -un)}` 优先 `$SUDO_USER` 才符合 "默认 user = 当前调用者" 的意图 · evidence: T-008 deploy-kit
+- **2026-05-19** · Windows PowerShell 的 `bash` 命令默认解析到 `C:\Users\<user>\AppData\Local\Microsoft\WindowsApps\bash.exe`（WSL shim），即使 Git Bash 已安装；用户未装 Linux 发行版时返回乱码错误。Playwright `webServer.command: 'bash ...'` 在 PowerShell 调用链下会失败。修复模式：`process.platform === 'win32' ? 'pwsh ... -File .ps1' : 'bash .sh'` 双脚本配对 · evidence: T-009 polish-pass
+- **2026-05-19** · PowerShell 写 TOML 配置文件必须用 `[System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))` 强制无 BOM；`Out-File -Encoding utf8` 在 Windows PowerShell 5.x 会写 BOM 让 BurntSushi/toml 解析失败（PS7 默认无 BOM 但项目支持 PS5 时仍要显式） · evidence: T-009 polish-pass
+- **2026-05-19** · TOML 字符串中 Windows 反斜杠路径会被当转义；写脚本生成的临时 TOML 配置时 `-replace '\\' '/'` 把所有反斜杠换正斜杠是最简单的方式，Go 在 Windows 上同样接受正斜杠路径 · evidence: T-009 polish-pass
+- **2026-05-19** · `npm exec <pkg> --someflag` 中 `--someflag` 会被 npm 自己当成 flag 吞掉（output `npm warn Unknown cli config "--someflag"`），子进程实际收不到。必须用 `npm exec -- <pkg> --someflag`（`--` 分隔符强制透传）。T-010 verify_all B.1 的 `npm exec tsc --noEmit` 被静默 emit 反复污染 web/src/，根因即此 · evidence: T-010 deploy-polish-and-ci
+- **2026-05-19** · `web/.gitignore` 含 `web/src/**/*.js` 时，`git status` / `git ls-files` 看不到 tsc 残留产物 —— 让"已清残留"自检永远通过、Reviewer 才能用 Glob 抓到。验证残留清理务必用 `find ... | wc -l` 而非 `git status` · evidence: T-010 deploy-polish-and-ci
+- **2026-05-19** · `tsconfig.json` 设 `"noEmit": true` 是真正一劳永逸防 tsc 误 emit 的方式；调用方加 `--noEmit` flag 是 belt，tsconfig 是 suspenders。新项目应当默认两者都有 · evidence: T-010 deploy-polish-and-ci
+- **2026-05-19** · Go 跨平台 `runtime.GOOS switch` 的单测如果直接读 `runtime.GOOS`，不论分支多漂亮都只能测当前主机的那一支 —— 必须用 `var goosFunc = func() string { return runtime.GOOS }` 这种可注入 seam 配 stubGOOS helper 才能 table-driven 跑遍三平台。其他平台不变量同理（`os.Getenv` → `getenvFunc`、`os.Stdin.Fd()` → `stdinFd`） · evidence: T-010 deploy-polish-and-ci
+- **2026-05-19** · GitHub Actions `actions/setup-go@v5` 的 `go-version` 应当与 `go.mod` 顶部 `go X.Y` 对齐；不对齐时 setup-go 拉指定版本后又被 `GOTOOLCHAIN=auto`（默认 Go 1.21+ 行为）二次拉真实版本，CI 时间翻倍 · evidence: T-010 deploy-polish-and-ci
+- verify_all E.6 要求已完成任务的 06_TEST_REPORT.md 含**精确英文标题** `## Adversarial tests`；即使项目输出语言规则为中文，该段标题也必须用英文（可在英文标题后括注中文）。QA 若写 `## 对抗性测试` 会导致 E.6 FAIL、pass_count 掉到 18。证据：本任务 stage 7 首次 verify_all。

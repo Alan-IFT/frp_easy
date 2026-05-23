@@ -1,11 +1,11 @@
 {
-  "version": 10,
+  "version": 11,
   "created": "2026-05-16",
   "updated": "2026-05-23",
-  "test_count": 337,
-  "passing_count": 337,
-  "go_tests": 241,
+  "test_count": 342,
+  "passing_count": 342,
+  "go_tests": 246,
   "frontend_tests": 96,
   "warnings_baseline": 0,
-  "notes": "T-022 service-mode-stderr-bridge delivered. exposureNotice now dual-channel: stderr (console) + logger.Warn (ui.log) so Windows Service / systemd hosts (stderr dropped by SCM/journald) can still see the exposure notice in ui.log. Go: 239->241 (+2: TestExposureNoticeText + TestExposureNoticeReachesLogger). Frontend: 96 unchanged. verify_all PASS 20/20 stable. T-021 history: .ps1 BOM applied (11/11); E.7 added; verify_all 19->20; QA Stage 6 ADV-1/2/3/4/5 all PASS. T-019 history: windows-service-scm-1053-fix delivered; binary 18,723,328 -> 18,758,656 bytes (+35,328); +2 windows-only tests build-tag isolated. T-018 history: Go 174->237 (+63: portrange/install/upload/batch/port-probe/publicip/storage). Frontend 57->96 (+39)."
+  "notes": "T-025 download-bin-timeout-fix delivered. internal/downloader.Manager 拆分 *http.Client: apiClient(Timeout=60s) + downloadClient(Client.Timeout=0, Transport dial/TLS/ResponseHeader 阶段性上限). 修复生产 bug: http.Client.Timeout=60s 覆盖整请求含 body 读取, frp 14MB archive 在国内 GitHub CDN 几乎必崩 (用户实测精确 60s 失败). Go: 241->246 (+5: T1 慢源不超时 / T2 死连接 / T3 API hang / T4 双 kind 对称 / TestNewDownloadHTTPClient_NoTotalTimeout 静态守门反向证伪). Frontend: 96 unchanged. verify_all PASS 20/20 stable. T-022 history: exposureNotice dual-channel (stderr + logger.Warn). Go 239->241 (+2). T-021 history: .ps1 BOM applied (11/11); E.7 added; verify_all 19->20. T-019 history: windows-service-scm-1053-fix; binary 18,723,328 -> 18,758,656 bytes (+35,328); +2 windows-only tests build-tag isolated. T-018 history: Go 174->237 (+63: portrange/install/upload/batch/port-probe/publicip/storage). Frontend 57->96 (+39)."
 }

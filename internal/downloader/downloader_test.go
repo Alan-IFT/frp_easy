@@ -226,7 +226,8 @@ func TestDownload_ErrAlreadyInProgress(t *testing.T) {
 	m := New(root, discardLogger())
 	m.apiBaseURL = srv.URL
 	m.goos = "linux"
-	m.client = &http.Client{Timeout: 5 * time.Second}
+	// T-025：仅 API 路径 hang（server 唯一 handler），用 apiClient 5s 超时避免主体挂死。
+	m.apiClient = &http.Client{Timeout: 5 * time.Second}
 
 	// First Start: state becomes StatusDownloading synchronously.
 	if err := m.Start("frpc"); err != nil {
@@ -358,8 +359,11 @@ func TestDownload_NetworkTimeout_StatusFailed(t *testing.T) {
 	m := New(root, discardLogger())
 	m.apiBaseURL = srv.URL
 	m.goos = "linux"
-	// Short timeout so the test completes quickly.
-	m.client = &http.Client{Timeout: 50 * time.Millisecond}
+	// T-025：archive 路径 hang 不发 header，靠 ResponseHeaderTimeout 兜底；
+	// 注入到 downloadClient.Transport 而非 Client.Timeout（拆分后 Client.Timeout=0）。
+	m.downloadClient = &http.Client{
+		Transport: &http.Transport{ResponseHeaderTimeout: 50 * time.Millisecond},
+	}
 
 	if err := m.Start("frpc"); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -525,7 +529,8 @@ func TestResolveLatest_NetworkFailure(t *testing.T) {
 	m := New(t.TempDir(), discardLogger())
 	m.apiBaseURL = apiURL
 	m.goos = "linux"
-	m.client = &http.Client{Timeout: 2 * time.Second}
+	// T-025：API 路径走 apiClient；server 已关闭 → dial 直接返回 ECONNREFUSED。
+	m.apiClient = &http.Client{Timeout: 2 * time.Second}
 
 	if err := m.Start("frpc"); err != nil {
 		t.Fatalf("Start: %v", err)
