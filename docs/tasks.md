@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-022 | service-mode-stderr-bridge | DELIVERED | 2026-05-23 | trivial 直接修复（main.go 单文件 ~10 行 + 2 个单测，无阶段文档）：exposureNotice 改走 logger，让服务模式 ui.log 也能拿到提示 |
 | T-021 | encoding-ps51-bom | DELIVERED | 2026-05-23 | `docs/features/_archived/encoding-ps51-bom/` |
 | T-019 | windows-service-scm-1053-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/windows-service-scm-1053-fix/` |
 | T-020 | claude-settings-context7-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/claude-settings-context7-fix/` |

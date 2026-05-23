@@ -158,11 +158,9 @@ func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 	if err != nil {
 		return fmt.Errorf("加载 %s 失败：%w", cfgPath, err)
 	}
-	// 安全提示：UI 绑定对外可达地址（0.0.0.0/::）时，引导用户尽快完成 setup。
-	// 正向枚举两个 unspecified 地址，不误伤用户自填的具体局域网 IP（高级用法）。
-	if cfg.UIBindAddr == "0.0.0.0" || cfg.UIBindAddr == "::" {
-		fmt.Fprint(os.Stderr, exposureNotice(cfg.UIPort, cfgPath))
-	}
+	// 【T-022】安全提示移到 logger 初始化后；详见步骤 3。原放在此处仅写 stderr，
+	// Windows Service / systemd 服务模式下 stderr 被 SCM/journald 丢弃 → ui.log
+	// 拿不到该提示，运维盲区。
 
 	// 解析数据目录绝对路径
 	dataDir, err := filepath.Abs(cfg.DataDir)
@@ -202,6 +200,16 @@ func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 	logger := newLogger(logWriter)
 	if errors.Is(openErr, storage.ErrCorruptReset) {
 		logger.Warn("data.db corrupt detected; renamed and reset", "dataDir", dataDir)
+	}
+
+	// 【T-022】安全提示：UI 绑定对外可达地址（0.0.0.0/::）时，引导用户尽快完成 setup。
+	// 双轨输出：(a) stderr 给控制台用户人类可读多行文案；(b) logger.Warn 让
+	// Windows Service / systemd 服务模式下（stderr 被 SCM/journald 丢弃）也能从
+	// ui.log 拿到提示。正向枚举两个 unspecified 地址，不误伤用户自填的具体 LAN IP。
+	if cfg.UIBindAddr == "0.0.0.0" || cfg.UIBindAddr == "::" {
+		notice := exposureNotice(cfg.UIPort, cfgPath)
+		fmt.Fprint(os.Stderr, notice)
+		logger.Warn("ui exposure notice", "addr", cfg.UIBindAddr, "port", cfg.UIPort, "config_path", cfgPath, "message", notice)
 	}
 
 	// 4. binloc / procmgr / ratelimiter / frpcadmin（先 nil，需要时构造）
