@@ -20,10 +20,19 @@ export async function apiGetPublicIP(): Promise<PublicIPResponse> {
 /**
  * T-018 §A：上传 frpc/frps 二进制（multipart/form-data）。
  *
- * **B-2 修订（严禁显式 Content-Type）**：
- *   axios 1.x 在用户不显式设置 Content-Type 时会自动构造
- *   `multipart/form-data; boundary=<auto>` 头；一旦手工设 'multipart/form-data'
- *   就会丢掉 boundary，服务端 multipart 解析直接 400。所以这里**不传** headers。
+ * **Content-Type 处理（修订自 B-2，T-023 修复）**：
+ *   `apiClient` 在 [client.ts](./client.ts) 设了实例级默认 `Content-Type: application/json`，
+ *   FormData 请求会继承该 default → axios 1.x 将其视作"用户显式设置"，于是
+ *   **不再**自动构造 `multipart/form-data; boundary=<auto>`，服务端报
+ *   `请求不是合法的 multipart/form-data` 400。
+ *
+ *   修复：在本请求显式把 `Content-Type` 设为 `undefined`，抵消实例 default；
+ *   axios 检测到 FormData + 无 Content-Type 后会自动补上正确的
+ *   `multipart/form-data; boundary=<auto>` 头。
+ *
+ *   注意：不要写 `headers: { 'Content-Type': 'multipart/form-data' }` —— 缺
+ *   boundary 等于把 multipart 标记空开，部分服务端 / axios 旧版会拒。`undefined`
+ *   是文档化的"让 axios 自己来"信号。
  *
  * **B-6 修订（字段顺序无关）**：
  *   后端已改用 `r.ParseMultipartForm` + FormValue/FormFile，前端 append 顺序
@@ -43,6 +52,9 @@ export async function apiUploadBin(
     '/api/v1/system/upload-bin',
     fd,
     {
+      // 关键：抵消 apiClient 实例 default 的 application/json，让 axios 自动从
+      // FormData 推导 multipart/form-data; boundary=<auto>。详见上方注释。
+      headers: { 'Content-Type': undefined },
       onUploadProgress: (e) => {
         if (onProgress && e.total) {
           onProgress(Math.round((e.loaded / e.total) * 100))

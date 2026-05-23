@@ -20,7 +20,7 @@ describe('T-018 §A apiUploadBin', () => {
     vi.clearAllMocks()
   })
 
-  it('用 multipart/form-data 提交，字段 kind + file 齐备，且 axios 调用不显式设 Content-Type（B-2 修订）', async () => {
+  it('用 multipart/form-data 提交，字段 kind + file 齐备，且 Content-Type 显式 undefined 抵消 apiClient 实例 default（T-023 修复）', async () => {
     const mockRes: UploadBinResponse = {
       ok: true, kind: 'frpc',
       path: 'frp_linux/frpc',
@@ -41,10 +41,20 @@ describe('T-018 §A apiUploadBin', () => {
     const formData = fd as FormData
     expect(formData.get('kind')).toBe('frpc')
     expect(formData.get('file')).toBeInstanceOf(File)
-    // **B-2 修订关键断言**：opts 不能含显式 Content-Type
+    // **T-023 修复关键断言**：opts.headers 必须显式 Content-Type=undefined，否则
+    // apiClient 实例 default 的 application/json 会污染 FormData 请求，axios 不再
+    // 自动补 multipart boundary，服务端 multipart 解析直接 400。
+    // 原 B-2 假设"不传 headers 就等于没设"是错的：实例 default 会注入。
     expect(opts).toBeDefined()
-    const optsObj = opts as { headers?: Record<string, string>; onUploadProgress?: unknown }
-    expect(optsObj.headers).toBeUndefined()
+    const optsObj = opts as {
+      headers?: Record<string, string | undefined>
+      onUploadProgress?: unknown
+    }
+    expect(optsObj.headers).toBeDefined()
+    // 关键：必须显式列出 Content-Type 键且值为 undefined，axios 1.x 才会抵消
+    // 实例 default。`'Content-Type' in headers` 必须为 true。
+    expect(optsObj.headers).toHaveProperty('Content-Type')
+    expect(optsObj.headers!['Content-Type']).toBeUndefined()
     expect(optsObj.onUploadProgress).toBeDefined()
     expect(result).toEqual(mockRes)
   })

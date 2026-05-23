@@ -12,6 +12,8 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-024 | install-ps1-iex-cmdletbinding-fix | DELIVERED | 2026-05-23 | trivial 直接修复（install.ps1 删 `[CmdletBinding()]` 一行 + 注释，无阶段文档）：iex inline 不允许该 attribute，会触发 "Unexpected attribute 'CmdletBinding'"；`param([switch]$Help)` 保留兼容磁盘形态 |
+| T-023 | upload-bin-content-type-fix | DELIVERED | 2026-05-23 | trivial 直接修复（system.ts + spec.ts，无阶段文档）：apiClient 实例 default `Content-Type: application/json` 污染 FormData 请求让 axios 不再自动补 multipart boundary，显式 `headers: { 'Content-Type': undefined }` 抵消 |
 | T-022 | service-mode-stderr-bridge | DELIVERED | 2026-05-23 | trivial 直接修复（main.go 单文件 ~10 行 + 2 个单测，无阶段文档）：exposureNotice 改走 logger，让服务模式 ui.log 也能拿到提示 |
 | T-021 | encoding-ps51-bom | DELIVERED | 2026-05-23 | `docs/features/_archived/encoding-ps51-bom/` |
 | T-019 | windows-service-scm-1053-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/windows-service-scm-1053-fix/` |
