@@ -9,6 +9,7 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,6 +31,8 @@ const (
 	StatusDownloading = "downloading"
 	StatusSuccess     = "success"
 	StatusFailed      = "failed"
+	// T-027：用户主动取消（区别于 failed = 网络/解压/落盘错误）。
+	StatusCanceled = "canceled"
 )
 
 // Sentinel errors returned by Start.
@@ -61,6 +64,14 @@ type Manager struct {
 
 	logger *slog.Logger
 
+	// T-027：per-kind ctx cancel func，由 m.mu 守护。
+	// doDownload 入口注册，goroutine 退出前 defer 反注册；非 downloading 状态时
+	// 该 entry 必不存在（Cancel 据此快速判断 no-op）。
+	//
+	// 设计参考：docs/features/download-cancel-and-upload-decouple/02_SOLUTION_DESIGN.md §2.1
+	// 或归档后 docs/features/_archived/download-cancel-and-upload-decouple/02_SOLUTION_DESIGN.md §2.1
+	cancels map[string]context.CancelFunc
+
 	// Unexported override fields for package-internal tests (C-4).
 	apiBaseURL string // empty = use https://api.github.com（T-014 测试注入 seam）
 	goos       string // empty = runtime.GOOS
@@ -78,6 +89,7 @@ func New(root string, logger *slog.Logger) *Manager {
 		apiClient:      &http.Client{Timeout: 60 * time.Second},
 		downloadClient: newDownloadHTTPClient(),
 		logger:         logger,
+		cancels:        make(map[string]context.CancelFunc, 2),
 	}
 }
 
@@ -153,9 +165,93 @@ func (m *Manager) Status(kind string) (DownloadState, bool) {
 	return *m.states[kind], true
 }
 
+// Cancel triggers cancellation for kind's in-flight download (T-027 FR-1).
+//
+// 行为契约：
+//   - kind 非法 → ErrBadKind。
+//   - 当前状态非 downloading（idle / success / failed / canceled） → no-op，返回 nil。
+//   - 当前状态 downloading → 触发 ctx cancel，阻塞等待 state 切到 canceled
+//     （≤3s 上限，正常 < 100ms），返回 nil。
+//   - 3s 超时兜底（T-027 F-3 选项 A）：拿锁强写 canceled，破坏防御性单调 guard
+//     但保 FR-7 "Cancel 同步返回时 state 必须已是 canceled" 不变量。
+//
+// 重入安全：多次 Cancel 同 kind / Cancel 与 Start 交错 / Cancel 与 doDownload
+// 即将写 success 的 race —— 均不报错、无 panic、状态机不被破坏（R-2 / NFR-5）。
+//
+// 设计要点：Cancel 不直接写 state；仅触发 ctx.Done，让 doDownload 自己在 ctx 分支
+// 调用 setCanceled。这避免 "Cancel 写 canceled → doDownload 再写 success" 的覆盖
+// （由 doDownload 末尾的 ctx 重检 + 状态机单调 guard 兜底）。
+//
+// 设计参考：docs/features/download-cancel-and-upload-decouple/02_SOLUTION_DESIGN.md §2.3
+// 或归档后 docs/features/_archived/download-cancel-and-upload-decouple/02_SOLUTION_DESIGN.md §2.3
+func (m *Manager) Cancel(kind string) error {
+	if kind != "frpc" && kind != "frps" {
+		return ErrBadKind
+	}
+
+	m.mu.Lock()
+	st := m.states[kind]
+	if st.Status != StatusDownloading {
+		m.mu.Unlock()
+		return nil // no-op
+	}
+	cancel, ok := m.cancels[kind]
+	m.mu.Unlock()
+
+	if !ok {
+		// 状态是 downloading 但 cancel func 未注册 —— 理论上不可能（doDownload 在
+		// goroutine 顶端就注册 cancels，早于任何 ctx 化的 HTTP 请求）。
+		// 防御性日志后等待状态切换；不阻塞 caller > 3s。
+		m.logger.Warn("cancel called but cancelFunc not yet registered", "kind", kind)
+	} else {
+		cancel()
+	}
+
+	// 等待 doDownload 把状态写到终态（canceled / failed / success 任一）。
+	// 轮询周期 10ms × 300 = 3s 上限（NFR-1）。
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		cur := m.states[kind].Status
+		m.mu.Unlock()
+		if cur != StatusDownloading {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// T-027 F-3 选项 A：3s 仍未切换 —— doDownload 卡死在不可中断的 syscall
+	// 或其它阻塞点。FR-7 不变量优先级 > 状态机单调防御 guard：强写 canceled，
+	// 让 caller 的 "Cancel → upload" 序列不破坏"零等待时间窗"契约。
+	// 即使 goroutine 后续返回，setFailed/setSuccess 的单调 guard 都会拒写
+	// （只有 downloading 才能转 success/failed/canceled），所以本强写不会被覆盖。
+	m.logger.Error("cancel timed out waiting for goroutine exit; force-writing canceled",
+		"kind", kind)
+	m.mu.Lock()
+	if m.states[kind].Status == StatusDownloading {
+		m.states[kind].Status = StatusCanceled
+		m.states[kind].Error = "用户取消下载（goroutine 卡住，强写）"
+	}
+	m.mu.Unlock()
+	return nil
+}
+
 // doDownload performs the download, extraction, and atomic install in a goroutine.
 func (m *Manager) doDownload(kind, goos string) {
 	startTime := time.Now()
+
+	// T-027：建 per-goroutine ctx，注册到 m.cancels；goroutine 退出前反注册。
+	// 任何 err 分支返回前都会先判 errors.Is(ctx.Err(), context.Canceled) 走 setCanceled。
+	ctx, cancel := context.WithCancel(context.Background())
+	m.mu.Lock()
+	m.cancels[kind] = cancel
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.cancels, kind)
+		m.mu.Unlock()
+		cancel() // idempotent，确保 ctx 资源回收
+	}()
 
 	targetDir, targetPath, archiveExt, entryName, err := m.resolveParams(kind, goos)
 	if err != nil {
@@ -163,9 +259,14 @@ func (m *Manager) doDownload(kind, goos string) {
 		return
 	}
 
-	// T-014：解析 fatedier/frp 最新 release 资产 URL（不再用写死的 FRPVersion 构造）。
-	downloadURL, version, err := m.resolveLatestAsset(goos)
+	// T-014 / T-027：解析 fatedier/frp 最新 release 资产 URL（不再用写死的 FRPVersion 构造）。
+	// T-027 F-4：resolveLatestAsset 已 ctx 化，API 阶段卡住时 Cancel 可立刻解除。
+	downloadURL, version, err := m.resolveLatestAsset(ctx, goos)
 	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			m.setCanceled(kind)
+			return
+		}
 		m.setFailed(kind, err.Error()) // err 已是面向用户的中文消息
 		return
 	}
@@ -191,14 +292,25 @@ func (m *Manager) doDownload(kind, goos string) {
 		os.Remove(archiveTmpPath) // always clean up archive temp
 	}()
 
-	req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
+	// T-027：ctx 化下载请求，stdlib transport 在 ctx Done 时主动关 conn，
+	// resp.Body.Read 立刻返 err，从而 io.Copy 解除阻塞。
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			m.setCanceled(kind)
+			return
+		}
 		m.setFailed(kind, fmt.Sprintf("构建下载请求失败: %v", err))
 		return
 	}
 
 	resp, err := m.downloadClient.Do(req)
 	if err != nil {
+		// T-027：ctx 取消时 stdlib transport 主动关 conn，Do 返 err 链含 context.Canceled。
+		if errors.Is(ctx.Err(), context.Canceled) {
+			m.setCanceled(kind)
+			return
+		}
 		m.setFailed(kind, fmt.Sprintf("下载超时: %v", err))
 		return
 	}
@@ -220,6 +332,11 @@ func (m *Manager) doDownload(kind, goos string) {
 
 	bytesWritten, err := io.Copy(archiveTmp, teeReader)
 	if err != nil {
+		// T-027：cancel 路径 → conn 被关 → io.Copy 返 err；走 setCanceled 而非 setFailed。
+		if errors.Is(ctx.Err(), context.Canceled) {
+			m.setCanceled(kind)
+			return
+		}
 		m.setFailed(kind, fmt.Sprintf("下载写入失败: %v", err))
 		return
 	}
@@ -241,6 +358,10 @@ func (m *Manager) doDownload(kind, goos string) {
 		return
 	}
 	binTmpPath := binTmp.Name()
+	// T-027 F-5：双层清理。defer 兜底 cancel 路径（cancel 在解压前发生时
+	// 下面 line 主动 Remove 不会跑）；正常路径仍由后面的显式 Remove 优先释放。
+	// 注意：defer 在显式 Remove 之后跑会走 ENOENT 分支，无副作用。
+	defer func() { _ = os.Remove(binTmpPath) }()
 
 	var extractErr error
 	switch archiveExt {
@@ -254,6 +375,12 @@ func (m *Manager) doDownload(kind, goos string) {
 	binTmp.Close()
 
 	if extractErr != nil {
+		// T-027：解压期间也可能 cancel（cancel→ctx Done→后续 ctx 重检捕获）。
+		if errors.Is(ctx.Err(), context.Canceled) {
+			os.Remove(binTmpPath)
+			m.setCanceled(kind)
+			return
+		}
 		os.Remove(binTmpPath)
 		m.setFailed(kind, fmt.Sprintf("解压失败: %v", extractErr))
 		return
@@ -272,6 +399,10 @@ func (m *Manager) doDownload(kind, goos string) {
 	// Install 内部用 CreateTemp 写自己的 .install-*.tmp；binTmpPath 已读尽不再需要。
 	os.Remove(binTmpPath)
 	if installErr != nil {
+		if errors.Is(ctx.Err(), context.Canceled) {
+			m.setCanceled(kind)
+			return
+		}
 		m.setFailed(kind, fmt.Sprintf("安装失败: %v", installErr))
 		return
 	}
@@ -281,7 +412,22 @@ func (m *Manager) doDownload(kind, goos string) {
 		"kind", kind, "path", targetPath,
 		"elapsed", elapsed.Round(time.Millisecond))
 
+	// T-027 R-2：写 success 前 ctx 重检 + 状态机单调 guard，防御
+	// "Cancel 刚写 canceled → doDownload 主循环跑完 → 覆盖回 success" 的 race。
 	m.mu.Lock()
+	if errors.Is(ctx.Err(), context.Canceled) {
+		m.mu.Unlock()
+		m.setCanceled(kind)
+		return
+	}
+	if m.states[kind].Status != StatusDownloading {
+		// 防御性 assert：理论上不会触发（doDownload 是同步段 Status=downloading
+		// 后启动的唯一 goroutine）。若触发说明状态机被外部改写，记日志不覆盖。
+		m.logger.Warn("download finished but state not downloading; skip success write",
+			"kind", kind, "state", m.states[kind].Status)
+		m.mu.Unlock()
+		return
+	}
 	m.states[kind].Status = StatusSuccess
 	m.states[kind].Progress = 100
 	m.states[kind].Error = ""
@@ -338,14 +484,17 @@ type ghRelease struct {
 //   - 先判 HTTP 状态码、再解析 JSON（限流 403 响应体也是合法 JSON）。
 //   - 按平台后缀匹配 assets[]（_linux_amd64.tar.gz / _windows_amd64.zip），
 //     比硬拼文件名鲁棒，且能精确实现"资产未匹配 → failed"分支。
-func (m *Manager) resolveLatestAsset(goos string) (downloadURL, version string, err error) {
+//
+// T-027 F-4：ctx 化。Cancel 在 API 阶段也能立即解除（apiClient 60s 总超时
+// 不再是 Cancel 响应延迟的下限）。
+func (m *Manager) resolveLatestAsset(ctx context.Context, goos string) (downloadURL, version string, err error) {
 	apiBase := m.apiBaseURL
 	if apiBase == "" {
 		apiBase = "https://api.github.com"
 	}
 	url := apiBase + "/repos/fatedier/frp/releases/latest"
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("构建查询请求失败: %v", err)
 	}
@@ -406,11 +555,33 @@ func (m *Manager) setProgress(kind string, pct int) {
 }
 
 // setFailed marks kind as failed with errMsg.
+//
+// T-027 F-6 / NFR-5：加单调 guard `if Status == downloading` —— 与 setCanceled 对称，
+// 防御纵深。若 Cancel 已先一步把状态写为 canceled，setFailed 不应覆盖回 failed
+// （即使理论上每个 err 分支前都已经 ctx 重检走 setCanceled）。
 func (m *Manager) setFailed(kind string, errMsg string) {
 	m.logger.Error("download failed", "kind", kind, "err", errMsg)
 	m.mu.Lock()
-	m.states[kind].Status = StatusFailed
-	m.states[kind].Error = errMsg
+	if m.states[kind].Status == StatusDownloading {
+		m.states[kind].Status = StatusFailed
+		m.states[kind].Error = errMsg
+	}
+	m.mu.Unlock()
+}
+
+// setCanceled marks kind as canceled (user-initiated, distinct from setFailed).
+//
+// 日志走 Info（不是错误）；progress 保留 cancel 那一刻的值（便于调试 §9 OQ-2）；
+// error 字段写"用户取消下载"（与 status 配套，前端可统一展示）。
+// 单调 guard：仅 downloading 才可转 canceled（防御性）。
+func (m *Manager) setCanceled(kind string) {
+	m.logger.Info("download canceled", "kind", kind)
+	m.mu.Lock()
+	if m.states[kind].Status == StatusDownloading {
+		m.states[kind].Status = StatusCanceled
+		m.states[kind].Error = "用户取消下载"
+		// progress 保留 cancel 那一刻的值，不清零（OQ-2 决策）。
+	}
 	m.mu.Unlock()
 }
 

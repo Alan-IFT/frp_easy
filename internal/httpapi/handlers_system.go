@@ -161,6 +161,40 @@ func (h *handlers) downloadStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
+// downloadCancel handles POST /api/v1/system/download-cancel/{kind}（T-027 FR-4）。
+//
+// 返回：
+//   - 200 + 最新 DownloadState JSON（成功，无论是真取消还是 idle/success/failed/canceled no-op）。
+//   - 422 VALIDATION_FAILED：kind 不是 frpc / frps（与 uploadBin / downloadBin 一致约定，
+//     03 F-2 采纳：偏离 01 §5.2 AC 写的 400）。
+//   - 503 INTERNAL：downloader nil。
+//   - 401 / 403：未登录 / 缺 CSRF（由中间件链统一处理，不在 handler 内）。
+//
+// 设计参考：docs/features/download-cancel-and-upload-decouple/02_SOLUTION_DESIGN.md §3.1
+// 或归档后 docs/features/_archived/download-cancel-and-upload-decouple/02_SOLUTION_DESIGN.md §3.1
+func (h *handlers) downloadCancel(w http.ResponseWriter, r *http.Request) {
+	if h.deps.Downloader == nil {
+		writeError(w, http.StatusServiceUnavailable, CodeInternal, "下载器未初始化", "")
+		return
+	}
+
+	kind := chi.URLParam(r, "kind")
+	if err := h.deps.Downloader.Cancel(kind); err != nil {
+		if errors.Is(err, downloader.ErrBadKind) {
+			writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed,
+				"kind 必须为 frpc 或 frps", "kind")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, CodeInternal, err.Error(), "")
+		return
+	}
+
+	// FR-7：Cancel 返回时 state 已是终态（canceled/idle/success/failed），
+	// 直接同步返回最新 state，前端不必再多发一次 download-status 请求。
+	st, _ := h.deps.Downloader.Status(kind)
+	writeJSON(w, http.StatusOK, st)
+}
+
 // --- internal helpers for public IP detection (T-018 §B 扩展) ---
 
 // ipSource 是一个 IP 探测候选源。
@@ -464,7 +498,9 @@ func (h *handlers) uploadBin(w http.ResponseWriter, r *http.Request) {
 	}
 	defer lk.Unlock()
 	if st, ok := h.deps.Downloader.Status(kind); ok && st.Status == downloader.StatusDownloading {
-		writeError(w, http.StatusConflict, CodeProcBusy, "下载进行中，请稍后再上传或取消下载", "")
+		// T-027 FR-6：精化文案，明确指向用户已有的"取消下载"按钮入口。
+		writeError(w, http.StatusConflict, CodeProcBusy,
+			"下载进行中，请先点击\"取消下载\"按钮后再上传", "")
 		return
 	}
 

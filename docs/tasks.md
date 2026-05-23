@@ -6,12 +6,15 @@
 
 ## 进行中
 
-（无）
+| ID | Slug | 阶段 | 模式 | 文档目录 |
+|---|---|---|---|---|
+| T-026 | install-ps1-iex-bom-and-host-exit-fix | delivery | full | `docs/features/install-ps1-iex-bom-and-host-exit-fix/` |
 
 ## 已完成
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-027 | download-cancel-and-upload-decouple | DELIVERED | 2026-05-24 | `docs/features/_archived/download-cancel-and-upload-decouple/` |
 | T-025 | download-bin-timeout-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/download-bin-timeout-fix/` |
 | T-024 | install-ps1-iex-cmdletbinding-fix | DELIVERED | 2026-05-23 | trivial 直接修复（install.ps1 删 `[CmdletBinding()]` 一行 + 注释，无阶段文档）：iex inline 不允许该 attribute，会触发 "Unexpected attribute 'CmdletBinding'"；`param([switch]$Help)` 保留兼容磁盘形态 |
 | T-023 | upload-bin-content-type-fix | DELIVERED | 2026-05-23 | trivial 直接修复（system.ts + spec.ts，无阶段文档）：apiClient 实例 default `Content-Type: application/json` 污染 FormData 请求让 axios 不再自动补 multipart boundary，显式 `headers: { 'Content-Type': undefined }` 抵消 |

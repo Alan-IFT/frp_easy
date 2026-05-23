@@ -6,13 +6,20 @@
           size="small"
           :type="uploading ? 'warning' : 'default'"
           :loading="uploading"
-          :disabled="uploading"
+          :disabled="uploading || props.siblingDownloading"
           @click="triggerFilePick"
         >
           {{ uploading ? `上传中 ${progress}%` : `上传 ${kind}` }}
         </n-button>
       </template>
-      本地选择已下载好的 {{ kind }} 二进制（适合 GitHub 不可达时使用）
+      <!-- T-027 FR-9 / F-1：tooltip + disabled 替代 dialog（PM 决策保留）。
+           AppLayout banner 已有显性"取消"按钮在相邻位置，tooltip 引导用户先取消。 -->
+      <template v-if="props.siblingDownloading">
+        正在下载 {{ kind }}，请先点击左侧"取消"按钮再上传
+      </template>
+      <template v-else>
+        本地选择已下载好的 {{ kind }} 二进制（适合 GitHub 不可达时使用）
+      </template>
     </n-tooltip>
     <n-progress
       v-if="uploading"
@@ -38,9 +45,13 @@ import { NButton, NProgress, NSpace, NTooltip, useMessage } from 'naive-ui'
 import { apiUploadBin } from '../api/system'
 import { extractErrorMessage } from '../api/client'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   kind: 'frpc' | 'frps'
-}>()
+  // T-027 FR-9：父组件传入"同 kind 是否正在下载"，控制本按钮 disabled + tooltip 文案。
+  siblingDownloading?: boolean
+}>(), {
+  siblingDownloading: false,
+})
 
 const emit = defineEmits<{
   (e: 'uploaded', payload: { sha256: string; size: number; kind: 'frpc' | 'frps' }): void

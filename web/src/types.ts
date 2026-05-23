@@ -98,7 +98,8 @@ export interface LogsIncrementalResponse {
 }
 
 export interface DownloadState {
-  status: 'idle' | 'downloading' | 'success' | 'failed'
+  // T-027：新增 'canceled'，与后端 downloader.StatusCanceled / openapi.yaml DownloadState.status enum 一致。
+  status: 'idle' | 'downloading' | 'success' | 'failed' | 'canceled'
   progress: number
   error?: string
 }

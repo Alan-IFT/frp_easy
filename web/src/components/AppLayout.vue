@@ -33,8 +33,23 @@
                     </template>
                     从 GitHub Releases 自动拉取最新版（境内可能失败）
                   </n-tooltip>
+                  <!-- T-027：取消下载按钮，仅在 downloading 状态显示 -->
+                  <n-button
+                    v-if="downloaderStore.isDownloading(kind)"
+                    size="small"
+                    type="error"
+                    ghost
+                    @click="handleCancel(kind)"
+                  >
+                    ✕ 取消
+                  </n-button>
                   <!-- T-018 §A.3：手动上传入口，与一键下载并列；B-4 修订仅挂 AppLayout banner -->
-                  <upload-bin-button :kind="kind" @uploaded="handleUploaded" />
+                  <!-- T-027 FR-9：传 sibling-downloading 让 UploadBinButton 在同 kind 下载时 disabled + tooltip 引导 -->
+                  <upload-bin-button
+                    :kind="kind"
+                    :sibling-downloading="downloaderStore.isDownloading(kind)"
+                    @uploaded="handleUploaded"
+                  />
                 </n-space>
                 <n-progress
                   v-if="downloaderStore.downloadState(kind).status === 'downloading'"
@@ -164,7 +179,7 @@ async function handleLogout() {
 function getDownloadBtnLabel(kind: 'frpc' | 'frps'): string {
   const state = downloaderStore.downloadState(kind)
   if (state.status === 'downloading') {
-    return '下载中...'
+    return `下载中... ${state.progress}%`
   }
   if (state.status === 'success') {
     return '已下载'
@@ -172,14 +187,30 @@ function getDownloadBtnLabel(kind: 'frpc' | 'frps'): string {
   if (state.status === 'failed') {
     return '重试'
   }
+  // T-027：新增 canceled 状态显式文案
+  if (state.status === 'canceled') {
+    return '已取消，点击重试'
+  }
   return `一键下载 ${kind}`
 }
 
-function getDownloadBtnType(kind: 'frpc' | 'frps'): 'default' | 'primary' | 'success' | 'error' {
+function getDownloadBtnType(kind: 'frpc' | 'frps'): 'default' | 'primary' | 'success' | 'error' | 'warning' {
   const state = downloaderStore.downloadState(kind)
   if (state.status === 'success') return 'success'
   if (state.status === 'failed') return 'error'
+  // T-027：canceled 用 warning 与 failed 视觉区分（用户主动 vs 系统错误）
+  if (state.status === 'canceled') return 'warning'
   return 'primary'
+}
+
+// T-027：取消下载 handler
+async function handleCancel(kind: 'frpc' | 'frps') {
+  try {
+    await downloaderStore.cancelDownload(kind)
+    message.info(`已取消 ${kind} 下载`)
+  } catch {
+    message.error(`取消 ${kind} 失败，请稍后再试`)
+  }
 }
 
 // T-018 §A：手动上传成功后刷新 systemReady，让 binMissing 重新计算

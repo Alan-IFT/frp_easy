@@ -120,6 +120,8 @@ func New(d Dependencies) http.Handler {
 				r.Get("/system/public-ip", h.systemPublicIP)
 				r.Post("/system/download-bin", h.downloadBin)
 				r.Get("/system/download-status/{kind}", h.downloadStatus)
+				// T-027：取消下载（与 download-bin / download-status 同分组同中间件链）。
+				r.Post("/system/download-cancel/{kind}", h.downloadCancel)
 				// T-018: 二进制上传 + 端口可用性探测。
 				r.Post("/system/upload-bin", h.uploadBin)
 				r.Post("/system/probe-ports", h.probePorts)
