@@ -51,6 +51,14 @@ var (
 	// 触发条件：proxies 表 name 列 column-level UNIQUE 约束（见
 	// internal/storage/sqlmigrations/0001_init.up.sql 第 32 行）。
 	ErrDuplicateName = errors.New("storage: duplicate proxy name")
+
+	// ErrDuplicateTcpRemote 表示批量 / 单条 Upsert 触发 (type, remote_port) 部分唯一
+	// 索引冲突（idx_proxies_tcp_remote）。
+	// T-018 引入用于 UpsertProxiesTx 事务回滚后的分流：调用方据此返回 409 + field=remotePort。
+	// 错误文本格式：`UNIQUE constraint failed: proxies.type, proxies.remote_port`
+	// （已在 proxies_test.go TestIsDuplicateNameError_DirectChecks "type-remote-conflict"
+	// 用例中实证，T-018 B-8）。
+	ErrDuplicateTcpRemote = errors.New("storage: duplicate (type, remote_port)")
 )
 
 // Store 是 SQLite 持久化层句柄。所有写操作受内部 mu 守护（避免单连接 + 并发写时

@@ -311,6 +311,9 @@ components:
         advisory:
           type: string
           description: IPv6 使用提示（IP 为 IPv6 时）
+        source:
+          type: string
+          description: "T-018 新增：胜出源标识（ipify / my-ip.io / ip.cn / bilibili / ip.cn-html / env）。env 表示通过 FRP_EASY_PUBLIC_IP 环境变量覆盖。"
 
     DownloadBinRequest:
       type: object
@@ -344,6 +347,97 @@ components:
         shouldShow:
           type: boolean
           description: 是否应当显示向导（!handled && !hasAnyConfig）
+
+    # T-018 新增 schemas
+
+    UploadBinResponse:
+      type: object
+      required: [ok, kind, sha256, size, path]
+      properties:
+        ok:
+          type: boolean
+        kind:
+          type: string
+          enum: [frpc, frps]
+        sha256:
+          type: string
+          description: 上传文件的 SHA-256 (hex)
+        size:
+          type: integer
+          format: int64
+        path:
+          type: string
+          description: 相对仓库 root 的相对路径（例 frp_linux/frpc）
+        advisory:
+          type: string
+          description: 仅当同 kind 子进程正在运行时附带（提示用户手动重启）
+
+    BatchProxiesRequest:
+      type: object
+      required: [basename, type, portsExpr]
+      properties:
+        basename:
+          type: string
+          description: "派生 name 前缀，^[A-Za-z0-9_-]{1,58}$（留 6 字符给端口后缀）"
+        type:
+          type: string
+          enum: [tcp, udp]
+          description: batch 仅支持 tcp/udp（http/https 走域名）
+        localIP:
+          type: string
+          description: 缺省 127.0.0.1
+        portsExpr:
+          type: string
+          example: "6000-6010,7000"
+          description: "端口表达式（最多 32 个端口）；localPort 与 remotePort 1:1 一致映射"
+        enabled:
+          type: boolean
+          description: 缺省 true
+
+    BatchProxiesResponse:
+      type: object
+      required: [created, items]
+      properties:
+        created:
+          type: integer
+          description: 成功创建条数
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProxyResponse'
+
+    PortProbeRequest:
+      type: object
+      required: [ports]
+      properties:
+        ports:
+          type: array
+          maxItems: 64
+          items:
+            type: integer
+            minimum: 1
+            maximum: 65535
+
+    PortProbeResult:
+      type: object
+      required: [port, available]
+      properties:
+        port:
+          type: integer
+        available:
+          type: boolean
+        reason:
+          type: string
+          description: "原因（仅 available=false 时）：privileged（特权端口 <1024）/ in_use（已被占用或受限）"
+
+    PortProbeResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortProbeResult'
 
 paths:
 
@@ -1217,6 +1311,160 @@ paths:
                 $ref: '#/components/schemas/ErrorBody'
         '503':
           description: 下载器未初始化
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  # T-018 新增端点
+
+  /api/v1/system/upload-bin:
+    post:
+      summary: 上传 frpc/frps 二进制（一键下载兜底）
+      operationId: uploadBin
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [system]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [frpc, frps]
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadBinResponse'
+        '400':
+          description: 请求不是合法的 multipart/form-data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '403':
+          description: 缺 CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: 同 kind 上传或下载进行中
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '413':
+          description: 文件超过 64 MiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 字段非法 / 文件头非法 / 平台不匹配
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/system/probe-ports:
+    post:
+      summary: 探测本机端口可用性（仅 TCP，dual-stack wildcard）
+      operationId: probePorts
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [system]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortProbeRequest'
+      responses:
+        '200':
+          description: 探测结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortProbeResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '403':
+          description: 缺 CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 端口数量超 64 / 端口越界
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/proxies/batch:
+    post:
+      summary: 批量创建代理规则（单事务，全成或全败）
+      operationId: batchCreateProxies
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      tags: [proxies]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchProxiesRequest'
+      responses:
+        '201':
+          description: 批量创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchProxiesResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '403':
+          description: 缺 CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: name 或 (type,remote_port) 冲突；事务已回滚
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: 表达式 / 字段 / 上限非法
           content:
             application/json:
               schema:

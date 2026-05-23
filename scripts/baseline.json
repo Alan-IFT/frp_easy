@@ -1,11 +1,11 @@
 {
-  "version": 6,
+  "version": 7,
   "created": "2026-05-16",
-  "updated": "2026-05-22",
-  "test_count": 231,
-  "passing_count": 226,
-  "go_tests": 174,
-  "frontend_tests": 57,
+  "updated": "2026-05-23",
+  "test_count": 333,
+  "passing_count": 333,
+  "go_tests": 237,
+  "frontend_tests": 96,
   "warnings_baseline": 0,
-  "notes": "T-014 frp-binary-auto-download QA phase. Go: 174 (dev +4 TestResolveLatest_* 覆盖 AC-6 四分支; QA +3 TestAdversarial_ResolveLatest_MalformedJSON/MissingTagName/HTTP500 补 02 §3.4.5 列出但 dev 未覆盖的降级分支). Frontend Vitest: 57 (unchanged). Baseline raised by T-014 verify_all PASS 19/19."
+  "notes": "T-018 upload-bin-multiport-ip-probe QA delivered. Go: 174->237 (+63: portrange 23 / install 8 / upload 11 / batch 12 / port-probe 11 / publicip 10 / storage batch 8 with B-5 ConcurrentWithUpsertProxy + B-8 modernc composite UNIQUE adversarial). Frontend: 57->96 (+39: usePortPresets 6 / useProxyGrouping 19 with B-12 5 regex cases / api system 5 with B-2 axios no-headers assertion / api proxies 4 with portsExpr+basename lock / UploadBinButton 5 with 64MiB pre-check). Baseline raised by T-018 verify_all PASS 19/19; A upload / B public IP / C multi-port all zero new deps, zero migration, zero cgo."
 }

@@ -100,6 +100,7 @@ func New(d Dependencies) http.Handler {
 
 				r.Get("/proxies", h.listProxies)
 				r.Post("/proxies", h.createProxy)
+				r.Post("/proxies/batch", h.batchProxies) // T-018 §C.1
 				r.Put("/proxies/{id}", h.updateProxy)
 				r.Delete("/proxies/{id}", h.deleteProxy)
 
@@ -119,6 +120,9 @@ func New(d Dependencies) http.Handler {
 				r.Get("/system/public-ip", h.systemPublicIP)
 				r.Post("/system/download-bin", h.downloadBin)
 				r.Get("/system/download-status/{kind}", h.downloadStatus)
+				// T-018: 二进制上传 + 端口可用性探测。
+				r.Post("/system/upload-bin", h.uploadBin)
+				r.Post("/system/probe-ports", h.probePorts)
 				r.Get("/wizard/status", h.wizardStatus)
 				r.Post("/wizard/complete", h.wizardComplete)
 			})

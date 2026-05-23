@@ -15,18 +15,27 @@
           style="padding: 4px 12px"
         >
           <n-space align="center" :size="8">
-            <span>二进制缺失: {{ appStore.binMissing.join(', ') }}。</span>
+            <span>二进制缺失: {{ appStore.binMissing.join(', ') }}。网络不便时可手动上传：</span>
         <template v-for="kind in (appStore.binMissing as Array<'frpc' | 'frps'>)" :key="kind">
               <n-space vertical :size="4" style="align-items: flex-start">
-                <n-button
-                  size="small"
-                  :type="getDownloadBtnType(kind)"
-                  :loading="downloaderStore.isDownloading(kind)"
-                  :disabled="downloaderStore.isDownloading(kind) || downloaderStore.downloadState(kind).status === 'success'"
-                  @click="handleDownload(kind)"
-                >
-                  {{ getDownloadBtnLabel(kind) }}
-                </n-button>
+                <n-space :size="4" align="center">
+                  <n-tooltip trigger="hover" placement="bottom">
+                    <template #trigger>
+                      <n-button
+                        size="small"
+                        :type="getDownloadBtnType(kind)"
+                        :loading="downloaderStore.isDownloading(kind)"
+                        :disabled="downloaderStore.isDownloading(kind) || downloaderStore.downloadState(kind).status === 'success'"
+                        @click="handleDownload(kind)"
+                      >
+                        {{ getDownloadBtnLabel(kind) }}
+                      </n-button>
+                    </template>
+                    从 GitHub Releases 自动拉取最新版（境内可能失败）
+                  </n-tooltip>
+                  <!-- T-018 §A.3：手动上传入口，与一键下载并列；B-4 修订仅挂 AppLayout banner -->
+                  <upload-bin-button :kind="kind" @uploaded="handleUploaded" />
+                </n-space>
                 <n-progress
                   v-if="downloaderStore.downloadState(kind).status === 'downloading'"
                   type="line"
@@ -78,13 +87,14 @@ import { ref, computed, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutSider, NLayoutContent,
-  NMenu, NSpace, NText, NButton, NAlert, NProgress,
+  NMenu, NSpace, NText, NButton, NAlert, NProgress, NTooltip,
   useMessage,
 } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { useDownloaderStore } from '../stores/downloader'
+import UploadBinButton from './UploadBinButton.vue'
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
@@ -170,6 +180,12 @@ function getDownloadBtnType(kind: 'frpc' | 'frps'): 'default' | 'primary' | 'suc
   if (state.status === 'success') return 'success'
   if (state.status === 'failed') return 'error'
   return 'primary'
+}
+
+// T-018 §A：手动上传成功后刷新 systemReady，让 binMissing 重新计算
+function handleUploaded(payload: { kind: 'frpc' | 'frps' }) {
+  void appStore.fetchReady()
+  message.success(`${payload.kind} 上传成功，二进制状态已刷新`)
 }
 
 async function handleDownload(kind: 'frpc' | 'frps') {

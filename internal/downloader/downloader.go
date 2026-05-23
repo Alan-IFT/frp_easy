@@ -221,33 +221,21 @@ func (m *Manager) doDownload(kind, goos string) {
 		return
 	}
 
-	// Step 3: Atomic rename: temp → target (NF-S1).
-	// On Linux, os.Rename atomically replaces any existing file.
-	// On Windows, Rename fails if the target already exists; we fall back to
-	// Remove-then-Rename.  If Remove fails (e.g. permissions, file in use) we
-	// report the error rather than silently destroying the existing binary.
-	renameErr := os.Rename(binTmpPath, targetPath)
-	if renameErr != nil && runtime.GOOS == "windows" {
-		// Windows does not allow overwriting an existing file with Rename.
-		// Remove the old binary first; ignore ErrNotExist (file may already be absent).
-		if removeErr := os.Remove(targetPath); removeErr != nil && !os.IsNotExist(removeErr) {
-			os.Remove(binTmpPath)
-			m.setFailed(kind, fmt.Sprintf("移除旧版本失败: %v", removeErr))
-			return
-		}
-		renameErr = os.Rename(binTmpPath, targetPath)
-	}
-	if renameErr != nil {
+	// Step 3 + 4 (T-018 §A.2 refactor)：原子 rename + Linux chmod + Windows fallback
+	// 全部走共享 Install；下载链路传 maxBytes = -1（不限大小，因 archive 已落盘）。
+	binTmpFile, openErr := os.Open(binTmpPath)
+	if openErr != nil {
 		os.Remove(binTmpPath)
-		m.setFailed(kind, fmt.Sprintf("安装失败: %v", renameErr))
+		m.setFailed(kind, fmt.Sprintf("打开解压临时文件失败: %v", openErr))
 		return
 	}
-
-	// Step 4: Set executable permission on Linux.
-	if goos == "linux" {
-		if err := os.Chmod(targetPath, 0o755); err != nil {
-			m.logger.Warn("chmod failed", "path", targetPath, "err", err)
-		}
+	_, _, _, installErr := m.Install(kind, binTmpFile, -1)
+	binTmpFile.Close()
+	// Install 内部用 CreateTemp 写自己的 .install-*.tmp；binTmpPath 已读尽不再需要。
+	os.Remove(binTmpPath)
+	if installErr != nil {
+		m.setFailed(kind, fmt.Sprintf("安装失败: %v", installErr))
+		return
 	}
 
 	elapsed := time.Since(startTime)

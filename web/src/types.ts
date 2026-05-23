@@ -107,6 +107,75 @@ export interface PublicIPResponse {
   ip?: string
   error?: string
   advisory?: string
+  // T-018 §B.1：来源标识，可选展示。例 "ipify" / "ip.cn" / "env"
+  source?: string
+}
+
+// ---------------------------------------------------------------
+// T-018 §A：二进制上传
+// ---------------------------------------------------------------
+
+export interface UploadBinResponse {
+  ok: boolean
+  kind?: 'frpc' | 'frps'
+  /** 后端返回的相对仓库 root 的子路径，例 "frp_linux/frpc"（不暴露绝对路径）。 */
+  path: string
+  /** 落盘字节数（后端契约字段名 size）。 */
+  size: number
+  /** 落盘后的 sha256 hex；用户可与官方 release 校验。 */
+  sha256: string
+  /** 上传时 frpc/frps 正在运行时返回的提示；可选。 */
+  advisory?: string
+}
+
+// ---------------------------------------------------------------
+// T-018 §C.1：批量端口创建
+// ---------------------------------------------------------------
+
+export interface BatchProxiesRequest {
+  /** 派生 name 的前缀，^[A-Za-z0-9_-]{1,58}$。 */
+  basename: string
+  /** 仅 tcp / udp 支持批量（http/https 走域名，无意义）。 */
+  type: 'tcp' | 'udp' | 'http' | 'https'
+  /** 可选，默认 127.0.0.1。 */
+  localIP?: string
+  /** 端口表达式，例 "6000-6010,7000"。本地与远程端口 1:1。 */
+  portsExpr: string
+  /** 可选，默认 true。 */
+  enabled?: boolean
+}
+
+export interface BatchProxiesResponse {
+  /** 实际创建条数。 */
+  created: number
+  /** 新建条目，结构与单条 ProxyResponse 一致。 */
+  items: Proxy[]
+}
+
+// ---------------------------------------------------------------
+// T-018 §C.3：端口可用性探测
+// ---------------------------------------------------------------
+
+export interface PortProbeRequest {
+  /** 1-32 个端口（后端硬限制；超过 → 422）。 */
+  ports: number[]
+}
+
+export interface PortProbeResult {
+  port: number
+  available: boolean
+  /**
+   * 可能值：
+   * - ""（空字符串） : available=true 时
+   * - "privileged"    : 端口 < 1024
+   * - "in_use"        : 端口已被占用
+   * - "invalid"       : 端口非法（0 或 > 65535，后端校验通常先行拒）
+   */
+  reason: string
+}
+
+export interface PortProbeResponse {
+  results: PortProbeResult[]
 }
 
 export interface WizardStatus {

@@ -5,9 +5,7 @@
 > 规则见 `.harness/rules/05-insight-index.md`。
 
 <!-- 追加新 insight 写下面，一行一条。格式：
-- YYYY-MM-DD · <一句话事实> · evidence: <任务 slug 或 commit sha>
 -->
-- 2026-05-16 · Windows os.Rename 不能覆盖已存在文件，需先 Remove 再 Rename；但 Remove 成功后 Rename 失败会丢失原文件，正确模式是先试 Rename 失败再 Remove+Rename · evidence: zero-config-quickstart
 - 2026-05-16 · 向导页面必须是顶层路由（非 AppLayout 子路由），否则侧边栏导航干扰向导流程 · evidence: zero-config-quickstart
 - 2026-05-16 · openapi.yaml 字段名应以 Go 常量为权威（直接读 .go），不以设计文档草稿为准；status 枚举值在设计阶段写错（done/error vs success/failed），Gate Review 捕获 · evidence: docs-and-api-schema
 - 2026-05-17 · Naive UI 凡使用 useMessage/useDialog 等 composable 的组件，App.vue 根组件必须包裹对应 Provider；缺失时 headless 浏览器中 setup() 抛异常，组件输出空节点 `<!-->`，表单不可见 · evidence: e2e-smoke-tests
@@ -38,3 +36,6 @@
 - **2026-05-23** · bash 双引号 + parameter expansion 的 quote-removal 陷阱：`"${p// /\\x20}"` 中 REPLACEMENT 段的 `\\` 先被 quote-removal 还原为单 `\`、再被 expansion 解析吞掉，结果丢反斜杠（实测 `frpx20easy`）；要让 REPLACEMENT 含字面反斜杠须用 4 反斜杠 `"${p// /\\\\x20}"` 或先存到单引号变量 `local esc='\x20'; "${p// /$esc}"`。验证字符级替换必须 verbatim source committed 函数，不能复用"等价" ad-hoc 测试脚本 · evidence: T-016 install-progress-and-systemd-unit-fix D-1
 - **2026-05-23** · install.sh 解包后必须对运行时可写路径（frp_easy.toml、.frp_easy/、frp_linux/）chown 给 RUN_USER（systemd `User=` 同款 `${SUDO_USER:-$(id -un)}` 两段式），否则 systemd 进程以 RUN_USER 启动时 appconf.Load() 写默认配置失败 → permission denied → 死循环重启。修复模式：解包后局部 chown（绝不全量 `chown -R /opt/<app>/`）+ 预生成 frp_easy.toml 让 appconf 走"已存在"分支 · evidence: T-017 install-role-and-public-ip
 - **2026-05-23** · 公网 IP 探测在国内 VM 上 api.ipify.org / ifconfig.me / icanhazip.com 三常用候选有高概率全部失败；必须提供用户手动覆盖通道（`FRP_EASY_PUBLIC_IP` 环境变量 + 函数首行 short-circuit）+ 失败横幅显式打印"登云控制台复制出口 IP"提示。仅靠多候选 URL 轮询在国内环境不够 · evidence: T-017 install-role-and-public-ip
+- **2026-05-23** · 前端 TS 接口与后端 Go struct 的 JSON 字段名漂移在双方 mock 测试都 PASS 时无法被捕获；本任务出现两处 P0：`size↔sizeBytes` 与 `basename↔namePrefix`，前端 spec mock 用自定字段名，后端单测用 OpenAPI 字段名，各自绿但生产必崩。补救：spec 测试用 OpenAPI codegen（如 openapi-typescript）做"契约一锤定音"，而非两边各自从 OpenAPI 抄一遍 · evidence: T-018 05_CODE_REVIEW P0-1/P0-2
+- **2026-05-23** · `scripts/verify_all.sh` 的 E.6 regex 是 `^##\s+Adversarial\s+tests`，**不允许数字编号前缀**（如 `## 2. Adversarial tests` 会 FAIL）；写 QA 06 时标题必须是裸 `## Adversarial tests` 不带任何前缀 · evidence: T-018 verify_all 首跑 E.6 FAIL
+- **2026-05-23** · gate-reviewer / code-reviewer 等 review 类 sub-agent 倾向把完整 review 内容返回到消息体而不写入对应 `0X_*.md` 文件；派发时 prompt 必须显式 "必须直接写到 <文件名> 文件" 才稳；否则 PM 要手工落盘 · evidence: T-018 stage 3/5 两次 reviewer 不落盘

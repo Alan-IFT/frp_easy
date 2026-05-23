@@ -2,19 +2,20 @@
   <div>
     <n-page-header title="代理规则" subtitle="管理 frpc 端口转发规则">
       <template #extra>
-        <n-button type="primary" @click="handleAdd">新增规则</n-button>
+        <n-button type="primary" @click="handleAdd">新增规则 / 批量新增</n-button>
       </template>
     </n-page-header>
 
     <n-data-table
       :columns="columns"
-      :data="proxiesStore.proxies"
+      :data="groupedRows"
       :loading="proxiesStore.loading"
+      :row-key="(row: TableRow) => row.key"
       style="margin-top: 16px"
     >
       <!-- T-007 AC-8(b)：空状态文案，与「新增规则」按钮文本对齐 -->
       <template #empty>
-        <n-empty description="暂无代理规则，点击右上角「新增规则」开始配置" />
+        <n-empty description="暂无代理规则，点击右上角「新增规则 / 批量新增」开始配置" />
       </template>
     </n-data-table>
 
@@ -24,9 +25,9 @@
     <!-- 新增/编辑弹窗 -->
     <n-modal
       v-model:show="showForm"
-      :title="editingProxy ? '编辑规则' : '新增规则'"
+      :title="editingProxy ? '编辑规则' : '新增规则 / 批量新增'"
       preset="card"
-      style="width: 560px"
+      style="width: 640px"
       :mask-closable="false"
     >
       <proxy-form
@@ -34,11 +35,15 @@
         v-model="formData"
         :edit-mode="!!editingProxy"
         :existing-proxy="editingProxy"
+        @update:batch-mode="(v: boolean) => (batchMode = v)"
+        @update:ports-expr="(v: string) => (portsExpr = v)"
       />
       <template #action>
         <n-space justify="end">
           <n-button @click="showForm = false">取消</n-button>
-          <n-button type="primary" :loading="submitting" @click="handleSubmit">保存</n-button>
+          <n-button type="primary" :loading="submitting" @click="handleSubmit">
+            {{ batchMode ? '批量创建' : '保存' }}
+          </n-button>
         </n-space>
       </template>
     </n-modal>
@@ -54,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, h, onMounted } from 'vue'
+import { ref, h, onMounted, computed } from 'vue'
 import {
   NPageHeader, NButton, NDataTable, NModal, NSpace, NTag, NEmpty,
   useMessage,
@@ -65,7 +70,8 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import FirewallHint from '../components/FirewallHint.vue'
 import { useProxiesStore } from '../stores/proxies'
 import { extractErrorMessage } from '../api/client'
-import type { Proxy, ProxyInput } from '../types'
+import { groupProxiesByPrefix, type GroupedProxyRow } from '../composables/useProxyGrouping'
+import type { Proxy, ProxyInput, BatchProxiesRequest } from '../types'
 
 const proxiesStore = useProxiesStore()
 const message = useMessage()
@@ -75,9 +81,18 @@ const showDeleteConfirm = ref(false)
 const submitting = ref(false)
 const editingProxy = ref<Proxy | null>(null)
 const deletingProxy = ref<Proxy | null>(null)
-const proxyFormRef = ref<{ validate: () => Promise<void> } | null>(null)
+const proxyFormRef = ref<{
+  validate: () => Promise<void>
+  isBatchMode: () => boolean
+  getPortsExpr: () => string
+  resetBatchState: () => void
+} | null>(null)
 const firewallPorts = ref<number[]>([])
 const firewallProto = ref<'tcp' | 'udp' | 'both'>('both')
+
+// 从子组件回传的批量状态镜像（用于按钮文案）
+const batchMode = ref(false)
+const portsExpr = ref('')
 
 const defaultFormData = (): ProxyInput => ({
   name: '',
@@ -92,6 +107,9 @@ const formData = ref<ProxyInput>(defaultFormData())
 function handleAdd() {
   editingProxy.value = null
   formData.value = defaultFormData()
+  batchMode.value = false
+  portsExpr.value = ''
+  proxyFormRef.value?.resetBatchState()
   showForm.value = true
 }
 
@@ -107,6 +125,8 @@ function handleEdit(proxy: Proxy) {
     enabled: proxy.enabled,
     version: proxy.version,
   }
+  batchMode.value = false
+  proxyFormRef.value?.resetBatchState()
   showForm.value = true
 }
 
@@ -120,8 +140,6 @@ async function handleDeleteConfirm() {
   try {
     await proxiesStore.deleteProxy(deletingProxy.value.id)
     message.success('规则已删除')
-    // T-007 AC-8(a)：删除成功后清空 FirewallHint，避免残留已删规则的端口提示。
-    // 注意：仅在删除成功时清；失败时保留以便用户参考（NIT-5）。
     firewallPorts.value = []
     firewallProto.value = 'both'
   } catch (e) {
@@ -140,6 +158,33 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
+    // T-018 §C.1：批量分支
+    if (!editingProxy.value && proxyFormRef.value?.isBatchMode()) {
+      const expr = proxyFormRef.value.getPortsExpr().trim()
+      const req: BatchProxiesRequest = {
+        basename: formData.value.name,
+        type: formData.value.type,
+        localIP: formData.value.localIP || '127.0.0.1',
+        portsExpr: expr,
+        enabled: formData.value.enabled !== false,
+      }
+      const res = await proxiesStore.batchCreate(req)
+      message.success(`批量创建 ${res.created} 条规则成功`)
+      showForm.value = false
+      // 批量场景的防火墙提示：取本次创建的所有远程端口
+      const ports = res.items
+        .map((p) => p.remotePort)
+        .filter((p): p is number => typeof p === 'number')
+      if (ports.length > 0) {
+        firewallPorts.value = ports
+        firewallProto.value =
+          req.type === 'tcp' ? 'tcp' :
+          req.type === 'udp' ? 'udp' : 'both'
+      }
+      return
+    }
+
+    // 原有：单条新增 / 编辑
     let savedProxy: Proxy
     if (editingProxy.value) {
       savedProxy = await proxiesStore.updateProxy(editingProxy.value.id, formData.value)
@@ -155,7 +200,6 @@ async function handleSubmit() {
       firewallPorts.value = [savedProxy.remotePort]
       firewallProto.value = savedProxy.type === 'tcp' ? 'tcp' : 'udp'
     } else {
-      // http/https: pass empty so FirewallHint auto-hides
       firewallPorts.value = []
     }
   } catch (e) {
@@ -165,53 +209,110 @@ async function handleSubmit() {
   }
 }
 
-const columns: DataTableColumns<Proxy> = [
-  { title: '名称', key: 'name' },
+// -----------------------------------------------------------------------
+// T-018 §C 折叠分组：纯视图层
+// -----------------------------------------------------------------------
+
+type TableRow = GroupedProxyRow
+
+const groupedRows = computed<TableRow[]>(() => {
+  return groupProxiesByPrefix(proxiesStore.proxies)
+})
+
+const columns = computed<DataTableColumns<TableRow>>(() => [
+  {
+    title: '名称',
+    key: 'name',
+    render: (row) => {
+      if (row.kind === 'group') {
+        return h('span', { style: 'font-weight: 600' },
+          `${row.basename}（${row.count} 条 ${row.proto.toUpperCase()}）`)
+      }
+      return row.proxy.name
+    },
+  },
   {
     title: '类型',
     key: 'type',
-    render: (row) => h(NTag, { type: 'info', size: 'small' }, { default: () => row.type.toUpperCase() }),
+    render: (row) => {
+      const type = row.kind === 'group' ? row.proto : row.proxy.type
+      return h(NTag, { type: 'info', size: 'small' },
+        { default: () => type.toUpperCase() })
+    },
   },
   {
     title: '本地地址',
     key: 'localAddr',
-    render: (row) => `${row.localIP}:${row.localPort}`,
+    render: (row) => {
+      if (row.kind === 'group') {
+        return `${row.localIP}:${row.portRangeText}`
+      }
+      return `${row.proxy.localIP}:${row.proxy.localPort}`
+    },
   },
   {
     title: '远程端口/域名',
     key: 'remote',
     render: (row) => {
-      if (row.remotePort) return String(row.remotePort)
-      if (row.customDomains?.length) return row.customDomains.join(', ')
+      if (row.kind === 'group') {
+        return row.portRangeText
+      }
+      if (row.proxy.remotePort) return String(row.proxy.remotePort)
+      if (row.proxy.customDomains?.length) return row.proxy.customDomains.join(', ')
       return '—'
     },
   },
   {
     title: '启用',
     key: 'enabled',
-    render: (row) => h(NTag, {
-      type: row.enabled ? 'success' : 'default',
-      size: 'small',
-    }, { default: () => row.enabled ? '启用' : '禁用' }),
+    render: (row) => {
+      if (row.kind === 'group') {
+        const allEnabled = row.proxies.every((p) => p.enabled)
+        const anyEnabled = row.proxies.some((p) => p.enabled)
+        const label =
+          allEnabled ? '启用' :
+          anyEnabled ? '部分启用' : '禁用'
+        return h(NTag, {
+          type: allEnabled ? 'success' : anyEnabled ? 'warning' : 'default',
+          size: 'small',
+        }, { default: () => label })
+      }
+      return h(NTag, {
+        type: row.proxy.enabled ? 'success' : 'default',
+        size: 'small',
+      }, { default: () => row.proxy.enabled ? '启用' : '禁用' })
+    },
   },
   {
     title: '操作',
     key: 'actions',
-    render: (row) => h(NSpace, {}, {
-      default: () => [
-        h(NButton, {
-          size: 'small',
-          onClick: () => handleEdit(row),
-        }, { default: () => '编辑' }),
-        h(NButton, {
-          size: 'small',
-          type: 'error',
-          onClick: () => handleDeleteRequest(row),
-        }, { default: () => '删除' }),
-      ],
-    }),
+    render: (row) => {
+      if (row.kind === 'group') {
+        return h(NSpace, {}, {
+          default: () => [
+            h(NButton, {
+              size: 'small',
+              onClick: () => { row.expanded = !row.expanded },
+            }, { default: () => row.expanded ? '收起明细' : '展开明细' }),
+          ],
+        })
+      }
+      return h(NSpace, {}, {
+        default: () => [
+          h(NButton, {
+            size: 'small',
+            onClick: () => handleEdit(row.proxy),
+          }, { default: () => '编辑' }),
+          h(NButton, {
+            size: 'small',
+            type: 'error',
+            onClick: () => handleDeleteRequest(row.proxy),
+          }, { default: () => '删除' }),
+        ],
+      })
+    },
   },
-]
+])
 
 onMounted(() => {
   void proxiesStore.fetchProxies()
