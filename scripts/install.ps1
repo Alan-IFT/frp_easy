@@ -20,7 +20,10 @@
 # 说明：本脚本不删除已存在安装中的 frp_easy.toml 与 .frp_easy\ 数据目录；
 #       目标目录已存在 frp-easy.exe 时按"升级"语义处理（覆盖二进制/脚本，保留配置与数据）。
 
-[CmdletBinding()]
+# 注意：本脚本既要支持 `.\install.ps1 -Help` 磁盘形态，也要支持 `irm ... | iex` 管道形态。
+# `[CmdletBinding()]` attribute 在 iex inline 上下文不允许（仅允许在 script file 或 function
+# 顶层），会触发 "Invoke-Expression: Unexpected attribute 'CmdletBinding'"。故此处不加。
+# `param` block 在 iex 形态下合法（虽无法从管道传参，$Help 取默认 $false），磁盘形态正常。
 param(
     [switch]$Help
 )
