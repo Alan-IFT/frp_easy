@@ -1,0 +1,5 @@
+# T-021: 强制 scripts/*.ps1 文件为 UTF-8 with BOM，防编辑器误存为 noBOM 导致 PS5.1 + zh-CN 主机解析失败。
+[*.ps1]
+charset = utf-8-bom
+end_of_line = lf
+insert_final_newline = true

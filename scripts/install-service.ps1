@@ -1,4 +1,4 @@
-# install-service.ps1 — frp_easy Windows Service 安装脚本（T-019 修订）
+﻿# install-service.ps1 — frp_easy Windows Service 安装脚本（T-019 修订）
 #
 # 用途：将解压后的 frp-easy.exe 注册为 Windows 服务（sc.exe create / config / failure / start）。
 #       T-019 起 sc.exe binPath= 直接指向 frp-easy.exe，进程内的 Windows Service ABI

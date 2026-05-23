@@ -1,4 +1,4 @@
-# archive-task.ps1 — Archive a completed task: harvest insights, move stage docs.
+﻿# archive-task.ps1 — Archive a completed task: harvest insights, move stage docs.
 #
 # Usage:
 #   pwsh -File scripts/archive-task.ps1 -Task <task-slug>

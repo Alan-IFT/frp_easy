@@ -1,4 +1,4 @@
-# uninstall-service.ps1 — frp_easy Windows Service 卸载脚本
+﻿# uninstall-service.ps1 — frp_easy Windows Service 卸载脚本
 #
 # 用途：停止并删除 Windows 服务（sc.exe stop + sc.exe delete），并对旧版（< T-019）
 #       install-service.ps1 曾生成的 frp-easy-svc.cmd 包装脚本做防御性清理；

@@ -1,4 +1,4 @@
-# install.ps1 — frp_easy 一键安装脚本（Windows）
+﻿# install.ps1 — frp_easy 一键安装脚本（Windows）
 #
 # 用途：一条命令完成 frp_easy 的下载、安装与 Windows 服务注册。自动探测架构，
 #       调用 GitHub Releases API 取固定标签 `rolling` 的滚动发布（与 main 分支

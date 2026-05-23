@@ -1,4 +1,4 @@
-# install-hooks.ps1 - Install the harness-kit git pre-commit hook.
+﻿# install-hooks.ps1 - Install the harness-kit git pre-commit hook.
 #
 # Why: .harness/ is the source of truth; CLAUDE.md + .github/copilot-instructions.md
 # are generated. Claude Code keeps them fresh via a Stop hook in .claude/settings.json,

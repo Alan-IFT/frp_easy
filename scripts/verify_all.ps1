@@ -1,4 +1,4 @@
-# verify_all.ps1 — Fullstack project total verification
+﻿# verify_all.ps1 — Fullstack project total verification
 # Generated for frp_easy (Go + Vue 3 + SQLite (Web UI to manage FRP, single-binary deploy)) on 2026-05-16
 #
 # Usage:
@@ -263,6 +263,30 @@ Step "E.6" "Adversarial tests section present in completed task reports" {
         if ($c -notmatch '##\s+Adversarial\s+tests') { $bad += $r.FullName.Substring($root.Length + 1) }
     }
     if ($bad.Count -gt 0) { throw "Test reports missing '## Adversarial tests' section:`n$($bad -join "`n")" }
+}
+
+Step "E.7" "scripts/*.ps1 have UTF-8 BOM" {
+    # T-021: 防回归闸门 —— scripts/*.ps1 全部必须 EF BB BF 起始。
+    # 设计 02_SOLUTION_DESIGN.md §2.2 + §9 I-1/I-2 (全 11 个加 BOM, 严格粒度)。
+    if (-not (Test-Path "scripts")) { return "SKIP" }
+    $ps1s = Get-ChildItem -Path "scripts" -Filter "*.ps1" -File -ErrorAction SilentlyContinue
+    if (-not $ps1s -or $ps1s.Count -eq 0) { return "SKIP" }
+    $missing = @()
+    foreach ($f in $ps1s) {
+        # 使用 .NET API 跨 PS5/7 一致 (Get-Content -Encoding Byte / -AsByteStream 在两版本 flag 不同)
+        $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+        if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+            # C-4 修订: 加 startsWith guard, 避免 verify_all 从子目录调用时 Substring 越界
+            if (-not $f.FullName.StartsWith($root)) {
+                throw "verify_all 必须从仓库根目录运行 (当前 root: $root)"
+            }
+            $relPath = $f.FullName.Substring($root.Length + 1)
+            $missing += $relPath
+        }
+    }
+    if ($missing.Count -gt 0) {
+        throw "Missing UTF-8 BOM in:`n$($missing -join "`n")"
+    }
 }
 
 # --- Summary ---

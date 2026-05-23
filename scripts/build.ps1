@@ -1,4 +1,4 @@
-# build.ps1 — frp_easy 生产构建脚本（Windows）
+﻿# build.ps1 — frp_easy 生产构建脚本（Windows）
 #
 # 输出：bin\frp-easy.exe（Windows x64）和（可选）bin\frp-easy-linux（Linux x64，交叉编译）
 #

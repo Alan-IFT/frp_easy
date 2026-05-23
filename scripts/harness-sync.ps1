@@ -1,4 +1,4 @@
-# harness-sync.ps1 — v0.10
+﻿# harness-sync.ps1 — v0.10
 # Binding sync: .harness/ (tool-agnostic SOT) → .claude/ (Claude Code path requirement).
 #
 # v0.10 scope (much narrower than v0.9.x):

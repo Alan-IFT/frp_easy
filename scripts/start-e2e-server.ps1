@@ -1,4 +1,4 @@
-#requires -Version 7
+﻿#requires -Version 7
 # start-e2e-server.ps1 — 为 Playwright E2E 测试启动 frp-easy 后端（Windows / PowerShell 7+）。
 # 与 scripts/start-e2e-server.sh 行为对齐，专供 PowerShell 调用路径使用。
 # 设计文档：docs/features/polish-pass/02_SOLUTION_DESIGN.md §2

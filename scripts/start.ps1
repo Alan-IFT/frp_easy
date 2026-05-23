@@ -1,4 +1,4 @@
-# start.ps1 — frp_easy 开发模式启动脚本（Windows）
+﻿# start.ps1 — frp_easy 开发模式启动脚本（Windows）
 #
 # 开发模式：Go API (port 7800) + Vite dev (port 5173) 独立运行，
 # Go 侧以 DevMode=true 开 CORS 允许 vite 代理。

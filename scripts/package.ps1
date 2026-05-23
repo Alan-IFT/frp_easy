@@ -1,4 +1,4 @@
-# package.ps1 — frp_easy Windows 发布包打包脚本
+﻿# package.ps1 — frp_easy Windows 发布包打包脚本
 #
 # 用途：在 scripts/build.ps1 产物基础上组装 staging 目录并 Compress-Archive 出 bin\release\<...>.zip；
 #       可选同时打 Linux tar.gz（需 Windows 10 22H2+ 自带 tar.exe）。

@@ -275,6 +275,31 @@ else
     fi
 fi
 
+# E.7 — All scripts/*.ps1 must start with UTF-8 BOM (EF BB BF)
+# T-021: 防回归闸门 —— scripts/*.ps1 全部必须 EF BB BF 起始。
+# 设计 02_SOLUTION_DESIGN.md §2.2 + §9 I-1/I-2 (全 11 个加 BOM, 严格粒度)。
+if [[ ! -d scripts ]]; then
+    step "E.7" "scripts/*.ps1 have UTF-8 BOM" "SKIP"
+else
+    e7_missing=""
+    e7_found_any=false
+    while IFS= read -r f; do
+        e7_found_any=true
+        # POSIX 字节级: head -c 3 + od -An -tx1; od 在 Alpine / 各 minimal 镜像默认存在 (xxd 不保证)
+        first3=$(head -c 3 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+        if [[ "$first3" != "efbbbf" ]]; then
+            e7_missing="$e7_missing\n$f"
+        fi
+    done < <(find scripts -maxdepth 1 -name '*.ps1' -type f 2>/dev/null)
+    if [[ "$e7_found_any" == "false" ]]; then
+        step "E.7" "scripts/*.ps1 have UTF-8 BOM" "SKIP"
+    elif [[ -z "$e7_missing" ]]; then
+        step "E.7" "scripts/*.ps1 have UTF-8 BOM" "PASS"
+    else
+        step "E.7" "scripts/*.ps1 have UTF-8 BOM" "FAIL" "$(echo -e $e7_missing)"
+    fi
+fi
+
 # Summary
 echo ""
 echo "=== Summary ==="
