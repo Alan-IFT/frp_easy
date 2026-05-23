@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-017 | install-role-and-public-ip | DELIVERED | 2026-05-23 | `docs/features/_archived/install-role-and-public-ip/` |
 | T-016 | install-progress-and-systemd-unit-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/install-progress-and-systemd-unit-fix/` |
 | T-015 | fix-dirty-release-version | DELIVERED | 2026-05-22 | trivial 直接修复（单行级，无阶段文档）：`npm install --frozen-lockfile`→`npm ci` |
 | T-014 | frp-binary-auto-download | DELIVERED | 2026-05-22 | `docs/features/_archived/frp-binary-auto-download/` |

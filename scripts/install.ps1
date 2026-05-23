@@ -31,6 +31,57 @@ $ErrorActionPreference = "Stop"
 $ApiUrl = "https://api.github.com/repos/Alan-IFT/frp_easy/releases/tags/rolling"
 $InstallDir = if ($env:FRP_EASY_INSTALL_DIR) { $env:FRP_EASY_INSTALL_DIR } else { "C:\Program Files\frp-easy" }
 
+# ---- 函数：Get-PublicIPv4 ----
+# 意图：Windows 路径同步 Linux detect_public_ip 的公网 IP 探测（T-017 FR-B / G-8）。
+# 入参：无（读 env FRP_EASY_PUBLIC_IP + 函数内常量 $PublicIPCandidates）。
+# 出参：成功返回 IPv4 字符串；失败返回 $null。
+# 预算：单候选 Invoke-WebRequest -TimeoutSec 3 秒，最坏 3 × 3 = 9 秒。
+# 验证：HTTP 200 + Trim() + [ipaddress]::TryParse 校验 IPv4 字面量；HTML 错误页
+# 不当 IP 用（insight L37 红线）。
+# Windows 路径暂无 role 区分（OOS-2），公网 IP 探测一律执行（C-6）。
+function Get-PublicIPv4 {
+    # FRP_EASY_PUBLIC_IP short-circuit：用户预先指定时跳过外网探测。
+    if ($env:FRP_EASY_PUBLIC_IP) {
+        $parsed = $null
+        if ([ipaddress]::TryParse($env:FRP_EASY_PUBLIC_IP, [ref]$parsed)) {
+            return $env:FRP_EASY_PUBLIC_IP
+        }
+        # 非 IP 字面量但格式安全（hostname / IPv6）—— 也直接返回，由用户自负。
+        if ($env:FRP_EASY_PUBLIC_IP -match '^[A-Za-z0-9.:_-]+$') {
+            return $env:FRP_EASY_PUBLIC_IP
+        }
+        return $null
+    }
+    # NFR-2：明文写死候选 URL（用户可 grep 审计），与 install.sh 同款 3 条。
+    $PublicIPCandidates = @(
+        'https://api.ipify.org',
+        'https://ifconfig.me/ip',
+        'https://icanhazip.com'
+    )
+    $prevProgress = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        foreach ($url in $PublicIPCandidates) {
+            try {
+                $resp = Invoke-WebRequest -Uri $url -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
+                if ($resp.StatusCode -eq 200) {
+                    $ip = ($resp.Content).Trim()
+                    $parsed = $null
+                    if ([ipaddress]::TryParse($ip, [ref]$parsed) -and $parsed.AddressFamily -eq 'InterNetwork') {
+                        return $ip
+                    }
+                }
+            } catch {
+                # 单候选失败 → 继续下一个
+                continue
+            }
+        }
+    } finally {
+        $ProgressPreference = $prevProgress
+    }
+    return $null
+}
+
 # ---- 步骤 0：-Help（必须在依赖检测之前）----
 if ($Help) {
     @"
@@ -242,6 +293,9 @@ try {
 }
 
 # ---- 步骤 8：打印安装结果 ----
+# Windows 路径暂无 role 区分（OOS-2），公网 IP 探测一律执行（C-6）。
+# Service 默认以 LocalSystem 跑，没有 Linux unit User= 那个根因；UI 监听地址沿用
+# appconf.Default() = 0.0.0.0，main.go 启动时会打印安全提示。
 Write-Host "==> [8/8] 安装完成。"
 
 $localIp = "<本机IP>"
@@ -254,6 +308,34 @@ try {
     $localIp = "<本机IP>"
 }
 
+# 公网 IP 探测（T-017 G-8 / FR-B 同步）。失败时给出明确中文降级文案 + 手动覆盖样例。
+$publicIp = Get-PublicIPv4
+
+$publicLine = ""
+$publicHint = ""
+if ($publicIp) {
+    # BC-3：IPv6 字面量必须用 [xxx]:port 包裹，否则浏览器无法解析。
+    # 探测路径只返回 IPv4，仅当用户手动 $env:FRP_EASY_PUBLIC_IP=<IPv6> 时会走到这里。
+    if ($publicIp -match ':') {
+        $publicUrl = "http://[${publicIp}]:7800"
+    } else {
+        $publicUrl = "http://${publicIp}:7800"
+    }
+    if ($publicIp -eq $localIp) {
+        # AMBIG-F = F2：公网 = LAN 时仍打两行 + 标注。
+        $publicLine = "  公网访问：    ${publicUrl}   （与局域网 IP 相同 —— 本机直接在公网上）"
+    } else {
+        $publicLine = "  公网访问：    ${publicUrl}"
+    }
+} else {
+    $publicLine = "  公网访问：    <公网 IP 探测失败，请手动确认服务器出口 IP>"
+    $publicHint = @"
+
+    国内 VM（腾讯云 / 阿里云 / 华为云）可登云控制台 → 实例详情复制公网 IP。
+    确认后可设 `$env:FRP_EASY_PUBLIC_IP=<your-ip>` 后重新运行本脚本（绕过探测）。
+"@
+}
+
 @"
 
 ============================================================
@@ -264,6 +346,7 @@ frp_easy 一键安装完成！
 访问地址：
   本机访问：    http://127.0.0.1:7800
   局域网访问：  http://${localIp}:7800
+$publicLine$publicHint
 
 常用命令：
   sc query frp-easy        # 查看服务状态

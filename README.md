@@ -50,13 +50,19 @@
 
 ### 一键安装（推荐）
 
-一条命令完成下载、安装、注册开机自启服务。
+一条命令完成下载、安装、注册开机自启服务。**安装前请先确认本机角色**——服务端要监听 `0.0.0.0` 让外部能连，客户端只监听 `127.0.0.1` 最安全；这是装机时必须做的二选一。
 
-**Linux / macOS**（需 root / sudo）：
+**Linux / macOS**（需 root / sudo；以下两条命令二选一）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash
+# 服务端（公网 VM，要让外部 frpc 客户端能连进来）
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash
+
+# 客户端（内网设备，仅本机访问 UI 最安全）
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash
 ```
+
+> 注意 `sudo -E` 的 `-E` 不能省 —— 它让 sudo 透传 `FRP_EASY_ROLE` 环境变量到子进程，否则脚本会因为缺少 role 退出码 3 并报错（保护用户避免静默装错角色）。
 
 **Windows**（管理员 PowerShell）：
 
@@ -64,11 +70,23 @@ curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/inst
 irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
 ```
 
+> Windows 路径目前不区分服务端 / 客户端（默认监听 `0.0.0.0`，与历史行为一致）；如需仅本机访问，装完后编辑 `frp_easy.toml` 把 `UIBindAddr` 改为 `127.0.0.1` 并重启服务。
+
 > 安全提示：`curl | bash` / `irm | iex` 会以高权限执行远程脚本。谨慎用户可先下载脚本审阅后再运行，详见 **[docs/DEPLOYMENT.md A.0 一键安装](docs/DEPLOYMENT.md)**。
+
+#### 国内 VM 公网 IP 探测兜底
+
+服务端安装结束横幅会尝试通过 `api.ipify.org` / `ifconfig.me` / `icanhazip.com` 三家探测公网出口 IP；国内云厂商网络下这三家**经常全部不可达**。这种情况脚本会打印降级文案，让你直接登腾讯云 / 阿里云 / 华为云控制台复制实例公网 IP，并提供绕过探测的命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_PUBLIC_IP=<你的公网IP> FRP_EASY_ROLE=server sudo -E bash
+```
 
 #### 如何更新
 
-重新运行上方**同一条**一键安装命令即可升级到最新版。升级会停服、覆盖主二进制与脚本、重注册服务，并完整保留你的配置（`frp_easy.toml`）、数据目录（`.frp_easy/`），以及 `frp_linux/`/`frp_win/` 下你已下载的 frp 二进制。
+重新运行**与首装相同 role** 的那条一键安装命令即可升级。升级会停服、覆盖主二进制与脚本、重注册服务，并完整保留你的配置（`frp_easy.toml`）、数据目录（`.frp_easy/`），以及 `frp_linux/` / `frp_win/` 下你已下载的 frp 二进制。
+
+> 切换角色（如客户端转服务端）必须先卸载（`sudo /opt/frp-easy/scripts/uninstall-service.sh`）再用新 role 装；脚本默认拒绝静默切换角色避免误操作，必要时可加 `FRP_EASY_FORCE_ROLE=yes` 强制覆盖。
 
 一键安装会把 frp_easy 装到固定目录（Linux/macOS `/opt/frp-easy`、Windows `C:\Program Files\frp-easy`）并注册为系统服务。
 
@@ -101,12 +119,12 @@ frp_easy 自身的配置文件是 `frp_easy.toml`（与 frp 的 `frpc.toml` / `f
 
 | 字段 | 默认值 | 说明 |
 |---|---|---|
-| `UIBindAddr` | `0.0.0.0` | UI 服务监听地址（仅主机，不含端口） |
+| `UIBindAddr` | role-derived：服务端一键安装 `0.0.0.0`，客户端一键安装 `127.0.0.1`；手动启动（裸跑二进制）`0.0.0.0` | UI 服务监听地址（仅主机，不含端口） |
 | `UIPort` | `7800` | UI 服务监听端口 |
 | `DataDir` | `./.frp_easy` | 数据目录（SQLite 数据库存放路径） |
 | `LogDir` | `./.frp_easy/logs` | 日志目录（frpc / frps 子进程日志） |
 
-示例 `frp_easy.toml`：
+服务端 `frp_easy.toml` 示例（一键安装自动生成）：
 
 ```toml
 UIBindAddr = "0.0.0.0"
@@ -115,25 +133,35 @@ DataDir    = "./.frp_easy"
 LogDir     = "./.frp_easy/logs"
 ```
 
-> 升级时不会改写你已有的 `frp_easy.toml`：默认值变更只作用于**新建配置文件**与**留空字段**。老用户若显式写过 `UIBindAddr` / `UIPort`，升级后保持原值不变。
-
-### 从其他设备访问 Web UI
-
-frp_easy 默认 `UIBindAddr = "0.0.0.0"`，即监听所有网卡。这是有意的设计取舍：frp_easy 本质是远程内网穿透管理工具，运维场景天然需要从其他设备访问 Web UI，默认仅本机会迫使每个用户首启后改配置。
-
-- **同局域网访问**：在其他设备的浏览器打开 `http://<运行 frp_easy 的机器 IP>:7800`。
-- **安全说明**：`0.0.0.0` 不等于"无认证暴露" —— frp_easy 已内置认证加固（argon2id 密码哈希、会话 Cookie、CSRF 防护、登录失败 IP 限流）。绑定对外地址时，启动期会在 stderr 打印一条安全提示，引导你**尽快完成 setup 向导**（setup 完成前界面尚无密码保护，这是最需要尽快关闭的暴露窗口）。
-- **如对外暴露到公网**：建议放在反向代理（Nginx / Caddy）之后，并确认防火墙规则。
-
-### 仅本机使用：改回 127.0.0.1
-
-如果只在本机使用、不需要其他设备访问，编辑 `frp_easy.toml`：
+客户端 `frp_easy.toml` 示例（一键安装自动生成）：
 
 ```toml
 UIBindAddr = "127.0.0.1"
+UIPort     = 7800
+DataDir    = "./.frp_easy"
+LogDir     = "./.frp_easy/logs"
 ```
 
-保存后重启 frp_easy。此时 UI 只有本机可访问，启动期也不再打印对外暴露的安全提示。
+> 升级时不会改写你已有的 `frp_easy.toml`：role-derived 默认只作用于**新建配置文件**（首装）；老用户已有的 `UIBindAddr` 显式值升级后保持不变。
+
+### 服务端：从其他设备访问 Web UI
+
+服务端一键安装默认 `UIBindAddr = "0.0.0.0"`，监听所有网卡。这是有意的设计取舍：服务端本身就是要让外部设备能连进来，否则 frp 内网穿透服务无法工作。
+
+- **同局域网访问**：在其他设备的浏览器打开 `http://<服务端 LAN IP>:7800`。
+- **公网访问**：浏览器打开 `http://<服务端公网 IP>:7800`；需要云厂商安全组放行 7800/tcp（脚本横幅会提示）。
+- **安全说明**：`0.0.0.0` 不等于"无认证暴露" —— frp_easy 已内置认证加固（argon2id 密码哈希、会话 Cookie、CSRF 防护、登录失败 IP 限流）。绑定对外地址时，启动期会在 stderr 打印一条安全提示，引导你**尽快完成 setup 向导**（setup 完成前界面尚无密码保护，这是最需要尽快关闭的暴露窗口）。
+- **如对外暴露到公网**：建议放在反向代理（Nginx / Caddy）之后，并确认防火墙规则。
+
+### 客户端：仅本机访问
+
+客户端一键安装默认 `UIBindAddr = "127.0.0.1"`，只允许本机访问 UI —— 客户端通常在内网设备上跑，UI 没必要对外暴露。如需临时让局域网其他设备访问客户端 UI，编辑 `frp_easy.toml`：
+
+```toml
+UIBindAddr = "0.0.0.0"
+```
+
+保存后 `systemctl restart frp-easy`。改回 `127.0.0.1` 即可恢复仅本机访问。
 
 ---
 

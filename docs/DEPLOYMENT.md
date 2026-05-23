@@ -35,13 +35,21 @@
 
 ### A.0 一键安装（推荐）
 
-最省事的方式，下面一条命令完成下载、安装、注册开机自启。
+最省事的方式，下面一条命令完成下载、安装、注册开机自启。**Linux / macOS 必须显式指定角色**——服务端要监听 `0.0.0.0` 让外部能连，客户端只监听 `127.0.0.1` 最安全；脚本拒绝静默默认，避免装错角色。
 
-**Linux / macOS**（需 root / sudo）：
+**Linux / macOS**（需 root / sudo；以下两条命令二选一）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash
+# 服务端（公网 VM，要让外部 frpc 客户端能连进来）
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash
+
+# 客户端（内网设备，仅本机访问 UI 最安全）
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash
 ```
+
+> `sudo -E` 的 `-E` 不能省 —— 让 sudo 透传 `FRP_EASY_ROLE` 环境变量到子进程；否则脚本以退出码 3 提示你补上 role。
+
+> 国内 VM 公网 IP 探测兜底：脚本横幅会尝试通过 `api.ipify.org` / `ifconfig.me` / `icanhazip.com` 三家探测公网出口 IP，国内云厂商网络下这三家**经常全部不可达**。这种情况脚本会打印降级文案，让你直接登云厂商控制台复制实例公网 IP，并给出绕过探测的命令：`curl ... | FRP_EASY_PUBLIC_IP=<你的公网IP> FRP_EASY_ROLE=server sudo -E bash`。
 
 **Windows**（以管理员身份运行 PowerShell）：
 
@@ -49,12 +57,14 @@ curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/inst
 irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
 ```
 
+> Windows 路径目前不区分服务端 / 客户端（默认监听 `0.0.0.0`，与历史行为一致）；如需仅本机访问，装完后编辑 `frp_easy.toml` 把 `UIBindAddr` 改为 `127.0.0.1` 并重启服务。
+
 > 安全提示：`curl | bash` 会以 root 执行远程脚本。谨慎用户可先下载脚本审阅后再运行：
 >
 > ```bash
 > curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh -o install.sh
 > # 审阅 install.sh 内容后
-> sudo bash install.sh
+> sudo FRP_EASY_ROLE=server bash install.sh  # 或 client
 > ```
 
 > 安全提示：`irm | iex` 会在当前会话执行远程脚本。谨慎用户可先下载脚本审阅：
@@ -79,7 +89,7 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 > 若想了解服务的状态查询 / 日志 / 卸载命令，见下方[路径 C](#路径-c--作为系统服务)。
 > macOS 因无 systemd / launchd 模板，一键安装会下载安装后提示手动启动，不注册服务。
 
-**如何更新**：重新运行上方**同一条**一键安装命令即可升级。升级会停服 → 覆盖主二进制与脚本 → 重注册服务，并完整保留 `frp_easy.toml`、`.frp_easy/` 数据目录，以及 `frp_linux/`/`frp_win/` 下你已下载的 frp 二进制（升级不触碰它们）。
+**如何更新**：重新运行**与首装相同 role** 的那条一键安装命令即可升级。升级会停服 → 覆盖主二进制与脚本 → 重注册服务，并完整保留 `frp_easy.toml`、`.frp_easy/` 数据目录，以及 `frp_linux/`/`frp_win/` 下你已下载的 frp 二进制（升级不触碰它们）。切换角色（如客户端转服务端）必须先卸载再用新 role 装；脚本默认拒绝静默切换避免误操作，必要时可加 `FRP_EASY_FORCE_ROLE=yes` 强制覆盖。
 
 > 不想用一键安装？下方 **A.1–A.3 手动安装（备选）** 是不使用一键安装时的备选路径。
 
@@ -130,9 +140,11 @@ cd .\frp-easy-<VERSION>-windows-amd64
 frp_easy UI 已启动：http://0.0.0.0:7800 （Ctrl+C 退出）
 ```
 
-> 默认 `UIBindAddr = "0.0.0.0"` 监听所有网卡，stderr 还会打印一条安全提示。
+> 裸跑（路径 A.3 / B 手动启动）的 `UIBindAddr` 默认 `0.0.0.0` 监听所有网卡，stderr 还会打印一条安全提示。
 > 本机访问用 <http://127.0.0.1:7800>；同局域网其他设备用 `http://<本机IP>:7800`。
 > 仅需本机访问时，把 `frp_easy.toml` 的 `UIBindAddr` 改为 `127.0.0.1` 后重启。
+>
+> 注：通过 [A.0 一键安装](#a0-一键安装推荐)装的，监听地址在装机时按 `FRP_EASY_ROLE` 自动决定（server=`0.0.0.0`、client=`127.0.0.1`），不需要装完手动改。
 
 浏览器打开 <http://127.0.0.1:7800>，按 setup 向导创建管理员账号并完成首启配置。
 

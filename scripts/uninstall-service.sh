@@ -73,6 +73,12 @@ echo "==> systemctl daemon-reload 完成"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# T-017：清理 .role 持久化文件，保持 uninstall 幂等。.role 是 install.sh 的安装期
+# 元数据（仅升级期被读，运行时不读），unit 卸载后没有保留意义。不删则下次 reinstall
+# 切换 role 时会触发 "role 冲突" 误报。frp_easy.toml 与 .frp_easy/ 保留（用户配置
+# 与运行时数据，与 T-016 行为一致，由用户手动清理）。
+rm -f "${INSTALL_DIR}/.role"
+
 cat <<EOF
 
 服务已卸载。
