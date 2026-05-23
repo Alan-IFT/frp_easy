@@ -1,0 +1,390 @@
+# 02 — Solution Design · T-020 claude-settings-context7-fix
+
+> Stage 2 / 7 · Solution Architect · 模式：`full` · 输出语言：中文 · 2026-05-23
+> 上游：`01_REQUIREMENT_ANALYSIS.md` Verdict = READY · `PM_LOG.md` 红线复议通过
+
+---
+
+## 1. 设计概要
+
+仅修改单一配置文件 `c:/Programs/frp_easy/.claude/settings.json`，做三类变更：(a) **P0** 修正 `$schema` URL（补 `.json` 后缀）以恢复 VS Code / Cursor 的 schema 校验与 IntelliSense；(b) **P1** 在 `permissions.deny` 中追加 5 条 `Bash(rm ...)` / `Bash(find ... -delete:*)` / `Bash(/bin/rm ...)` 字面前缀，覆盖几个最常见的 `rm -rf /` 绕过路径；(c) **P2** 追加 3 条官方安全示例推荐的 `Read(./.env)` / `Read(./.env.*)` / `Read(./secrets/**)` deny，对 `.env` 类敏感文件预防性拦截。**`_comment` / `_doc_sync_hook` / `hooks.Stop` / `permissions.allow` 全部保持原状**。本任务不引入新模块、新依赖、新代码路径，纯配置修订。
+
+---
+
+## 2. Affected modules
+
+| 文件 | 路径（绝对） | 改动类型 |
+|---|---|---|
+| Claude Code 项目级 settings | `c:/Programs/frp_easy/.claude/settings.json` | edit（字符串替换 + 数组追加） |
+
+无其他文件变更。`scripts/verify_all.{ps1,sh}` 与 `scripts/harness-sync.{ps1,sh}` 经 grep 核验**不依赖 `.claude/settings.json` 内容**（仅 `install-hooks.{ps1,sh}` 的注释提及 settings.json，且仅为说明文档，不解析其内容），故无需联动改动。
+
+---
+
+## 3. Module decomposition
+
+不涉及新模块。
+
+---
+
+## 4. Data model changes
+
+不涉及。
+
+---
+
+## 5. API contracts
+
+不涉及（无 HTTP API、无函数签名变化）。本任务唯一的"契约"是 JSON Schema：
+
+- 修订后 `$schema` 字段值：`"https://json.schemastore.org/claude-code-settings.json"`
+- 该 schema 的 `additionalProperties` 默认为 `true`，故 `_comment` / `_doc_sync_hook` 不触发校验错误（信息性字段安全保留）。
+
+---
+
+## 6. Sequence / flow
+
+```
+[Claude Code 启动 / VS Code 打开 settings.json]
+        │
+        ▼
+读取 .claude/settings.json
+        │
+        ├── JSON parse 通过（AC-2）
+        ▼
+解析 $schema URL → https://json.schemastore.org/claude-code-settings.json
+        │（修复后 200 OK，修复前 404）
+        ▼
+schema 注入：permissions.allow / deny / hooks.Stop 字段获得 IntelliSense
+        │
+        ▼
+permissions 引擎遍历 allow / deny 数组：
+   - deny 中遇到工具调用，做"字面前缀匹配"
+   - 命中即拒绝（如 `Bash(rm -rf ~/foo)` 命中新追加的 `Bash(rm -rf ~:*)`）
+        │
+        ▼
+Stop hook 不变：仍跑 pwsh -File scripts/harness-sync.ps1
+```
+
+---
+
+## 7. Reuse audit
+
+| Need | Existing code / 资源 | 路径 | 决策 |
+|---|---|---|---|
+| 官方 schema URL | JSON Schema Store 已提供 `claude-code-settings.json` | `https://json.schemastore.org/claude-code-settings.json` | 直接引用（修复 URL 即可） |
+| Bash `rm` 字面前缀 deny 模板 | 已有 `Bash(rm -rf /:*)`、`Bash(git push --force:*)` | `.claude/settings.json` line 29-31 | 复用其语法风格追加新条目 |
+| Read 类 deny 写法 | context7 官方安全示例 | `https://code.claude.com/docs/en/permissions` | 直接引用官方示例三条 |
+| settings.json 备份 / 回滚 | git 已纳管该文件 | `c:/Programs/frp_easy/.claude/settings.json`（in repo） | `git checkout --` 一键回滚 |
+| JSON 解析校验工具 | `ConvertFrom-Json`（PowerShell 内置）/ `python -m json.tool` | 系统/解释器 | QA 直接用 |
+
+**未发现可复用代码 / 模块需重写。** 本任务纯文本编辑，不存在"新模块"问题。
+
+---
+
+## 8. 决策表（核心交付）
+
+> 把 RA §5 的每个分类条目拍板。每条带依据。
+
+| 编号 | RA 项 | 决策 | 依据 |
+|---|---|---|---|
+| **D-1** | P0-1 `$schema` URL 补 `.json` 后缀 | **纳入** | 无可商榷；context7 settings 文档与 JSON Schema Store 实际 URL 都带 `.json` 后缀。零风险，修复编辑器校验。 |
+| **D-2** | P1-1 Bash rm deny 加固（追加常见绕过前缀） | **纳入** | RA 默认建议；context7 permissions 文档显式告警字面前缀的弱点；项目威胁面虽低但属"基线漏洞"，零成本补齐。 |
+| **D-3** | P2-1 Read 敏感文件 deny | **纳入** | RA 默认建议；当前仓库无 `.env` 但属预防性配置，成本几乎为零，未来引入 `.env` 立即生效。 |
+| **D-4** | I-1 `_comment` / `_doc_sync_hook` 保留 | **不动** | 承载知识；JSON Schema 默认 `additionalProperties: true`，不触发校验错误。 |
+| **D-5** | I-2 Stop hook 跨平台改造 | **out of scope** | RA §3.2 第 5 条；这是 init 模板属性而非 bug，超出"修复"语义。 |
+| **D-6** | `_comment` 字段值是否更新 | **不动** | RA §5 I-1 决议保留原文不动；任何文案改写均超出本任务范围。 |
+
+### 8.1 P1 新增 deny 条目清单（D-2 落地）
+
+按 context7 官方"字面前缀匹配"语法，追加：
+
+1. `Bash(rm -rf ~:*)` —— 拦 `rm -rf ~`、`rm -rf ~/...`
+2. `Bash(rm -rf .:*)` —— 拦 `rm -rf .`、`rm -rf ./...`
+3. `Bash(rm -rf $HOME:*)` —— 拦字面 `$HOME` 展开前（Bash 工具传字面字符串时命中）
+4. `Bash(/bin/rm:*)` —— 拦 `/bin/rm -rf ...`（绕过 `rm` 命令名匹配的常见路径）
+5. `Bash(find / -delete:*)` —— 拦 `find / -delete ...`（context7 文档点名的典型绕过）
+
+> **不做完备防御**：context7 已警示 deny 是字面前缀匹配、无法穷举（如 `rm -r -f /`、空格变体、`\rm`、自写脚本 etc.）。本设计目标是把"教科书级几条"堵住，深度安全仰赖系统沙盒 / 用户 review。
+
+### 8.2 P2 新增 deny 条目清单（D-3 落地）
+
+按 context7 permissions 文档安全示例，追加：
+
+1. `Read(./.env)`
+2. `Read(./.env.*)`
+3. `Read(./secrets/**)`
+
+> Windows 路径行为见 §10 R-3：context7 文档使用 POSIX 风格的 `./`，Claude Code 内部对 Windows 反斜杠路径的匹配行为依赖其工具实现；本设计照搬官方示例字符串、不做改写，保持与上游一致。
+
+### 8.3 deny 数组最终顺序（分组排序，提升 reviewer 可读性）
+
+```
+[
+  // git 类（原有，不动）
+  "Bash(git push --force:*)",
+  "Bash(git push -f:*)",
+  // rm / find 类（原有 1 条 + 新增 5 条）
+  "Bash(rm -rf /:*)",
+  "Bash(rm -rf ~:*)",
+  "Bash(rm -rf .:*)",
+  "Bash(rm -rf $HOME:*)",
+  "Bash(/bin/rm:*)",
+  "Bash(find / -delete:*)",
+  // Read 敏感文件类（全部新增）
+  "Read(./.env)",
+  "Read(./.env.*)",
+  "Read(./secrets/**)"
+]
+```
+
+> JSON 不支持 `//` 注释，上面只是 reviewer 视觉分组示意；**实际写入文件时不带注释**，但通过排序与空行（JSON 允许逗号前后元素间换行）保持视觉分组。
+
+---
+
+## 9. 最终修改 — Unified Diff（Developer 直接照做）
+
+```diff
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -1,5 +1,5 @@
+ {
+-  "$schema": "https://json.schemastore.org/claude-code-settings",
++  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+   "_comment": "Generated by harness-kit. Edit hooks/permissions to suit your project. Stop hook auto-runs harness-sync so .harness/ edits flow to .claude/ + CLAUDE.md without you remembering.",
+   "permissions": {
+     "allow": [
+@@ -28,7 +28,15 @@
+     "deny": [
+       "Bash(git push --force:*)",
+       "Bash(git push -f:*)",
+-      "Bash(rm -rf /:*)"
++      "Bash(rm -rf /:*)",
++      "Bash(rm -rf ~:*)",
++      "Bash(rm -rf .:*)",
++      "Bash(rm -rf $HOME:*)",
++      "Bash(/bin/rm:*)",
++      "Bash(find / -delete:*)",
++      "Read(./.env)",
++      "Read(./.env.*)",
++      "Read(./secrets/**)"
+     ]
+   },
+   "hooks": {
+```
+
+字符级要点（Developer 必读）：
+
+- **行尾 LF**（与现有文件一致），**无 BOM**，**UTF-8**。
+- **缩进 2 空格**。
+- **文件末尾保留单个换行符**（POSIX 友好）。
+- **数组最后一个元素无尾逗号**（JSON 严格语法）。
+- 改完立即 `Get-Content .claude/settings.json -Raw | ConvertFrom-Json | Out-Null` 应不抛错。
+
+---
+
+## 10. 改后完整文件预览
+
+> 这是 Developer 应该写入到 `c:/Programs/frp_easy/.claude/settings.json` 的最终全文。**Reviewer 一眼对照即可**。
+
+```json
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Generated by harness-kit. Edit hooks/permissions to suit your project. Stop hook auto-runs harness-sync so .harness/ edits flow to .claude/ + CLAUDE.md without you remembering.",
+  "permissions": {
+    "allow": [
+      "Bash(npm:*)",
+      "Bash(pnpm:*)",
+      "Bash(yarn:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(python:*)",
+      "Bash(pip:*)",
+      "Bash(pytest:*)",
+      "Bash(uv:*)",
+      "Bash(poetry:*)",
+      "Bash(go:*)",
+      "Bash(cargo:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(pwsh:*)",
+      "Bash(bash scripts/harness-sync.sh:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf .:*)",
+      "Bash(rm -rf $HOME:*)",
+      "Bash(/bin/rm:*)",
+      "Bash(find / -delete:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
+    ]
+  },
+  "hooks": {
+    "_doc_sync_hook": "Stop hook below auto-runs harness-sync so a forgotten manual sync never breaks the binding. Command was OS-picked at init time: `pwsh -File scripts/harness-sync.ps1` on Windows, `bash scripts/harness-sync.sh` elsewhere. Swap freely if your environment differs (e.g. WSL using bash on Windows, or pwsh installed on Linux).",
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -File scripts/harness-sync.ps1"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+行数：约 47 行（与原 47 行 + 9 行 deny 新增 ≈ 56 行）。
+
+---
+
+## 11. 风险表
+
+| ID | 风险 | 概率 | 影响 | 缓解 |
+|---|---|---|---|---|
+| **R-1** | JSON 语法错误（漏逗号 / 尾逗号 / 引入 BOM / 行尾混合） → Claude Code 启动拒载 settings，permissions 退化为默认 | 低 | 高（Claude Code 不可用 / 静默放行） | Developer 必须在写盘后立即跑 `Get-Content … -Raw \| ConvertFrom-Json \| Out-Null`；QA Stage 6 再次断言（见 §12 测试策略）；万一炸了 `git checkout` 立刻复原 |
+| **R-2** | 新增 `Bash(find / -delete:*)` 误伤合法 `find` 用法 | 极低 | 低 | 字面前缀必须以 `find / -delete` 开头才命中；项目内合法 `find` 用例不会以此开头（grep 验证：项目无任何脚本以 `find /` 开头）。即便误伤，allow 列表中也没有 `Bash(find:*)`，本就需要用户每次审批 —— 不引入新摩擦 |
+| **R-3** | `Read(./.env.*)` 与 `Read(./secrets/**)` 模式在 Windows 路径（反斜杠 / 大小写不敏感）下匹配行为不明 | 中 | 中（漏拦截而非误拦） | 照搬 context7 官方示例字符串，与上游保持一致；Claude Code 工具调用路径通常归一化为 POSIX 风格；本任务**不**承诺完备拦截，明确写在 §8.1 "不做完备防御"；后续若引入真实 `.env`，可在 Insight Index 追加观察条目 |
+| **R-4** | `scripts/verify_all` / `scripts/harness-sync` 对 `.claude/settings.json` 内容有隐式断言 → 改后 verify_all FAIL | 极低 | 高 | 已 grep 核验：`verify_all.{ps1,sh}` 仅 E.4 调用 `harness-sync -Check`；`harness-sync.{ps1,sh}` 仅 diff `.harness/agents/` 与 `.harness/skills/`，**完全不读 settings.json 内容**。本风险已被事实排除，但 QA Stage 6 仍应跑 `verify_all` 实证 |
+| **R-5** | `_comment` / `_doc_sync_hook` 在某些严格 schema 校验器下报 warning | 极低 | 极低（不阻塞） | 决策 D-4 保留；JSON Schema Store 的 schema 默认 `additionalProperties: true`，VS Code / Cursor 不报错。若未来证明会报错，可在后续任务讨论改写 |
+| **R-6** | deny 顺序变化导致语义变化（误以为顺序影响匹配） | 极低 | 无 | context7 文档明确 deny 是全量 OR 语义、顺序无关；§8.3 排序仅为可读性 |
+| **R-7** | Developer 误把 §8.3 示意里的 `//` 注释当真写入 JSON → 解析失败 | 低 | 高（同 R-1） | §8.3 已明确"实际写入文件时不带注释"；§10 完整预览作为唯一权威落盘版本 |
+
+至少 3 条风险已覆盖（实际给出 7 条）。
+
+---
+
+## 12. 测试策略（QA Stage 6 指引）
+
+按 RA §4 验收标准，分层验证：
+
+### 12.1 静态断言（脚本可跑）
+
+```powershell
+# T1. JSON 解析成功（AC-2）
+$cfg = Get-Content c:/Programs/frp_easy/.claude/settings.json -Raw | ConvertFrom-Json
+# 应无异常抛出
+
+# T2. $schema 值断言（AC-1, D-1）
+if ($cfg.'$schema' -ne 'https://json.schemastore.org/claude-code-settings.json') {
+    throw "AC-1 FAIL: schema URL mismatch"
+}
+
+# T3. deny 数组非空且只增不减（AC-3）
+$denySet = [System.Collections.Generic.HashSet[string]]::new($cfg.permissions.deny)
+foreach ($must in @('Bash(git push --force:*)', 'Bash(git push -f:*)', 'Bash(rm -rf /:*)')) {
+    if (-not $denySet.Contains($must)) { throw "AC-3 FAIL: missing original deny: $must" }
+}
+
+# T4. P1 新 deny 条目（AC-7, D-2）
+foreach ($must in @('Bash(rm -rf ~:*)', 'Bash(rm -rf .:*)', 'Bash(/bin/rm:*)', 'Bash(find / -delete:*)', 'Bash(rm -rf $HOME:*)')) {
+    if (-not $denySet.Contains($must)) { throw "AC-7 FAIL: missing P1 deny: $must" }
+}
+
+# T5. P2 新 deny 条目（AC-8, D-3）
+foreach ($must in @('Read(./.env)', 'Read(./.env.*)', 'Read(./secrets/**)')) {
+    if (-not $denySet.Contains($must)) { throw "AC-8 FAIL: missing P2 deny: $must" }
+}
+
+# T6. Stop hook 无 matcher（AC-4）
+if ($cfg.hooks.Stop[0].PSObject.Properties.Name -contains 'matcher') {
+    throw "AC-4 FAIL: Stop hook should not have matcher"
+}
+
+# T7. _comment / _doc_sync_hook 保留（D-4）
+if (-not $cfg.'_comment') { throw "D-4 FAIL: _comment removed" }
+if (-not $cfg.hooks.'_doc_sync_hook') { throw "D-4 FAIL: _doc_sync_hook removed" }
+```
+
+### 12.2 集成断言
+
+```powershell
+# T8. verify_all PASS（AC-5）
+pwsh -File c:/Programs/frp_easy/scripts/verify_all.ps1
+if ($LASTEXITCODE -ne 0) { throw "AC-5 FAIL: verify_all non-zero exit" }
+```
+
+### 12.3 手动断言
+
+- **T9**（AC-6）：在 VS Code 打开 `.claude/settings.json`，状态栏点击 schema 标识，应显示 `claude-code-settings.json` 已加载，无 "Cannot resolve schema" 红字；在 `permissions.allow` 数组内输入 `"B`，应有 IntelliSense 补全。
+
+### 12.4 对抗用例（Adversarial — QA 强制项）
+
+> 这些测试的目标是**确认修改后旧问题确实被拦下 / 新条目确实生效**，而不仅是"代码跑通"。
+
+- **ADV-1 · 复现 P0 旧 URL 故障**：把 `$schema` 临时改回 `"https://json.schemastore.org/claude-code-settings"`（缺 `.json`），重启 VS Code，应观察到 schema 解析失败 / IntelliSense 消失。然后改回 `.json` 版本，应立即恢复。**目的**：证明 D-1 真的产生了用户可见的差异，而非"假装修复"。
+- **ADV-2 · 验证新 deny 真的拦下绕过命令**：在 Claude Code chat 中尝试让其执行 `rm -rf ~/test_T020_dummy`（确保该目录不存在 / 无副作用），permissions 引擎应拒绝（命中 `Bash(rm -rf ~:*)`）。**目的**：D-2 真生效。
+- **ADV-3 · 验证 deny 字面前缀的局限**：在 chat 中要求执行变体 `\rm -rf ~/test_T020_dummy`（反斜杠转义）或 `rm  -rf ~/x`（双空格），观察是否**漏拦**。**预期**：会漏拦（与 §8.1 "不做完备防御"声明一致）。**目的**：让 reviewer 直观看到 deny 的真实强度，避免设计被"夸大解读"。
+- **ADV-4 · JSON 语法对抗**：人为在 deny 数组末尾追加一个尾逗号，重启 Claude Code，验证其拒载 settings.json（行为应在错误日志中可见）；恢复后正常。**目的**：保证 R-1 缓解路径真的可发现问题。
+
+ADV-1 ~ ADV-4 中至少 ADV-1 必跑（RA prompt 要求 ≥ 1 条对抗用例）。
+
+---
+
+## 13. 回滚方案
+
+一行命令：
+
+```powershell
+git checkout -- c:/Programs/frp_easy/.claude/settings.json
+```
+
+回滚后所有 deny 退回原 3 条、`$schema` 退回缺 `.json` 版本。无脏数据、无外部副作用（settings.json 被 git 纳管）。
+
+---
+
+## 14. Migration / rollout plan
+
+- **向后兼容**：所有变更只增不删、只改一个字符串字面量，对运行时无侵入性。
+- **Feature flag**：N/A（配置文件无运行时切换需求）。
+- **数据迁移**：N/A。
+- **发布顺序**：单文件单 commit；建议 commit message：`fix(T-020): claude-settings-context7-fix — $schema URL + rm/Read deny 加固`。
+- **跨平台**：本任务不修改 Stop hook 命令（仍为 Windows-only 的 `pwsh -File scripts/harness-sync.ps1`），Linux/macOS 克隆者**仍需手动**按 `_doc_sync_hook` 文案切换为 `bash scripts/harness-sync.sh`。这是延续现状，**不是回归**。
+
+---
+
+## 15. Out-of-scope clarifications（再次明确边界）
+
+- 不改 `.claude/agents/`、`.claude/skills/`、`CLAUDE.md`、`.github/copilot-instructions.md`（红线保护）。
+- 不改 `_comment`、`_doc_sync_hook` 文案。
+- 不做 Stop hook 跨平台自适应（I-2）。
+- 不重排 `permissions.allow`、不删 allow 条目。
+- 不引入 `.claude/settings.local.json` 的任何变更（用户层，不在范围）。
+- 不追求 deny 的完备防御（context7 文档已明示其限制）。
+
+---
+
+## 16. Partition assignment
+
+`.harness/agents/` 下经 Glob 检索**无** `dev-*.md` 类分区 Developer 文件（参见 `c:/Programs/frp_easy/.harness/agents/`），项目使用**单一 Developer 模式**。按 solution-architect 契约 §"Partition assignment"末段，单 Developer 模式仍给出简表：
+
+| 文件 | Partition | New / Edit | Dependency |
+|---|---|---|---|
+| `c:/Programs/frp_easy/.claude/settings.json` | developer（单一） | edit（字符串替换 + 数组追加） | — |
+
+### Dispatch order
+
+1. developer（唯一）
+
+### Parallelism
+
+不适用（单文件单步骤）。
+
+---
+
+## 17. Verdict
+
+**READY** — 设计已落地到字符级别，Developer 可直接照 §9 的 diff 与 §10 的完整预览 patch。所有 P0/P1/P2/I 条目均已拍板，无 open question。
+
+下一步：Stage 3 Gate Reviewer 审本设计 → 若 APPROVED → Stage 4 Developer 实施。
