@@ -86,13 +86,38 @@ frp-easy 是 FRP 可视化管理 UI 的单二进制服务进程。
 `
 
 func main() {
-	if err := run(); err != nil {
+	// 【T-019】Windows Service 双入口分流：被 SCM 拉起时走 runService()
+	// 实现完整 SetServiceStatus 状态机（解决 sc.exe start 1053 错误）；
+	// 控制台 / dev / 双击 .exe 启动时 isWindowsService() 返回 false，
+	// 退化到现有 run(nil, nil) 控制台分支（NFR-9 不破断言）。
+	if isWindowsService() {
+		if err := runService(); err != nil {
+			// 服务化分支主路径错误已通过 SCM 上报；这里只兜底防 panic 后未退出。
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if err := run(nil, nil); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+// run 是 frp-easy UI 服务的主启动序列。
+//
+// 参数：
+//   - stopCh：非 nil 时为外部关停信号源（Windows Service Stop control code），
+//     与 sigCh / serveErr 三路并存。nil 表示"无外部关停源"，select 对应
+//     case 永远阻塞，退化到现有控制台分支（仅依赖 SIGINT/SIGTERM）。
+//   - readyCh：非 nil 时在 HTTP server / autoRestoreProcs / ready.Store(true)
+//     完成后由 run() 内部 close(readyCh) 通知调用方"启动序列结束"。
+//     Windows Service Execute 用此通道决定何时把 SCM 状态从
+//     START_PENDING 切到 RUNNING。
+//
+// 控制台 / dev 调用：`run(nil, nil)` —— 两参均 nil 等价于现有行为，
+// NFR-9 启动序列零字节改。
+func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 	// 0. flag 解析（T-008 FR-3 / AC-11/12/13/14）
 	//
 	// 必须早于 appconf.Load：用户即使没有 frp_easy.toml 也能跑 --version / --help。
@@ -262,6 +287,12 @@ func run() error {
 	ready.Store(true)
 	logger.Info("ready gate opened")
 
+	// 【T-019】通知 Windows Service Execute 切 SCM 状态到 RUNNING。
+	// readyCh == nil 时（控制台分支）无操作，行为与现状等价。
+	if readyCh != nil {
+		close(readyCh)
+	}
+
 	// 【T-010 AC-2】TTY 启动时自动打开浏览器；systemd / service 模式天然被 TTY 检测排除。
 	// 0.0.0.0 / :: 绑定时把 URL 改写为 127.0.0.1，浏览器无法访问 unspecified address。
 	if browseropen.ShouldOpen(noBrowser) {
@@ -276,13 +307,18 @@ func run() error {
 		}
 	}
 
-	// 7. 信号
+	// 7. 信号 / Windows Service Stop / HTTP fatal 三路 select
+	// 【T-019】追加 case <-stopCh 让 Windows Service Execute 能通过 close(stopCh)
+	// 触发优雅关停链路；stopCh == nil 时该 case 永久阻塞（Go select 对 nil
+	// channel 的 case 视为不存在），等价于现有控制台分支行为。
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
 	select {
 	case s := <-sigCh:
 		logger.Info("signal received, shutting down", "signal", s.String())
+	case <-stopCh:
+		logger.Info("stopCh received, shutting down")
 	case e := <-serveErr:
 		if e != nil && !errors.Is(e, http.ErrServerClosed) {
 			logger.Error("http server fatal", "err", e)

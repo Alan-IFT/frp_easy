@@ -27,6 +27,11 @@ frp_easy/
 │                     install.{sh,ps1}（T-012 新增 / T-013 改：一键安装编排脚本，curl|bash / irm|iex 形态；查 releases/tags/rolling 滚动发布 → 解压 → 调 install-service.* 注册服务）
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
+│                     T-019：service_windows.go（//go:build windows）实现 Windows Service ABI
+│                     双入口分流（main.go 顶端 isWindowsService() → runService() 走 SCM 状态机；
+│                     run(stopCh, readyCh) 两参签名，控制台分支传 nil 退化）；
+│                     service_other.go（//go:build !windows）非 Windows 平台空 stub；
+│                     service_windows_test.go 守护脚本契约（wrapper.cmd 不再生成 + 卸载防御性清理保留）
 ├── bin/            ← 构建产物（gitignore；build.ps1/build.sh 输出到这里）
 ├── frp_win/        ← frp 二进制运行时下载落地目录（T-014：不再内置，仅 LICENSE 占位；downloader 下载落地于此）
 ├── frp_linux/      ← frp 二进制运行时下载落地目录（T-014：不再内置，仅 LICENSE 占位；downloader 下载落地于此）
@@ -111,7 +116,8 @@ frp_easy/
 
 | 功能区域 | 文件 | 约定 |
 |---|---|---|
-| 程序入口 | `cmd/frp-easy/main.go` | 启动序列：appconf → storage → logrotate(ui.log) → binloc/procmgr/ratelimiter → HTTP server → ReadyGate → AC-9 自动恢复 → 可选浏览器自动打开。 |
+| 程序入口 | `cmd/frp-easy/main.go` | 启动序列：appconf → storage → logrotate(ui.log) → binloc/procmgr/ratelimiter → HTTP server → ReadyGate → AC-9 自动恢复 → 可选浏览器自动打开。T-019：main() 顶端 `isWindowsService()` 分流；run() 签名扩展为 `run(stopCh <-chan struct{}, readyCh chan<- struct{}) error`，控制台传 nil 等价于现有行为；ready.Store(true) 后 close(readyCh)；signal select 追加 `case <-stopCh:` 第三路。 |
+| Windows Service ABI | `cmd/frp-easy/service_windows.go` / `service_other.go` | T-019 新增。Windows 文件实现 `serviceHandler.Execute`：START_PENDING + 1s CheckPoint 心跳 + WaitHint=5s → 收到 readyCh close 切 RUNNING (CheckPoint=0/WaitHint=0) → 主循环 select SCM Stop 控制码 → 触发 close(stopCh) → STOP_PENDING (WaitHint=30s) → 等 run() 返回 → STOPPED。`runService()` 起手 `os.Chdir(filepath.Dir(os.Executable()))` 锁 cwd（替代旧 wrapper.cmd 的 cd /d，UTF-16 原生不依赖 host codepage）。非 Windows 文件提供 `isWindowsService() bool { return false }` + `runService() error` 空 stub。 |
 | 应用配置（UI 服务自身） | `internal/appconf/config.go` | `AppConfig{UIBindAddr,UIPort,DataDir,LogDir}`；Load/Validate/ListenAddr；frp_easy.toml 不存在时写默认。 |
 | 嵌入前端资源（占位） | `internal/assets/assets.go` | dev 阶段返回 404 占位；Round 2 改成 `//go:embed all:dist`。 |
 | 密码哈希 / 限流 | `internal/auth/` | `HashPassword`(argon2id m=64MiB/t=3/p=2) / `VerifyPassword` / `GenerateSessionToken` / `GenerateCSRFToken` / `RateLimiter`(5次/60s per IP 基于 kv)。 |

@@ -12,6 +12,8 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-019 | windows-service-scm-1053-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/windows-service-scm-1053-fix/` |
+| T-020 | claude-settings-context7-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/claude-settings-context7-fix/` |
 | T-018 | upload-bin-multiport-ip-probe | DELIVERED | 2026-05-23 | `docs/features/_archived/upload-bin-multiport-ip-probe/` |
 | T-017 | install-role-and-public-ip | DELIVERED | 2026-05-23 | `docs/features/_archived/install-role-and-public-ip/` |
 | T-016 | install-progress-and-systemd-unit-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/install-progress-and-systemd-unit-fix/` |

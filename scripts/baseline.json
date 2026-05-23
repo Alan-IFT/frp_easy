@@ -1,11 +1,11 @@
 {
-  "version": 7,
+  "version": 8,
   "created": "2026-05-16",
   "updated": "2026-05-23",
-  "test_count": 333,
-  "passing_count": 333,
-  "go_tests": 237,
+  "test_count": 335,
+  "passing_count": 335,
+  "go_tests": 239,
   "frontend_tests": 96,
   "warnings_baseline": 0,
-  "notes": "T-018 upload-bin-multiport-ip-probe QA delivered. Go: 174->237 (+63: portrange 23 / install 8 / upload 11 / batch 12 / port-probe 11 / publicip 10 / storage batch 8 with B-5 ConcurrentWithUpsertProxy + B-8 modernc composite UNIQUE adversarial). Frontend: 57->96 (+39: usePortPresets 6 / useProxyGrouping 19 with B-12 5 regex cases / api system 5 with B-2 axios no-headers assertion / api proxies 4 with portsExpr+basename lock / UploadBinButton 5 with 64MiB pre-check). Baseline raised by T-018 verify_all PASS 19/19; A upload / B public IP / C multi-port all zero new deps, zero migration, zero cgo."
+  "notes": "T-019 windows-service-scm-1053-fix QA delivered. Go: 237->239 (+2 windows-only: TestInstallServiceScriptNoWrapperGen + TestUninstallStillCleansWrapper, build-tag isolated, Linux/macOS go test ./... skips them; baseline reflects per-platform max). Frontend: 96 unchanged. verify_all PASS 19/19 stable x3 runs. Binary size T-018 vs T-019: 18,723,328 -> 18,758,656 bytes (+35,328 bytes, 0.034 MB) <= NFR-2 1 MB. AC-18 PS 5.1 zh-CN disk-load .ps1 parse FAIL is T-018 historical regression (not T-019 induced); follow-up T-020-encoding-ps51-bom. T-018 history: Go 174->237 (+63: portrange/install/upload/batch/port-probe/publicip/storage). Frontend 57->96 (+39: usePortPresets/useProxyGrouping/api system/api proxies/UploadBinButton)."
 }

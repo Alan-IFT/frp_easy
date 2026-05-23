@@ -1,7 +1,11 @@
 # uninstall-service.ps1 — frp_easy Windows Service 卸载脚本
 #
-# 用途：停止并删除 Windows 服务（sc.exe stop + sc.exe delete），同时清理 install-service.ps1
-#       生成的 frp-easy-svc.cmd 包装脚本；**不删除** frp_easy.toml 与 .frp_easy/ 数据目录。
+# 用途：停止并删除 Windows 服务（sc.exe stop + sc.exe delete），并对旧版（< T-019）
+#       install-service.ps1 曾生成的 frp-easy-svc.cmd 包装脚本做防御性清理；
+#       **不删除** frp_easy.toml 与 .frp_easy/ 数据目录。
+#       T-019 起 install-service.ps1 不再生成 wrapper.cmd（cwd 由 frp-easy.exe 内
+#       os.Chdir(filepath.Dir(os.Executable())) 锁定），但老安装升级再卸载时
+#       磁盘上可能仍有残留 .cmd，本脚本顺手清掉避免用户困惑。
 # 用法：以管理员身份运行 PowerShell，执行：.\scripts\uninstall-service.ps1 [-ServiceName "frp-easy"]
 # 参数：-ServiceName  服务键名（默认 "frp-easy"）
 # 输出：stdout 中文进度；卸载完成时打印数据目录保留提示
@@ -67,13 +71,15 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "==> 已删除服务：$ServiceName"
 
-# 清理由 install-service.ps1 生成的 cwd 包装脚本
+# 防御性清理：旧版（< T-019）install-service.ps1 曾生成 frp-easy-svc.cmd 包装脚本。
+# 本任务移除生成逻辑后（cwd 由 frp-easy.exe 内 os.Chdir 锁定），老安装升级再卸载时
+# 磁盘上可能仍有残留 .cmd；本段把它清掉，避免用户在卸载后看到一个"不知何用"的文件。
 $ScriptDir  = $PSScriptRoot
 $InstallDir = (Resolve-Path (Join-Path $ScriptDir "..")).Path
 $WrapperPath = Join-Path $InstallDir "frp-easy-svc.cmd"
 if (Test-Path -PathType Leaf $WrapperPath) {
     Remove-Item -Force $WrapperPath -ErrorAction SilentlyContinue
-    Write-Host "==> 已删除服务包装脚本：$WrapperPath"
+    Write-Host "==> 已清理旧版包装脚本残留：$WrapperPath"
 }
 
 @"
