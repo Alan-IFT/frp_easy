@@ -190,7 +190,15 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 TARBALL="$TMP_DIR/release.tar.gz"
 
-if ! curl -fsSL -o "$TARBALL" "$ASSET_URL"; then
+# A 组（UX）：交互式终端下显示 curl 进度条；非交互（stderr 重定向到文件 / 管道）降级为静默
+# 以避免 \r 覆盖序列污染日志（FR-A.3 / FR-A.6 / BC-A.5）。
+# 仅去掉 -s（show progress），保留 -f（4xx/5xx 让 curl 退非 0，FR-A.5 错误分流不变）、
+# -S（错误仍打印）、-L（跟随 302→CDN）。
+CURL_PROGRESS_FLAG=""
+if [[ -t 2 ]]; then
+    CURL_PROGRESS_FLAG="--progress-bar"
+fi
+if ! curl -fSL $CURL_PROGRESS_FLAG -o "$TARBALL" "$ASSET_URL"; then
     echo "错误：发布包下载失败，请检查网络后重试。" >&2
     exit 1
 fi
@@ -265,8 +273,17 @@ if [[ ! -f "$SERVICE_SCRIPT" ]]; then
     exit 1
 fi
 
-if ! bash "$SERVICE_SCRIPT"; then
-    rc=$?
+# C 组（退出码透传，PM 默认 §8.4 (a)）：把 `if ! cmd; then rc=$?` 反模式拆为
+# `set +e; cmd; rc=$?; set -e` 三行块，避免 bash `set -e` 在 `if` 条件上下文
+# 不生效与 `!` 反转后 then 块内 `$?` 跨版本语义不一致两条隐患（02 §C.1）。
+# diag 打印仅在失败时输出（GR §F-1 hint 4），便于 QA / 用户拿到真实退出码证据。
+set +e
+bash "$SERVICE_SCRIPT"
+rc=$?
+set -e
+[[ $rc -ne 0 ]] && echo "    [diag] install-service.sh rc=$rc" >&2
+
+if [[ $rc -ne 0 ]]; then
     echo "错误：服务注册失败（install-service.sh 退出码 ${rc}）。请查看上方 install-service.sh 的中文报错。" >&2
     exit "$rc"
 fi

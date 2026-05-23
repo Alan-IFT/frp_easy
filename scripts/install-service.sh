@@ -16,6 +16,23 @@ set -euo pipefail
 UNIT_NAME="frp-easy"
 RUN_USER=""
 
+# B.2.1（02 §B.2.1 + T-016 D-1 fix）：systemd.exec(5) 规定路径含特殊字符必须 C-style
+# 转义；整体双引号 `WorkingDirectory="/foo bar"` 被 systemd 任意版本拒为 bad unit
+# file setting（T-008 旧 insight 反例的真因）。OOS-2 限定仅支持 ASCII + 空格，所以
+# 单字符替换即足够：把空格替换成字面 4 字符 `\x20`（反斜杠 + x + 2 + 0）。
+#
+# bash 5.x 双引号 + parameter expansion 的 quote-removal 陷阱：旧实现
+# `printf '%s' "${p// /\\x20}"` 在 bash 5.2 实测产出 `frpx20easy`（反斜杠缺失）——
+# 双引号内 `\\` 先被 quote-removal 还原为单个 `\`，再被 expansion 的 string 解析
+# 吞掉，REPLACEMENT 退化为 `x20`。
+# 修复：用单引号字面赋值 `\x20` 到变量 esc，参数扩展引用 `$esc` 时不再做反斜杠
+# 脱壳，replacement 保留字面 4 字符 `\x20`（hex `5c 78 32 30`）。
+systemd_escape_path() {
+    local p="$1"
+    local esc='\x20'
+    printf '%s' "${p// /$esc}"
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --user)
@@ -104,6 +121,11 @@ if [[ -f "$UNIT_PATH" ]]; then
     systemctl stop "$UNIT_NAME" >/dev/null 2>&1 || true
 fi
 
+# B 组（02 §B.2）：ExecStart= / WorkingDirectory= 改为裸 token + `\x20` 转义；
+# 不再用整体双引号（systemd 拒收，T-008 旧 insight 已纠正）。
+ESC_BINARY="$(systemd_escape_path "$BINARY")"
+ESC_INSTALL_DIR="$(systemd_escape_path "$INSTALL_DIR")"
+
 # 原子写 unit 文件（参考 .harness/insight-index.md 2026-05-19 AtomicWrite 双重 chmod 模式）：
 #   1) 先写 tmp 文件 → chmod 0644
 #   2) mv -f 到目标路径（Linux POSIX rename 是原子的）
@@ -116,8 +138,8 @@ Documentation=https://github.com/Alan-IFT/frp_easy
 
 [Service]
 Type=simple
-ExecStart="${BINARY}"
-WorkingDirectory="${INSTALL_DIR}"
+ExecStart=${ESC_BINARY}
+WorkingDirectory=${ESC_INSTALL_DIR}
 User=${RUN_USER}
 Restart=on-failure
 RestartSec=5
@@ -134,13 +156,55 @@ chmod 0644 "$UNIT_PATH"
 
 echo "==> 写入 unit 文件：$UNIT_PATH"
 
-if ! systemctl daemon-reload; then
-    echo "错误：systemctl daemon-reload 失败。" >&2
+# B.3 + GR §F-3 降级路径：systemd-analyze verify 主动自检。
+# 设计原方案对 verify 失败采取 "exit 2 + rm unit"，但 GR §F-3 提出 systemd-analyze
+# 在 systemd 249-255 历史上存在误报 fatal 的情况（如对不可达 Documentation= URL）。
+# 降级为 "warn + 继续" —— 让 daemon-reload / enable--now 作最终事实源；若它们也
+# 失败将由下方 C.2 强诊断块详述根因。
+if command -v systemd-analyze >/dev/null 2>&1; then
+    verify_out="$(systemd-analyze verify "$UNIT_PATH" 2>&1)" && verify_rc=0 || verify_rc=$?
+    if [[ "$verify_rc" -ne 0 ]]; then
+        echo "警告：systemd-analyze verify 报告问题（退出码 $verify_rc）：" >&2
+        printf '%s\n' "$verify_out" | sed 's/^/    /' >&2
+        echo "    继续 daemon-reload 让 systemd 自己判定（若 reload/enable 失败将由下方诊断块详述）。" >&2
+    fi
+fi
+
+# C 组（02 §C.2 + GR §F-1 diag 打印）：daemon-reload 改为 set +e/-e 包裹 + diag 打印。
+set +e
+systemctl daemon-reload
+reload_rc=$?
+set -e
+[[ $reload_rc -ne 0 ]] && echo "    [diag] systemctl daemon-reload rc=$reload_rc" >&2
+if [[ $reload_rc -ne 0 ]]; then
+    echo "错误：systemctl daemon-reload 失败（退出码 $reload_rc）。" >&2
+    echo "      unit 文件已写入：$UNIT_PATH（可 cat 审阅）。" >&2
+    echo "      如需清理：sudo rm -f $UNIT_PATH && sudo systemctl daemon-reload" >&2
     exit 2
 fi
 
-if ! systemctl enable --now "$UNIT_NAME"; then
-    echo "错误：systemctl enable --now $UNIT_NAME 失败；请查看 journalctl -u $UNIT_NAME。" >&2
+# C 组（02 §C.2 + GR §F-1 / §F-2 字面前缀锚点）：enable--now 失败块扩展为
+# 自动打印 status + journalctl 摘要 + unit 路径 + 清理提示。
+# 字面前缀严格使用以下两条 AC-8 grep 锚点：
+#   "==== 诊断信息：systemctl status $UNIT_NAME --no-pager ===="
+#   "==== 诊断信息：journalctl -u $UNIT_NAME --no-pager -n 20 ===="
+set +e
+systemctl enable --now "$UNIT_NAME"
+enable_rc=$?
+set -e
+[[ $enable_rc -ne 0 ]] && echo "    [diag] systemctl enable --now $UNIT_NAME rc=$enable_rc" >&2
+
+if [[ $enable_rc -ne 0 ]]; then
+    echo "错误：systemctl enable --now $UNIT_NAME 失败（退出码 $enable_rc）。" >&2
+    echo "" >&2
+    echo "==== 诊断信息：systemctl status $UNIT_NAME --no-pager ====" >&2
+    systemctl status "$UNIT_NAME" --no-pager 2>&1 | sed 's/^/    /' >&2 || true
+    echo "" >&2
+    echo "==== 诊断信息：journalctl -u $UNIT_NAME --no-pager -n 20 ====" >&2
+    journalctl -u "$UNIT_NAME" --no-pager -n 20 2>&1 | sed 's/^/    /' >&2 || true
+    echo "" >&2
+    echo "unit 文件已写入：$UNIT_PATH（可 cat 审阅）。" >&2
+    echo "如需清理：sudo systemctl disable $UNIT_NAME && sudo rm -f $UNIT_PATH && sudo systemctl daemon-reload" >&2
     exit 2
 fi
 

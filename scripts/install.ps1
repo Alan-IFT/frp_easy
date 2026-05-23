@@ -147,11 +147,28 @@ Write-Host "==> [5/8] 下载并校验发布包..."
 $tmpDir = New-Item -ItemType Directory -Path (Join-Path ([System.IO.Path]::GetTempPath()) ("frp-easy-" + [guid]::NewGuid().ToString("N")))
 try {
     $zipPath = Join-Path $tmpDir.FullName "release.zip"
+    # A 组（UX，PM 默认 §8.1 (d) 组合 + 非交互降级）：
+    #  - 去掉 -UseBasicParsing：PS 5.x 下该 flag 显式抑制 Write-Progress；
+    #    PS 7+ 下该 flag 已是 no-op，去掉无副作用（02 §A.3）。
+    #  - $ProgressPreference 显式控制：交互式终端 Continue（显示进度），
+    #    重定向 / CI / 无 UserInteractive 时 SilentlyContinue（避免日志膨胀，FR-A.6）。
+    #  - try/finally 恢复原 $ProgressPreference 不污染调用环境。
+    $prevProgress = $ProgressPreference
+    $isInteractive = [Environment]::UserInteractive -and -not [Console]::IsErrorRedirected
+    if ($isInteractive) {
+        $ProgressPreference = 'Continue'
+    } else {
+        $ProgressPreference = 'SilentlyContinue'
+    }
     try {
-        Invoke-WebRequest -Uri $assetUrl -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
-    } catch {
-        Write-Error "发布包下载失败，请检查网络后重试。"
-        exit 1
+        try {
+            Invoke-WebRequest -Uri $assetUrl -OutFile $zipPath -ErrorAction Stop
+        } catch {
+            Write-Error "发布包下载失败，请检查网络后重试。"
+            exit 1
+        }
+    } finally {
+        $ProgressPreference = $prevProgress
     }
 
     if (-not (Test-Path -PathType Leaf $zipPath) -or (Get-Item $zipPath).Length -le 0) {
@@ -211,6 +228,10 @@ try {
         Write-Error "未找到 $svc，发布包结构异常。"
         exit 1
     }
+    # C 组（退出码透传，02 §C.3）：显式重置 $LASTEXITCODE 防止
+    # install-service.ps1 因 terminating error 未走到 `exit N` 时
+    # $LASTEXITCODE 保留上一条命令陈旧值，导致透传错误码。
+    $LASTEXITCODE = 0
     & $svc
     if ($LASTEXITCODE -ne 0) {
         Write-Error "服务注册失败（install-service.ps1 退出码 $LASTEXITCODE）。请查看上方中文报错。"
