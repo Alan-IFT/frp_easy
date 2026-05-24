@@ -127,6 +127,17 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * T-032: 单向数据流（initialValue prop + defineExpose getProxyInput()）。
+ * 不要恢复 v-model / defineModel 双向桥——toProxyInput() 每次返回新对象引用，
+ * defineModel 的循环检测对此场景无效，会再次触发 OOM 反馈环。
+ * 详见 docs/features/proxy-form-vmodel-oom-fix/02_SOLUTION_DESIGN.md §7（归档后路径 _archived/）；
+ * 或直接 grep T-032 02 文档 §7 / §10 R-6。
+ *
+ * 保留 update:batchMode / update:portsExpr emit：它们是子→父单向通知（不构成
+ * 反馈环），父组件按钮文案需要响应式镜像；非 modelValue 同类反模式。
+ * 详见 02 §10.1 决策点 / §12 第 2 条。
+ */
 import { ref, watch, computed } from 'vue'
 import {
   NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch, NDynamicTags,
@@ -141,13 +152,17 @@ import { apiProbePorts } from '../api/system'
 import { extractErrorMessage } from '../api/client'
 
 const props = defineProps<{
-  modelValue: ProxyInput
+  /**
+   * T-032: 仅作为「表单初始种子」使用——子组件在 setup() 阶段读 1 次，
+   * 后续不再 watch；用户编辑只写本地 form，不回流到父组件。
+   * 父组件需要用户最终输入时通过 defineExpose 的 getProxyInput() 主动拉取。
+   */
+  initialValue: ProxyInput
   editMode?: boolean
   existingProxy?: Proxy | null
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', val: ProxyInput): void
   (e: 'update:batchMode', val: boolean): void
   (e: 'update:portsExpr', val: string): void
 }>()
@@ -155,20 +170,10 @@ const emit = defineEmits<{
 const formRef = ref<FormInst | null>(null)
 const message = useMessage()
 
-const { form, isTcpUdp, isHttpHttps, handleTypeChange, toProxyInput, syncFromInput } = useProxyForm(
-  props.modelValue,
+const { form, isTcpUdp, isHttpHttps, handleTypeChange, toProxyInput } = useProxyForm(
+  props.initialValue,
   props.existingProxy,
 )
-
-// 通知父组件表单变更
-watch(form, () => {
-  emit('update:modelValue', toProxyInput())
-}, { deep: true })
-
-// 响应父组件的变更
-watch(() => props.modelValue, (val) => {
-  syncFromInput(val)
-}, { deep: true })
 
 // -----------------------------------------------------------------------
 // T-018 §C.1 批量模式相关本地状态
@@ -398,5 +403,8 @@ defineExpose({
     probeStatus.value = 'idle'
     probeText.value = ''
   },
+  // T-032：父组件提交时主动拉取用户编辑后的最终 ProxyInput（单向数据流）。
+  // 必须在 await validate() 成功之后调用，确保 form 已稳定。
+  getProxyInput: (): ProxyInput => toProxyInput(),
 })
 </script>

@@ -1,11 +1,11 @@
 {
-  "version": 14,
+  "version": 15,
   "created": "2026-05-16",
   "updated": "2026-05-24",
-  "test_count": 367,
-  "passing_count": 367,
+  "test_count": 375,
+  "passing_count": 375,
   "go_tests": 265,
-  "frontend_tests": 102,
+  "frontend_tests": 110,
   "warnings_baseline": 0,
-  "notes": "T-031 install-ps1-host-close-on-completion delivered. install.ps1 末尾 `exit 0` 改为 `$global:LASTEXITCODE = 0` 防御性置零（消解 RA R4 假设）；README Windows 推荐入口字串改 `pwsh -NoExit -Command \"irm ... | iex\"` 让 cmd/Win+R/Windows Terminal 入口窗口不在脚本结束时关闭（PowerShell `-NoExit` 是 about_PowerShell_Exe 文档化语义）；PS5.1 段同步给 `powershell -NoExit` 替代字串；新增'如你看到的是旧入口'反向兼容段。verify_all 新 3 道静态闸门：E.8 (forbid Read-Host / [Console]::ReadKey / 裸 pause / Wait-Event in install.ps1 + install-service.ps1, FR-3 红线；C-1 单走 Select-String 按行扫描天然 multiline)、E.9 (forbid scripts/install*.cmd|bat, FR-8 单脚本)、E.10 (README Windows entry contains -NoExit). verify_all PASS 21 -> 24 (+3) / WARN 0 / FAIL 0 / SKIP 0（Quick 模式实测）. install-service.ps1 字节零变（OQ-5 a）. .editorconfig 不动（T-026 决议保留）. T-027 history: Manager.Cancel(kind) + ctx 化 doDownload + StatusCanceled. T-026 history: install.ps1 删 BOM + iex 子作用域. T-025 history: downloader.Manager 拆 apiClient/downloadClient (Client.Timeout=0). T-022 history: exposureNotice dual-channel. T-021 history: .ps1 BOM applied (11/11); E.7 added. T-019 history: windows-service-scm-1053-fix. T-018 history: Go 174->237."
+  "notes": "T-032 proxy-form-vmodel-oom-fix delivered. ProxyForm.vue 删 v-model 双 watch + emit('update:modelValue') 反馈环（OOM 根因）；prop modelValue → initialValue（语义改为「初始种子」）；defineExpose 新增 getProxyInput(): ProxyInput；Proxies.vue v-model→:initial-value + handleSubmit 改读 proxyFormRef.value?.getProxyInput()；useProxyForm.ts 删 syncFromInput 函数（无消费方）。架构层根除反馈环，AC-1 / AC-7 实测 update:modelValue emit 上界 = 0（比 RA 字面≤2/3 更强）。前端测试 102 → 110（+8 净增：ProxyForm.spec.ts 13→17 +4 含 2 改写 + 2 新增 AC-1/AC-7；qa_t007_adversarial.spec.ts 5→4 -1 删 syncFromInput 原子性；新增 qa_t032_adversarial.spec.ts 7 用例做独立反馈环对抗 +1000 次 setProps + FR-3/4/5/6/7 边界）. verify_all PASS 22 / FAIL 3 (A.1 / B.1 / C.1) —— git stash 隔离裸基线同样 22 PASS / 3 FAIL，3 个 FAIL 全部归责为先存在的环境基线问题（A.1 git grep regex 跨平台；B.1 npm 8+ --frozen-lockfile 警告；C.1 T-031 引入的 E2E playwright 步骤 setup fixture 残留），与 T-032 改动零相关。T-031 history: install.ps1 末尾 exit 0 → $global:LASTEXITCODE = 0；README Windows 入口加 -NoExit. T-027 history: Manager.Cancel(kind) + ctx 化 doDownload + StatusCanceled. T-026 history: install.ps1 删 BOM + iex 子作用域. T-025 history: downloader.Manager 拆 apiClient/downloadClient. T-022 history: exposureNotice dual-channel. T-021 history: .ps1 BOM applied; E.7 added. T-019 history: windows-service-scm-1053-fix. T-018 history: Go 174->237."
 }

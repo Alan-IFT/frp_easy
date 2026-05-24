@@ -49,31 +49,12 @@ describe('QA T-007 Adversarial — ProxyForm AC-9', () => {
     expect(form.value.customDomains).toEqual(['kept.com'])
   })
 
-  // AC-9 对抗：syncFromInput 写完 type 后立即写 customDomains/remotePort。
-  // Vue 3 默认 flush:'pre' → 整个 syncFromInput 函数体在同步内完成，watch 在 microtask
-  // 里以新整体状态触发。验证：sync 后 watch 一次性看到正确的 type→fields 组合。
-  it('Adversarial: syncFromInput 是原子的 — watch 触发后看到完整新状态', async () => {
-    const { form, syncFromInput } = useProxyForm({
-      name: '', type: 'tcp', localIP: '127.0.0.1', localPort: 80,
-      remotePort: 6000, enabled: true,
-    })
-    // type 从 tcp 切到 http，customDomains 同时被写入
-    syncFromInput({
-      name: 'fromedit',
-      type: 'http',
-      localIP: '127.0.0.1',
-      localPort: 80,
-      customDomains: ['real.com'],
-      enabled: true,
-      version: 5,
-    })
-    await nextTick()
-    // 关键断言：customDomains 没被 watch 清掉（这是 C-1 强制条件）
-    expect(form.value.customDomains).toEqual(['real.com'])
-    expect(form.value.type).toBe('http')
-    // remotePort 应被清（因为 type 改成了 http）
-    expect(form.value.remotePort).toBeNull()
-  })
+  // T-032：原 "Adversarial: syncFromInput 是原子的 — watch 触发后看到完整新状态" 用例已删除。
+  // 原因：T-032 移除了 useProxyForm.syncFromInput 函数（02 §3.2）以及 ProxyForm.vue 的
+  // 双向 watch + emit 反馈环（02 §3.1）。"sync 期间 watch flush:'pre' 不抢跑"的前提
+  // 已不存在；等价语义改由「mount 完整组件传 initialValue → 内部 form 立即反映新值」
+  // 在 ProxyForm.spec.ts 中以更强方式守护（参见该文件 T-032 改写 + AC-1 / AC-7 用例）。
+  // 详见 docs/features/proxy-form-vmodel-oom-fix/02_SOLUTION_DESIGN.md §10 R-3。
 
   // AC-9 对抗：连续 5 次 type 切换 — 验证没有无限循环 / 栈溢出
   it('Adversarial: 多次 type 切换不会栈溢出（watch 不形成循环）', async () => {

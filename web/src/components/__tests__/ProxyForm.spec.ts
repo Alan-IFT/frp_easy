@@ -1,7 +1,27 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { useProxyForm } from '../../composables/useProxyForm'
+import ProxyForm from '../ProxyForm.vue'
 import type { ProxyInput } from '../../types'
+
+// T-032 P1-2：vitest + happy-dom + Naive UI 的 useMessage stub。
+// 必须用 importOriginal 模式 —— ProxyForm.vue import 十余个 Naive UI 组件，
+// 整体 vi.mock('naive-ui') 不带 importOriginal 会让 render 时所有 N* 组件缺失。
+vi.mock('naive-ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('naive-ui')>()
+  return {
+    ...actual,
+    useMessage: () => ({
+      error:       vi.fn(),
+      success:     vi.fn(),
+      warning:     vi.fn(),
+      info:        vi.fn(),
+      loading:     vi.fn(),
+      destroyAll:  vi.fn(),
+    }),
+  }
+})
 
 describe('useProxyForm composable（ProxyForm 逻辑）', () => {
   const tcpInput = (): ProxyInput => ({
@@ -86,78 +106,89 @@ describe('useProxyForm composable（ProxyForm 逻辑）', () => {
     expect(output.remotePort).toBeUndefined()
   })
 
-  it('syncFromInput 可从外部更新表单', () => {
-    const { form, syncFromInput } = useProxyForm(tcpInput())
-    const newInput: ProxyInput = {
-      name: 'updated',
-      type: 'http',
-      localIP: '0.0.0.0',
-      localPort: 3000,
-      customDomains: ['new.example.com'],
-      enabled: false,
-      version: 2,
-    }
-    syncFromInput(newInput)
-
-    expect(form.value.name).toBe('updated')
-    expect(form.value.type).toBe('http')
-    expect(form.value.localPort).toBe(3000)
-    expect(form.value.customDomains).toEqual(['new.example.com'])
-    expect(form.value.enabled).toBe(false)
-    expect(form.value.version).toBe(2)
-  })
-
   // ----------------------------
-  // T-007 AC-9 / Gate Review C-1 新增覆盖：watch type 兜底 + 编辑模式
+  // T-032：以下原 3 条「syncFromInput 直接调用」用例改写为 mount + initialValue 等价断言。
+  // syncFromInput 已被删除（02 §3.2）；等价语义现在由「mount ProxyForm with initialValue
+  // → 内部 form 立即正确反映 initialValue」承担，且双向桥已删，物理上不可能被 watch 抹掉。
+  // 详见 docs/features/proxy-form-vmodel-oom-fix/02_SOLUTION_DESIGN.md §10 R-3 / §13.3 / §13.5。
   // ----------------------------
 
-  it('AC-9 / C-1: 编辑现有 HTTP 规则加载时 customDomains 不被 watch 抹掉', async () => {
-    // 初始状态：tcp（默认 modal 打开时的 defaultFormData 是 tcp）
-    const initial: ProxyInput = {
-      name: '', type: 'tcp', localIP: '127.0.0.1', localPort: 80, enabled: true,
-    }
-    const { form, syncFromInput } = useProxyForm(initial)
-
-    // 模拟父组件 handleEdit 触发：写入已有 HTTP 规则的完整数据
-    syncFromInput({
-      name: 'edit-web',
-      type: 'http',
-      localIP: '127.0.0.1',
-      localPort: 80,
-      customDomains: ['existing.example.com', 'second.example.com'],
-      enabled: true,
-      version: 7,
+  it('T-032 改写：mount ProxyForm with initialValue 后内部 form 等价于外部字段', async () => {
+    const wrapper = mount(ProxyForm, {
+      props: {
+        initialValue: {
+          name: 'updated',
+          type: 'http',
+          localIP: '0.0.0.0',
+          localPort: 3000,
+          customDomains: ['new.example.com'],
+          enabled: false,
+          version: 2,
+        },
+      },
     })
-    // 让 watch（flush='pre'）的回调跑一次
     await nextTick()
-
-    expect(form.value.type).toBe('http')
-    expect(form.value.customDomains).toEqual(['existing.example.com', 'second.example.com'])
-    expect(form.value.remotePort).toBeNull()
-    expect(form.value.version).toBe(7)
+    const submitted = (wrapper.vm as unknown as { getProxyInput: () => ProxyInput })
+      .getProxyInput()
+    expect(submitted.name).toBe('updated')
+    expect(submitted.type).toBe('http')
+    expect(submitted.localPort).toBe(3000)
+    expect(submitted.customDomains).toEqual(['new.example.com'])
+    expect(submitted.enabled).toBe(false)
+    expect(submitted.version).toBe(2)
   })
 
-  it('AC-9 / C-1: 编辑现有 TCP 规则加载时 remotePort 不被 watch 抹掉', async () => {
-    // 反向场景：默认 tcp → syncFromInput 写入已有 TCP 规则
-    const initial: ProxyInput = {
-      name: '', type: 'http', localIP: '127.0.0.1', localPort: 80, enabled: true,
-    }
-    const { form, syncFromInput } = useProxyForm(initial)
-
-    syncFromInput({
-      name: 'edit-ssh',
-      type: 'tcp',
-      localIP: '127.0.0.1',
-      localPort: 22,
-      remotePort: 6022,
-      enabled: true,
-      version: 3,
+  it('AC-9 / C-1（T-032 等价）：mount 编辑现有 HTTP 规则 customDomains 不会被抹掉', async () => {
+    const wrapper = mount(ProxyForm, {
+      props: {
+        initialValue: {
+          name: 'edit-web',
+          type: 'http',
+          localIP: '127.0.0.1',
+          localPort: 80,
+          customDomains: ['existing.example.com', 'second.example.com'],
+          enabled: true,
+          version: 7,
+        },
+        editMode: true,
+      },
     })
-    await nextTick()
+    // 等 happy-dom + Naive UI 完成几个 tick；任何 watch 触发都会在此期间反映出来
+    for (let i = 0; i < 5; i++) await nextTick()
+    const submitted = (wrapper.vm as unknown as { getProxyInput: () => ProxyInput })
+      .getProxyInput()
+    expect(submitted.type).toBe('http')
+    expect(submitted.customDomains).toEqual([
+      'existing.example.com', 'second.example.com',
+    ])
+    // tcp 字段未上送（http 模式 toProxyInput 不输出 remotePort）
+    expect(submitted.remotePort).toBeUndefined()
+    expect(submitted.version).toBe(7)
+  })
 
-    expect(form.value.type).toBe('tcp')
-    expect(form.value.remotePort).toBe(6022)
-    expect(form.value.customDomains).toEqual([])
+  it('AC-9 / C-1（T-032 等价）：mount 编辑现有 TCP 规则 remotePort 不会被抹掉', async () => {
+    const wrapper = mount(ProxyForm, {
+      props: {
+        initialValue: {
+          name: 'edit-ssh',
+          type: 'tcp',
+          localIP: '127.0.0.1',
+          localPort: 22,
+          remotePort: 6022,
+          enabled: true,
+          version: 3,
+        },
+        editMode: true,
+      },
+    })
+    for (let i = 0; i < 5; i++) await nextTick()
+    const submitted = (wrapper.vm as unknown as { getProxyInput: () => ProxyInput })
+      .getProxyInput()
+    expect(submitted.type).toBe('tcp')
+    expect(submitted.remotePort).toBe(6022)
+    // tcp 模式 toProxyInput 不输出 customDomains
+    expect(submitted.customDomains).toBeUndefined()
+    expect(submitted.version).toBe(3)
   })
 
   it('AC-9: type 切换 tcp → http 时 customDomains 不残留旧值（watch 兜底）', async () => {
@@ -208,5 +239,49 @@ describe('useProxyForm composable（ProxyForm 逻辑）', () => {
     // toProxyInput 已经按 type 分支选字段：tcp 模式下不会输出 customDomains
     expect(output.customDomains).toBeUndefined()
     expect(output.remotePort).toBe(6000)
+  })
+})
+
+// =========================================================================
+// T-032：新增 mount-level 测试覆盖单向数据流不变量 + 反馈环根除证明
+// =========================================================================
+
+const defaultSeed = (): ProxyInput => ({
+  name: '',
+  type: 'tcp',
+  localIP: '127.0.0.1',
+  localPort: 80,
+  enabled: true,
+})
+
+describe('T-032 AC-1: ProxyForm 不产生 update:modelValue 反馈环', () => {
+  it('mount 后 50ms / 10 ticks 内不 emit "update:modelValue"（删 emit 后上界 = 0）', async () => {
+    const wrapper = mount(ProxyForm, {
+      props: { initialValue: defaultSeed() },
+    })
+    for (let i = 0; i < 10; i++) await nextTick()
+    await new Promise((r) => setTimeout(r, 50))
+    // 关键：本设计删除了 'update:modelValue' emit，断言 emit 表中根本不应出现该事件
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+})
+
+describe('T-032 AC-7: ProxyForm initialValue 引用变化时不进入无限 emit 循环', () => {
+  it('父组件连续 3 次替换 initialValue（新对象引用，字段同），emit 总次数 = 0', async () => {
+    const wrapper = mount(ProxyForm, { props: { initialValue: defaultSeed() } })
+    for (let i = 0; i < 5; i++) await nextTick()
+
+    // 模拟父组件 3 次 formData.value = defaultFormData() —— 新引用、字段相同
+    for (let i = 0; i < 3; i++) {
+      await wrapper.setProps({ initialValue: defaultSeed() })
+      for (let j = 0; j < 5; j++) await nextTick()
+    }
+
+    // 关键断言：上界是 0（因为没有 update:modelValue emit），而非随 N 增长
+    expect(wrapper.emitted('update:modelValue') ?? []).toHaveLength(0)
+
+    // 兜底：batchMode / portsExpr emit 不在此用例语义内，但也应 ≤ 常数（初始 false / '' 后无变化）
+    expect((wrapper.emitted('update:batchMode') ?? []).length).toBeLessThanOrEqual(1)
+    expect((wrapper.emitted('update:portsExpr') ?? []).length).toBeLessThanOrEqual(1)
   })
 })

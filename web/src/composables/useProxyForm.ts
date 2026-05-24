@@ -63,23 +63,11 @@ export function useProxyForm(initial: ProxyInput, _existingProxy?: Proxy | null)
     return output
   }
 
-  function syncFromInput(val: ProxyInput) {
-    form.value.name = val.name
-    form.value.type = val.type
-    form.value.localIP = val.localIP ?? '127.0.0.1'
-    form.value.localPort = val.localPort || null
-    form.value.remotePort = val.remotePort ?? null
-    form.value.customDomains = val.customDomains ?? []
-    form.value.enabled = val.enabled !== false
-    form.value.version = val.version ?? 0
-  }
-
   return {
     form,
     isTcpUdp,
     isHttpHttps,
     handleTypeChange,
     toProxyInput,
-    syncFromInput,
   }
 }

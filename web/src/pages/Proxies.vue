@@ -32,7 +32,7 @@
     >
       <proxy-form
         ref="proxyFormRef"
-        v-model="formData"
+        :initial-value="formData"
         :edit-mode="!!editingProxy"
         :existing-proxy="editingProxy"
         @update:batch-mode="(v: boolean) => (batchMode = v)"
@@ -86,6 +86,7 @@ const proxyFormRef = ref<{
   isBatchMode: () => boolean
   getPortsExpr: () => string
   resetBatchState: () => void
+  getProxyInput: () => ProxyInput
 } | null>(null)
 const firewallPorts = ref<number[]>([])
 const firewallProto = ref<'tcp' | 'udp' | 'both'>('both')
@@ -102,6 +103,11 @@ const defaultFormData = (): ProxyInput => ({
   enabled: true,
 })
 
+/**
+ * T-032：仅作为 ProxyForm 的初始种子；由 handleAdd / handleEdit 在打开模态框前写入。
+ * 用户编辑期间它**不更新**——最终值用 proxyFormRef.value?.getProxyInput() 取（单向数据流）。
+ * 禁止在 template / computed / 跨组件 prop 中绑此 ref 做实时显示。
+ */
 const formData = ref<ProxyInput>(defaultFormData())
 
 function handleAdd() {
@@ -158,15 +164,22 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
+    // T-032：从子组件主动拉取用户编辑后的最终值；formData 仅是种子，不再实时反映输入。
+    const formValue = proxyFormRef.value?.getProxyInput()
+    if (!formValue) {
+      message.error('表单组件未就绪')
+      return
+    }
+
     // T-018 §C.1：批量分支
     if (!editingProxy.value && proxyFormRef.value?.isBatchMode()) {
       const expr = proxyFormRef.value.getPortsExpr().trim()
       const req: BatchProxiesRequest = {
-        basename: formData.value.name,
-        type: formData.value.type,
-        localIP: formData.value.localIP || '127.0.0.1',
+        basename: formValue.name,
+        type: formValue.type,
+        localIP: formValue.localIP || '127.0.0.1',
         portsExpr: expr,
-        enabled: formData.value.enabled !== false,
+        enabled: formValue.enabled !== false,
       }
       const res = await proxiesStore.batchCreate(req)
       message.success(`批量创建 ${res.created} 条规则成功`)
@@ -187,10 +200,10 @@ async function handleSubmit() {
     // 原有：单条新增 / 编辑
     let savedProxy: Proxy
     if (editingProxy.value) {
-      savedProxy = await proxiesStore.updateProxy(editingProxy.value.id, formData.value)
+      savedProxy = await proxiesStore.updateProxy(editingProxy.value.id, formValue)
       message.success('规则已更新')
     } else {
-      savedProxy = await proxiesStore.createProxy(formData.value)
+      savedProxy = await proxiesStore.createProxy(formValue)
       message.success('规则已创建')
     }
     showForm.value = false
