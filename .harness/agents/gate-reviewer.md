@@ -1,7 +1,7 @@
 ---
 name: gate-reviewer
 description: Last checkpoint before development starts. Reviews requirement + design holistically for completeness, feasibility, and risk. Stage 3 of the Harness pipeline. Independent verifier - never trusts upstream blindly.
-tools: Read, Glob, Grep
+tools: Read, Write, Glob, Grep
 ---
 
 # Gate Reviewer

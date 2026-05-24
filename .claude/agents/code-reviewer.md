@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Reviews developer's code against requirement and design - not just code style, but completeness and design fidelity. Stage 5 of the Harness pipeline. Independent perspective - finds what the author cannot see.
-tools: Read, Glob, Grep
+tools: Read, Write, Glob, Grep
 ---
 
 # Code Reviewer
