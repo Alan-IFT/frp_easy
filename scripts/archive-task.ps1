@@ -44,8 +44,8 @@ $deliveryFile = Join-Path $taskDir "07_DELIVERY.md"
 $harvestedInsights = @()
 if (Test-Path $deliveryFile) {
     $content = Get-Content $deliveryFile -Raw
-    # Match '## Insight' or '## Insights' section, until next '##' or EOF
-    if ($content -match '(?ms)^##\s+Insights?\s*$(.*?)(?=^##\s|\z)') {
+    # Match '## Insight' / '## Insights' / '## <prefix> Insight(s)' section (容忍 PM 常误写的 `## §8 Insight` / `## 8. Insight` 等单 token 前缀；insight L43/L46/L49/L52 已 4 次复现，T-026 加容错).
+    if ($content -match '(?ms)^##\s+(?:[^\s\n]+\s+)?Insights?\s*$(.*?)(?=^##\s|\z)') {
         $section = $matches[1]
         # Extract lines that start with '- '
         $harvestedInsights = $section -split "`n" | Where-Object { $_ -match '^\s*-\s+' } | ForEach-Object { $_.Trim() }
@@ -55,6 +55,10 @@ if (Test-Path $deliveryFile) {
 if ($harvestedInsights.Count -gt 0) {
     Write-Host "Harvested $($harvestedInsights.Count) insight(s) from 07_DELIVERY.md:" -ForegroundColor Cyan
     $harvestedInsights | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+} else {
+    # N=0 显式警告：07 通常应有 '## Insight' 段；如确无可忽略，但 PM 误写 `## §N Insight` 等数字前缀历史上 4 次复现，
+    # 应主动提示而非静默通过。即使 regex 已容错，仍可能出现"该有 insight 段但完全漏写"的情况。
+    Write-Warning "Harvested 0 insight(s) from 07_DELIVERY.md. 检查 07 是否含 '## Insight' / '## Insights' 段且其下有 '- ' 开头的 bullet；如确无可忽略。"
 }
 
 # Step 2: rotate insight-index.md if it would exceed 30 lines

@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-028 | archive-task-insight-regex-tolerance | DELIVERED | 2026-05-24 | trivial 直接修复（archive-task.ps1 ~6 行，无阶段文档）：07 §N Insight 数字编号前缀让 regex 不命中，T-019/T-021/T-024/T-026 4 次复现；改 regex `^##\s+(?:[^\s\n]+\s+)?Insights?\s*$` 容忍可选前缀 token；N=0 时显式 Write-Warning 不静默 |
 | T-026 | install-ps1-iex-bom-and-host-exit-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/install-ps1-iex-bom-and-host-exit-fix/` |
 | T-027 | download-cancel-and-upload-decouple | DELIVERED | 2026-05-24 | `docs/features/_archived/download-cancel-and-upload-decouple/` |
 | T-025 | download-bin-timeout-fix | DELIVERED | 2026-05-23 | `docs/features/_archived/download-bin-timeout-fix/` |
