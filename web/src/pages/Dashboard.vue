@@ -2,6 +2,9 @@
   <div>
     <n-page-header title="仪表盘" subtitle="frpc / frps 进程状态与控制" />
 
+    <!-- T-038 boot-autostart-hardening：服务化状态卡片（[boot-autostart-fix]） -->
+    <ServiceStatusCard style="margin: 16px 0" />
+
     <!-- 二进制缺失警告 -->
     <n-alert
       v-if="appStore.binMissing.length > 0"
@@ -166,6 +169,7 @@ import {
   useMessage,
 } from 'naive-ui'
 import StatusBadge from '../components/StatusBadge.vue'
+import ServiceStatusCard from '../components/ServiceStatusCard.vue'
 import { useProcStore } from '../stores/proc'
 import { useAppStore } from '../stores/app'
 import { extractErrorMessage } from '../api/client'

@@ -3,6 +3,7 @@ import type {
   SystemReady,
   PublicIPResponse,
   UploadBinResponse,
+  SystemServiceStatusResponse,
 } from '../types'
 
 export async function apiGetReady(): Promise<SystemReady> {
@@ -12,6 +13,15 @@ export async function apiGetReady(): Promise<SystemReady> {
 
 export async function apiGetPublicIP(): Promise<PublicIPResponse> {
   const res = await apiClient.get<PublicIPResponse>('/api/v1/system/public-ip')
+  return res.data
+}
+
+/**
+ * T-038 boot-autostart-hardening：获取服务化状态 + 上次 autoRestore 结果。
+ * 供 Dashboard "服务化状态" 卡片消费。后端 5s 探测兜底，请求总不会 5xx。
+ */
+export async function apiGetServiceStatus(): Promise<SystemServiceStatusResponse> {
+  const res = await apiClient.get<SystemServiceStatusResponse>('/api/v1/system/service-status')
   return res.data
 }
 

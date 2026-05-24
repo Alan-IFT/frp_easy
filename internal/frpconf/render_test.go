@@ -73,6 +73,36 @@ func TestRenderFrpc_RoundTrip(t *testing.T) {
 	}
 }
 
+// T-038: 渲染出的 frpc.toml 必须含 `loginFailExit = false` 字面，让 frpc 在登录
+// 失败时不直接 exit 而是进入重连循环（与 autoRestoreProcs retry 形成双层防御）。
+// 反向证伪：删掉 RenderFrpc 内 LoginFailExit 赋值 → 此测试失败。
+func TestRenderFrpc_LoginFailExitFalse(t *testing.T) {
+	in := FrpcRenderInput{
+		ServerAddr: "x.example.com",
+		ServerPort: 7000,
+	}
+	data, err := RenderFrpc(in)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "loginFailExit = false") {
+		t.Errorf("expected 'loginFailExit = false' in output, got:\n%s", s)
+	}
+	// 反序列化也要验证字段语义
+	var got map[string]any
+	if err := toml.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	v, ok := got["loginFailExit"]
+	if !ok {
+		t.Fatalf("loginFailExit not present in TOML")
+	}
+	if b, _ := v.(bool); b {
+		t.Errorf("expected loginFailExit=false, got %v", v)
+	}
+}
+
 func TestRenderFrpc_OmitAuthWhenTokenEmpty(t *testing.T) {
 	in := FrpcRenderInput{
 		ServerAddr: "x.example.com",

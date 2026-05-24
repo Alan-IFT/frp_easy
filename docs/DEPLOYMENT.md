@@ -304,6 +304,15 @@ bash scripts/package.sh --skip-build    # 不重跑 build.sh
 
 适合需要开机自启、长驻、统一日志的运维场景。**前提**：已通过路径 A 解压发布包，或路径 B 构建得到二进制并组织好目录。
 
+> ⚠️ **[boot-autostart-fix] 开机自启硬保证**：路径 A 裸跑 `./frp-easy` **不会**让 reboot 后远程连接自动恢复——它只是个前台进程。如需"设备开机即可远程使用"（不依赖用户登录），必须走本路径 C，注册为系统级服务。一键安装（README §快速开始）等价于"路径 A + 路径 C 合并执行"，最省事。
+>
+> 注册后的硬保证：
+>
+> - Linux：unit 写在 `/etc/systemd/system/`，含 `Wants=network-online.target` 等到网络就绪再启 frp-easy；`Restart=on-failure` 让进程崩了 5s 内自动重启。
+> - Windows：`sc.exe create binPath= ... start= auto` 注册为 LocalSystem 自启服务，含 `depend= Tcpip/Dnscache`。
+> - frp-easy 进程内 `autoRestoreProcs` 按 `mode.frpc.enabled` / `mode.frps.enabled` 自动恢复 frpc/frps 子进程，首次失败后按 `5s / 15s / 45s / 2min / 5min` 指数 backoff 重试 5 次，全失败写 kv `system.autorestore.{kind}` 让 UI Dashboard 卡片可见。
+> - 装完会自动跑自检（`systemctl is-active + is-enabled` / `sc.exe qc + query`），不通过会 exit 4 让 install.sh / install.ps1 透传错误码。
+
 ### C.1 前置
 
 - Linux：systemd（绝大多数发行版默认有；WSL1 / 容器极简镜像可能没有）

@@ -55,6 +55,11 @@ while [[ $# -gt 0 ]]; do
 示例:
   sudo ./scripts/install-service.sh
   sudo ./scripts/install-service.sh --user nobody
+
+[boot-autostart-fix] 本脚本会注册 systemd system-level 服务（/etc/systemd/system/），
+开机即起，不依赖任何用户登录。unit 含 Wants=network-online.target 让 frpc 等到
+网络在线再启，配合 frp_easy.toml 渲染层的 loginFailExit=false 与 frp-easy 进程
+的 autoRestoreProcs 指数 backoff，让"reboot 后远程连接立即恢复"成为硬保证。
 EOF
             exit 0
             ;;
@@ -133,8 +138,14 @@ ESC_INSTALL_DIR="$(systemd_escape_path "$INSTALL_DIR")"
 cat > "$TMP_UNIT" <<EOF
 [Unit]
 Description=FRP Easy — frp 可视化管理 UI
-After=network.target
 Documentation=https://github.com/Alan-IFT/frp_easy
+# T-038 [boot-autostart-fix]：用 network-online.target 让 frp-easy 等到网络真正在线再启。
+# 旧版用 network.target 仅表示"网络配置已下发"，不等于"路由可达"——会让 frpc 在 boot
+# 时拿到 connect: network is unreachable 立即 exit（配合 loginFailExit=false 已无此问题，
+# 但仍把 systemd 依赖修对作为多层防御）。NetworkManager-wait-online.service 或
+# systemd-networkd-wait-online.service 任一 enabled 即可 gating。
+Wants=network-online.target
+After=network-online.target
 
 [Service]
 Type=simple
@@ -213,6 +224,26 @@ if [[ "$EXISTED" == "yes" ]]; then
 else
     echo "==> 已新建 unit 并启动服务"
 fi
+
+# T-038 [boot-autostart-fix] 自检：确认 unit 已 active + enabled 才算装好。
+# 失败时打印诊断 + exit 4（install.sh 透传同款码值；GR §5 C-1 / Q-4 决策）。
+# 用 5 次 1s 轮询（与 install-service.ps1 Wait-ServiceRunning idiom 同款），
+# 比裸 sleep 1 更稳：systemd active 状态推进有时 < 1s 有时 ~3s。
+echo "==> [boot-autostart-fix] 自检：systemctl is-active + is-enabled..."
+for i in 1 2 3 4 5; do
+    if systemctl is-active --quiet "$UNIT_NAME"; then break; fi
+    sleep 1
+done
+if ! systemctl is-active --quiet "$UNIT_NAME"; then
+    echo "错误：[boot-autostart-fix self-check FAIL] $UNIT_NAME 未进入 active 状态。" >&2
+    systemctl status "$UNIT_NAME" --no-pager -l 2>&1 | sed 's/^/    /' >&2
+    exit 4
+fi
+if ! systemctl is-enabled --quiet "$UNIT_NAME"; then
+    echo "错误：[boot-autostart-fix self-check FAIL] $UNIT_NAME 未 enabled（不会开机自启）。" >&2
+    exit 4
+fi
+echo "==> [boot-autostart-fix] 自检通过：$UNIT_NAME 已 active + enabled"
 
 cat <<EOF
 

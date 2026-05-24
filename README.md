@@ -106,6 +106,13 @@ curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/inst
 
 ### 或：手动下载发布包（备选）
 
+> ⚠️ **[boot-autostart-fix] 关于开机自启**：直接 `./frp-easy` 裸跑**不会**注册系统服务，关机/重启后远程连接**不会**自动恢复（前台进程随 shell / 终端关闭而退出）。如需"开机即可远程访问"的硬保证，请改用上方一键安装；或在解压目录里跑：
+>
+> - **Linux**：`sudo ./scripts/install-service.sh`（注册 system-level systemd 服务，含 `Wants=network-online.target` 等到网络就绪再启）
+> - **Windows**：管理员 PowerShell 跑 `.\scripts\install-service.ps1`（注册 LocalSystem Windows Service，含 `Tcpip/Dnscache` 依赖）
+>
+> 服务注册成功后会自检 `systemctl is-active + is-enabled` / `sc.exe qc + query`，不通过会 exit 4。frpc/frps 子进程由 frp-easy 在启动尾巴按 `mode.*.enabled` 自动恢复，失败时走 `5s / 15s / 45s / 2min / 5min` 指数 backoff retry。
+
 最短上手路径（以 Linux 发布包为例）：
 
 ```bash

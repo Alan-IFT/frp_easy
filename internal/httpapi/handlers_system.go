@@ -19,6 +19,7 @@ import (
 
 	"github.com/frp-easy/frp-easy/internal/downloader"
 	"github.com/frp-easy/frp-easy/internal/procmgr"
+	"github.com/frp-easy/frp-easy/internal/svcprobe"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -391,6 +392,63 @@ func respondWithIPResult(w http.ResponseWriter, result ipResult) {
 		resp.IP = result.IP
 		resp.Advisory = result.Advisory
 		resp.Source = result.Source
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// --- T-038: GET /api/v1/system/service-status ---
+
+// SystemServiceStatusResponse 是 GET /api/v1/system/service-status 的响应体。
+// 用于 Dashboard "服务化状态" 卡片展示是否被 systemd / SCM 监管、是否开机自启、
+// 上次 autoRestore 结果（按 kind 拆分）。设计依据 T-038 02 §3.4 / §5。
+type SystemServiceStatusResponse struct {
+	Supervised    bool                          `json:"supervised"`
+	Supervisor    string                        `json:"supervisor"`
+	BootAutostart bool                          `json:"boot_autostart"`
+	RunAs         string                        `json:"run_as"`
+	ProbeError    string                        `json:"probe_error,omitempty"`
+	AutoRestore   SystemAutoRestoreSection      `json:"auto_restore"`
+}
+
+// SystemAutoRestoreSection 描述自动恢复的当前期望（哪些 kind 启用）
+// 与上次实际恢复结果（按 kind 拆分）。
+type SystemAutoRestoreSection struct {
+	EnabledKinds []string                            `json:"enabled_kinds"`
+	LastRuns     map[string]json.RawMessage          `json:"last_runs,omitempty"` // kind → 原 JSON（透传 kv 值）
+}
+
+// systemServiceStatus 实现 GET /api/v1/system/service-status。
+//
+// 总预算 5s context（svcprobe 内部探测 + kv 读取共享）。
+// 失败降级语义：任一探测失败仍返回 supervised=false / boot_autostart=false / lastRuns=空。
+// 不返回 5xx 让前端能稳定渲染卡片（与 systemReady / systemPublicIP 同款契约）。
+func (h *handlers) systemServiceStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	status := svcprobe.Probe(ctx)
+
+	enabledKinds := []string{}
+	lastRuns := map[string]json.RawMessage{}
+	for _, k := range []string{"frpc", "frps"} {
+		if readBoolKV(ctx, h, "mode."+k+".enabled") {
+			enabledKinds = append(enabledKinds, k)
+		}
+		if v, ok, _ := h.deps.Store.KVGet(ctx, "system.autorestore."+k); ok && v != "" {
+			lastRuns[k] = json.RawMessage(v)
+		}
+	}
+
+	resp := SystemServiceStatusResponse{
+		Supervised:    status.Supervised,
+		Supervisor:    status.Supervisor,
+		BootAutostart: status.BootAutostart,
+		RunAs:         status.RunAs,
+		ProbeError:    status.ProbeError,
+		AutoRestore: SystemAutoRestoreSection{
+			EnabledKinds: enabledKinds,
+			LastRuns:     lastRuns,
+		},
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

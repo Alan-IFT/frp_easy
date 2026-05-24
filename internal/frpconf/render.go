@@ -36,12 +36,19 @@ type ProxyInput struct {
 // 用指针 + omitempty 来区分"未设置"和"零值"——TOML 编码器对空字符串
 // 与 nil 行为不同；指针更直观。
 type frpcRoot struct {
-	ServerAddr string          `toml:"serverAddr,omitempty"`
-	ServerPort int             `toml:"serverPort,omitempty"`
-	Log        *frpLog         `toml:"log,omitempty"`
-	Auth       *frpAuth        `toml:"auth,omitempty"`
-	WebServer  *frpWebServer   `toml:"webServer,omitempty"`
-	Proxies    []frpProxyEntry `toml:"proxies,omitempty"`
+	ServerAddr string `toml:"serverAddr,omitempty"`
+	ServerPort int    `toml:"serverPort,omitempty"`
+	// LoginFailExit 由 RenderFrpc 恒设为 &false（T-038）：让 frpc 在首次登录失败时
+	// **不**直接 exit，而是进入 frp 自身的重连循环（dial timeout / heartbeat 监控）。
+	// 这与 frp-easy autoRestoreProcs 的指数 backoff 形成双层防御：
+	// 网络瞬时不可达由 frp 自身 retry 处理；二进制 / 配置硬错由 autoRestoreProcs 兜底。
+	// 用 *bool 而非 bool 让 nil（未设置）与 false（显式禁用 exit）语义清晰；
+	// omitempty 在 *bool=nil 时省略输出，与本包既有"指针 + omitempty"约定一致。
+	LoginFailExit *bool           `toml:"loginFailExit,omitempty"`
+	Log           *frpLog         `toml:"log,omitempty"`
+	Auth          *frpAuth        `toml:"auth,omitempty"`
+	WebServer     *frpWebServer   `toml:"webServer,omitempty"`
+	Proxies       []frpProxyEntry `toml:"proxies,omitempty"`
 }
 
 type frpsRoot struct {
@@ -122,9 +129,13 @@ func RenderFrpc(in FrpcRenderInput) ([]byte, error) {
 		return nil, fmt.Errorf("frpconf.RenderFrpc: serverPort %d out of range", in.ServerPort)
 	}
 
+	// T-038: loginFailExit 恒为 false —— 与 autoRestoreProcs retry 形成双层防御。
+	// 解释见 frpcRoot.LoginFailExit 字段注释。
+	no := false
 	root := frpcRoot{
-		ServerAddr: in.ServerAddr,
-		ServerPort: in.ServerPort,
+		ServerAddr:    in.ServerAddr,
+		ServerPort:    in.ServerPort,
+		LoginFailExit: &no,
 	}
 	if in.AuthToken != "" {
 		method := in.AuthMethod

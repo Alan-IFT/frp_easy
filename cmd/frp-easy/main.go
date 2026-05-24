@@ -47,6 +47,7 @@ import (
 	"github.com/frp-easy/frp-easy/internal/logrotate"
 	"github.com/frp-easy/frp-easy/internal/procmgr"
 	"github.com/frp-easy/frp-easy/internal/storage"
+	"github.com/frp-easy/frp-easy/internal/svcprobe"
 )
 
 // Version 由构建脚本通过 -ldflags 注入；MVP 阶段写死 0.1.0。
@@ -117,6 +118,34 @@ func main() {
 //
 // 控制台 / dev 调用：`run(nil, nil)` —— 两参均 nil 等价于现有行为，
 // NFR-9 启动序列零字节改。
+// retryBackoff 是 autoRestoreProcs 后台 retry goroutine 的指数 backoff 序列（T-038）。
+// 序列设计依据 02 §D-1：覆盖网络瞬时抖动（< 5s）+ systemd network-online 兜底（30-60s）
+// + frps server cold-boot（30-90s）。累计 ~8 分钟与用户主观"reboot 后几分钟内应可用"对齐。
+var retryBackoff = []time.Duration{
+	5 * time.Second,
+	15 * time.Second,
+	45 * time.Second,
+	120 * time.Second,
+	300 * time.Second,
+}
+
+// AutoRestoreAttempt 描述一次 retry 的元数据；JSON 序列化后存 kv `system.autorestore.last`。
+type AutoRestoreAttempt struct {
+	Index  int       `json:"index"`
+	OK     bool      `json:"ok"`
+	Reason string    `json:"reason,omitempty"`
+	At     time.Time `json:"at"`
+}
+
+// AutoRestoreLastRun 是 kv.system.autorestore.last 单 key 的 JSON value 结构。
+// 每个 kind 独立保留一份（key 仍是单 key，value 含 kind 字段）。
+type AutoRestoreLastRun struct {
+	Kind      string               `json:"kind"`
+	Timestamp time.Time            `json:"timestamp"`
+	Outcome   string               `json:"outcome"` // ok | exhausted | user-initiated | canceled | binary-missing | config-missing
+	Attempts  []AutoRestoreAttempt `json:"attempts"`
+}
+
 func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 	// 0. flag 解析（T-008 FR-3 / AC-11/12/13/14）
 	//
@@ -290,10 +319,18 @@ func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 		serveErr <- srv.Serve(ln)
 	}()
 
-	// 6. 启动序列尾巴：恢复模式开关（AC-9）
-	autoRestoreProcs(store, pm, loc, logger, map[string]string{"frpc": frpcTOML, "frps": frpsTOML})
+	// 6. 启动序列尾巴：恢复模式开关（AC-9 + T-038 retry）
+	// rootCtx 串通 first attempt 同步路径 + retry goroutine 后台 sleep；
+	// 主 select 收到 SIGTERM / stopCh 时调 rootCancel() 让 retry goroutine 中断。
+	rootCtx, rootCancel := context.WithCancel(context.Background())
+	defer rootCancel()
+	autoRestoreProcs(rootCtx, store, pm, loc, logger, map[string]string{"frpc": frpcTOML, "frps": frpsTOML})
 	ready.Store(true)
 	logger.Info("ready gate opened")
+
+	// T-038 B-5.2：裸跑（非 systemd / 非 SCM）+ 用户已配置过 mode.*.enabled 时
+	// 在 stderr 与 ui.log 双轨打印一行中文警告，明示"前台运行不会开机自启"。
+	autostartNotice(store, logger)
 
 	// 【T-019】通知 Windows Service Execute 切 SCM 状态到 RUNNING。
 	// readyCh == nil 时（控制台分支）无操作，行为与现状等价。
@@ -335,6 +372,8 @@ func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 
 	// 优雅关停
 	ready.Store(false)
+	// T-038: 取消 retry goroutine（让 case <-ctx.Done() 命中立即退）
+	rootCancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	pm.Shutdown()
@@ -428,17 +467,27 @@ func ensureFrpcAdminCreds(store *storage.Store, logger *slog.Logger) frpcAdminCr
 	return c
 }
 
-// autoRestoreProcs 按 kv.mode.frpc.enabled / kv.mode.frps.enabled 自动 Start
-// （AC-9）。二进制缺失则记 warn 不报错。configPaths 用于 TOML 预检（OPT-8）。
-func autoRestoreProcs(store *storage.Store, pm *procmgr.Manager, loc binloc.Locator, logger *slog.Logger, configPaths map[string]string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+// autoRestoreProcs 按 kv.mode.frpc.enabled / kv.mode.frps.enabled 自动 Start（AC-9）。
+//
+// T-038 重构：
+//   - first attempt 仍同步执行（保留 NFR-9 启动序列字节级语义不变）。
+//   - first attempt 失败 → 启 per-kind retry goroutine 跑指数 backoff（retryBackoff
+//     5/15/45/120/300s），与用户主动 UI 操作竞态安全。
+//   - 二进制缺失 / 配置缺失视为"永久失败"，不 retry（不会因网络好了变成可解决）。
+//   - 任何分支都 persistAutoRestoreLast 写 kv `system.autorestore.last`，
+//     让 GET /api/v1/system/service-status 能展示给用户。
+//
+// rootCtx 用于让 retry goroutine 在主进程 SIGTERM / stopCh 时及时退出。
+func autoRestoreProcs(rootCtx context.Context, store *storage.Store, pm *procmgr.Manager, loc binloc.Locator, logger *slog.Logger, configPaths map[string]string) {
 	missing := map[string]bool{}
 	for _, k := range loc.Missing() {
 		missing[k] = true
 	}
 	for _, kind := range []string{"frpc", "frps"} {
-		v, ok, err := store.KVGet(ctx, "mode."+kind+".enabled")
+		// 读 kv mode.{kind}.enabled —— 用独立 3s context（与重构前对齐）。
+		kvCtx, cancel := context.WithTimeout(rootCtx, 3*time.Second)
+		v, ok, err := store.KVGet(kvCtx, "mode."+kind+".enabled")
+		cancel()
 		if err != nil || !ok {
 			continue
 		}
@@ -446,22 +495,152 @@ func autoRestoreProcs(store *storage.Store, pm *procmgr.Manager, loc binloc.Loca
 		if !b {
 			continue
 		}
+
+		// 二进制缺失：永久失败，不 retry。
 		if missing[kind] {
 			logger.Warn("auto-restore skipped: binary missing", "kind", kind)
+			persistAutoRestoreLast(rootCtx, store, logger, AutoRestoreLastRun{
+				Kind:      kind,
+				Timestamp: time.Now().UTC(),
+				Outcome:   "binary-missing",
+				Attempts:  []AutoRestoreAttempt{{Index: 0, OK: false, Reason: "binary missing", At: time.Now().UTC()}},
+			})
 			continue
 		}
-		// TOML 预检：配置文件不存在时跳过（避免子进程立即以 error 状态退出）
+
+		// TOML 预检：配置文件不存在视为永久失败（用户尚未在 UI 上配置过 server / proxies）。
 		if tomlPath, ok := configPaths[kind]; ok {
 			if _, err := os.Stat(tomlPath); os.IsNotExist(err) {
 				logger.Warn("auto-restore skipped: config file missing", "kind", kind, "path", tomlPath)
+				persistAutoRestoreLast(rootCtx, store, logger, AutoRestoreLastRun{
+					Kind:      kind,
+					Timestamp: time.Now().UTC(),
+					Outcome:   "config-missing",
+					Attempts:  []AutoRestoreAttempt{{Index: 0, OK: false, Reason: "config file missing: " + tomlPath, At: time.Now().UTC()}},
+				})
 				continue
 			}
 		}
-		// 注意：本期 main 不重写 frpc.toml/frps.toml；若 runtime 目录里没文件
-		// 子进程会启动失败 → procmgr 把 state 标 error。这是已知行为，前端
-		// 引导用户先编辑 server/client/proxies 后再开 mode 开关。
+
+		// First attempt（同步）
+		firstAttempt := AutoRestoreAttempt{Index: 0, At: time.Now().UTC()}
 		if _, err := pm.Start(kind); err != nil {
-			logger.Warn("auto-restore failed", "kind", kind, "err", err)
+			firstAttempt.OK = false
+			firstAttempt.Reason = err.Error()
+			logger.Warn("auto-restore first attempt failed; starting retry loop", "kind", kind, "err", err)
+			// 启 retry goroutine —— 用 rootCtx 让 SIGTERM 能取消。
+			go retryRestoreLoop(rootCtx, store, pm, kind, logger, []AutoRestoreAttempt{firstAttempt})
+		} else {
+			firstAttempt.OK = true
+			persistAutoRestoreLast(rootCtx, store, logger, AutoRestoreLastRun{
+				Kind:      kind,
+				Timestamp: time.Now().UTC(),
+				Outcome:   "ok",
+				Attempts:  []AutoRestoreAttempt{firstAttempt},
+			})
 		}
 	}
+}
+
+// retryRestoreLoop 在 first attempt 失败后启动；按 retryBackoff 序列指数 backoff。
+// 退出条件（任一）：
+//
+//	(a) 某次 pm.Start 成功 → outcome="ok"。
+//	(b) 用户主动操作让 state 变成非 stopped / error → outcome="user-initiated"。
+//	(c) rootCtx 取消（主进程 SIGTERM / stopCh）→ outcome="canceled"。
+//	(d) retryBackoff 全部跑完仍未成功 → outcome="exhausted"。
+//
+// 任一退出路径都 persistAutoRestoreLast，让 UI 能查到 last_run。
+func retryRestoreLoop(ctx context.Context, store *storage.Store, pm *procmgr.Manager, kind string, logger *slog.Logger, initial []AutoRestoreAttempt) {
+	attempts := append([]AutoRestoreAttempt(nil), initial...)
+	for i, d := range retryBackoff {
+		select {
+		case <-ctx.Done():
+			logger.Info("auto-restore canceled", "kind", kind)
+			persistAutoRestoreLast(ctx, store, logger, AutoRestoreLastRun{
+				Kind: kind, Timestamp: time.Now().UTC(), Outcome: "canceled", Attempts: attempts,
+			})
+			return
+		case <-time.After(d):
+		}
+		// 用户介入检测：若 state 已不是 stopped/error，说明用户从 UI 主动改了。
+		if st := pm.Status(kind).State; st != "stopped" && st != "error" {
+			logger.Info("auto-restore retry aborted (user-initiated)", "kind", kind, "state", st)
+			persistAutoRestoreLast(ctx, store, logger, AutoRestoreLastRun{
+				Kind: kind, Timestamp: time.Now().UTC(), Outcome: "user-initiated", Attempts: attempts,
+			})
+			return
+		}
+		logger.Info("auto-restore retry", "kind", kind, "attempt", i+1, "of", len(retryBackoff))
+		attempt := AutoRestoreAttempt{Index: i + 1, At: time.Now().UTC()}
+		_, err := pm.Start(kind)
+		if err == nil {
+			attempt.OK = true
+			attempts = append(attempts, attempt)
+			persistAutoRestoreLast(ctx, store, logger, AutoRestoreLastRun{
+				Kind: kind, Timestamp: time.Now().UTC(), Outcome: "ok", Attempts: attempts,
+			})
+			return
+		}
+		attempt.OK = false
+		attempt.Reason = err.Error()
+		attempts = append(attempts, attempt)
+	}
+	logger.Error("auto-restore exhausted", "kind", kind, "attempts", len(attempts))
+	persistAutoRestoreLast(ctx, store, logger, AutoRestoreLastRun{
+		Kind: kind, Timestamp: time.Now().UTC(), Outcome: "exhausted", Attempts: attempts,
+	})
+}
+
+// persistAutoRestoreLast 把单 kind 的 retry 结果序列化为 JSON 写到 kv。
+// key = "system.autorestore." + kind（每 kind 一份），让 UI 能按 kind 展示。
+// 5s context timeout 防 kv 写挂死。
+func persistAutoRestoreLast(parent context.Context, store *storage.Store, logger *slog.Logger, run AutoRestoreLastRun) {
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
+	defer cancel()
+	b, err := json.Marshal(run)
+	if err != nil {
+		logger.Warn("persist autorestore.last: marshal failed", "err", err)
+		return
+	}
+	if err := store.KVSet(ctx, "system.autorestore."+run.Kind, string(b)); err != nil {
+		logger.Warn("persist autorestore.last: kvset failed", "err", err, "kind", run.Kind)
+	}
+}
+
+// autostartNotice 在裸跑场景（非 systemd / 非 Windows Service）+ 用户已配置过
+// mode.*.enabled=true 时，在 stderr + ui.log 双轨打印一行中文警告，明示"前台
+// 运行关机后不会自动恢复"。这是 T-038 B-5.2。
+//
+// 安全条件：探测 supervised=false AND boot_autostart=false 同时成立才打印；
+// 任一为 true（已在 systemd / SCM 下运行）则不打扰。
+func autostartNotice(store *storage.Store, logger *slog.Logger) {
+	probeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	st := svcprobe.Probe(probeCtx)
+	if st.Supervised || st.BootAutostart {
+		return
+	}
+	// 是否有用户已经"打算开机自启"的意图？读 mode.*.enabled。
+	kvCtx, kvCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer kvCancel()
+	anyEnabled := false
+	for _, kind := range []string{"frpc", "frps"} {
+		if v, ok, err := store.KVGet(kvCtx, "mode."+kind+".enabled"); err == nil && ok {
+			if b, _ := strconv.ParseBool(v); b {
+				anyEnabled = true
+				break
+			}
+		}
+	}
+	if !anyEnabled {
+		// 用户根本没启用任何 mode → 没必要打扰。
+		return
+	}
+	msg := "提示：当前以前台进程运行（非 systemd / Windows Service），关机/重启后不会自动恢复 frpc/frps 子进程。\n" +
+		"  如需开机自启请运行：\n" +
+		"    Linux:   sudo /opt/frp-easy/scripts/install-service.sh\n" +
+		"    Windows: 以管理员 PowerShell 跑 install-service.ps1\n"
+	fmt.Fprint(os.Stderr, msg)
+	logger.Warn("autostart notice: bare foreground run", "supervisor", st.Supervisor, "run_as", st.RunAs, "message", msg)
 }

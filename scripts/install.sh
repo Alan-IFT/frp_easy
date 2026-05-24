@@ -30,6 +30,7 @@
 #         1 前置/环境失败（非 root / 缺依赖 / 非 amd64 / 网络或 API 不可用 / 下载解压失败）
 #         2 服务注册阶段失败（透传 install-service.sh 的退出码）
 #         3 ROLE 未指定 / 非法 / 升级期 role 冲突且无 --force-role / FRP_EASY_FORCE_ROLE
+#         4 [boot-autostart-fix] 自检失败（unit 已注册但未 active/enabled；透传 install-service.sh 的 exit 4）
 # 说明：本脚本不删除已存在安装中的 frp_easy.toml 与 .frp_easy/ 数据目录；
 #       目标目录已存在 frp-easy 时按"升级"语义处理（覆盖二进制/脚本，保留配置与数据）。
 
@@ -106,6 +107,7 @@ frp_easy 一键安装脚本（Linux / macOS）—— 下载滚动发布包（与
   1  前置/环境失败（非 root / 缺依赖 / 非 amd64 / 网络或 API 不可用 / 下载解压失败）
   2  服务注册阶段失败（透传 install-service.sh 退出码）
   3  ROLE 未指定 / 非法 / 升级期 role 冲突且无 --force-role / FRP_EASY_FORCE_ROLE
+  4  [boot-autostart-fix] 自检失败（unit 已注册但未 active/enabled）
 
 卸载:
   sudo /opt/frp-easy/scripts/uninstall-service.sh

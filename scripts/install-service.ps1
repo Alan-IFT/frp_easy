@@ -159,6 +159,16 @@ if ($existed) {
 # reset= 60 表示 60 秒计数窗口；崩溃后 5000 毫秒重启
 & sc.exe failure $ServiceName reset= 60 actions= restart/5000 | Out-Null
 
+# T-038 [boot-autostart-fix]：声明对 Tcpip 与 Dnscache 系统服务的依赖，让 SCM 在
+# 网络栈与 DNS 解析就绪后再启 frp-easy。LocalSystem 服务通常已隐式等待，但显式
+# 声明是软件工程标准。Server Core 等精简版本可能缺 Dnscache → best-effort：失败
+# 仅警告不阻断（GR §3 Q-5 决策）。
+$null = & sc.exe config $ServiceName depend= "Tcpip/Dnscache" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "提示：[boot-autostart-fix] sc.exe config depend= 失败（rc=$LASTEXITCODE），不影响本次安装；LocalSystem 服务通常已隐式等待网络栈就绪。" -ForegroundColor Yellow
+    $LASTEXITCODE = 0  # 显式重置防影响后续 sc.exe 调用退出码判定
+}
+
 # 服务描述（中文）
 & sc.exe description $ServiceName "FRP 可视化管理 UI（frp_easy）" | Out-Null
 
@@ -184,6 +194,23 @@ if ($existed) {
 } else {
     Write-Host "==> 服务已启动"
 }
+
+# T-038 [boot-autostart-fix] 自检：确认 sc.exe qc 输出含 START_TYPE: 2 AUTO_START
+# 与 sc.exe query 含 STATE: 4 RUNNING。失败 exit 4（与 install.sh 透传同款码值）。
+Write-Host "==> [boot-autostart-fix] 自检：sc.exe qc + query..."
+$qcOut = & sc.exe qc $ServiceName 2>&1
+if ($qcOut -notmatch 'START_TYPE\s*:\s*2\s+AUTO_START') {
+    Write-Error "[boot-autostart-fix self-check FAIL] $ServiceName 未配置为 AUTO_START。"
+    Write-Host ($qcOut | Out-String)
+    exit 4
+}
+$qOut = & sc.exe query $ServiceName 2>&1
+if ($qOut -notmatch 'STATE\s*:\s*4\s+RUNNING') {
+    Write-Error "[boot-autostart-fix self-check FAIL] $ServiceName 未进入 RUNNING 状态。"
+    Write-Host ($qOut | Out-String)
+    exit 4
+}
+Write-Host "==> [boot-autostart-fix] 自检通过：$ServiceName AUTO_START + RUNNING"
 
 @"
 

@@ -137,3 +137,33 @@ export interface WizardStatus {
 export interface DownloadBinRequest {
   kind: 'frpc' | 'frps'
 }
+
+// ---------------------------------------------------------------
+// T-038 boot-autostart-hardening：服务化状态 + autoRestore last-run
+// ---------------------------------------------------------------
+
+export interface AutoRestoreAttempt {
+  index: number
+  ok: boolean
+  reason?: string
+  at: string // RFC3339 UTC
+}
+
+export interface AutoRestoreLastRun {
+  kind: 'frpc' | 'frps'
+  timestamp: string
+  outcome: 'ok' | 'exhausted' | 'user-initiated' | 'canceled' | 'binary-missing' | 'config-missing'
+  attempts: AutoRestoreAttempt[]
+}
+
+export interface SystemServiceStatusResponse {
+  supervised: boolean
+  supervisor: 'systemd' | 'windows-service' | 'none'
+  boot_autostart: boolean
+  run_as: string
+  probe_error?: string
+  auto_restore: {
+    enabled_kinds: Array<'frpc' | 'frps'>
+    last_runs?: Record<string, AutoRestoreLastRun>
+  }
+}

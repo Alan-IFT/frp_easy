@@ -441,6 +441,50 @@ else
     fi
 fi
 
+# --- I. T-038 boot-autostart-hardening static gates ---
+# 守门 4 处与"开机自启硬保证"相关的字面契约，未来若有人改回旧形态会立即 FAIL。
+# 锚字串 [boot-autostart-fix] 在 README / ServiceStatusCard.vue / install-service.sh --help
+# 三处呈现，与 install-service.sh / .ps1 自检失败诊断段共享同款锚——dev/QA/用户都能 grep。
+# 双实现对账（insight L26）：与 verify_all.ps1 I.x 行为一致——按行 grep。
+
+# I.1 install-service.sh unit 模板含 network-online.target（实测主因 #1 守门）
+i1_hits=$(grep -c 'network-online.target' scripts/install-service.sh 2>/dev/null || echo 0)
+if (( i1_hits >= 2 )); then
+    step "I.1" "install-service.sh unit references network-online.target (Wants+After)" "PASS"
+else
+    step "I.1" "install-service.sh unit references network-online.target (Wants+After)" "FAIL" "expected >=2 hits, got $i1_hits"
+fi
+
+# I.2 render.go 渲染 frpc.toml 含 LoginFailExit 字段（实测主因 #2 守门）
+if grep -q 'LoginFailExit' internal/frpconf/render.go 2>/dev/null; then
+    step "I.2" "frpconf/render.go has LoginFailExit field" "PASS"
+else
+    step "I.2" "frpconf/render.go has LoginFailExit field" "FAIL" "字段被删除会让 frpc 在首次登录失败时立即 exit"
+fi
+
+# I.3 README + ServiceStatusCard.vue + install-service.sh 三处含 [boot-autostart-fix] 锚字串
+i3_missing=""
+for f in README.md scripts/install-service.sh web/src/components/ServiceStatusCard.vue; do
+    if [[ ! -f "$f" ]] || ! grep -q '\[boot-autostart-fix\]' "$f"; then
+        i3_missing+="$f "
+    fi
+done
+if [[ -z "$i3_missing" ]]; then
+    step "I.3" "[boot-autostart-fix] anchor present in README + install-service.sh + ServiceStatusCard.vue" "PASS"
+else
+    step "I.3" "[boot-autostart-fix] anchor present in README + install-service.sh + ServiceStatusCard.vue" "FAIL" "missing: $i3_missing"
+fi
+
+# I.4 main.go 含 retryRestoreLoop 函数 + retryBackoff 序列（实测主因 #3 守门）
+i4_problems=""
+grep -q 'retryRestoreLoop' cmd/frp-easy/main.go 2>/dev/null || i4_problems+="retryRestoreLoop missing "
+grep -q 'retryBackoff' cmd/frp-easy/main.go 2>/dev/null || i4_problems+="retryBackoff missing "
+if [[ -z "$i4_problems" ]]; then
+    step "I.4" "main.go has retryRestoreLoop + retryBackoff" "PASS"
+else
+    step "I.4" "main.go has retryRestoreLoop + retryBackoff" "FAIL" "$i4_problems"
+fi
+
 # Summary
 echo ""
 echo "=== Summary ==="

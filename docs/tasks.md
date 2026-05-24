@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-038 | boot-autostart-hardening | DELIVERED | 2026-05-25 | `docs/features/_archived/boot-autostart-hardening/` |
 | T-036 | log-ui-ux-polish | DELIVERED | 2026-05-24 | `docs/features/_archived/log-ui-ux-polish/` |
 | T-037 | proxy-rules-simplify-and-port-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/proxy-rules-simplify-and-port-fix/` |
 | T-035 | install-sh-role-cli-arg-passthrough | DELIVERED | 2026-05-24 | `docs/features/_archived/install-sh-role-cli-arg-passthrough/` |

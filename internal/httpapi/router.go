@@ -117,6 +117,8 @@ func New(d Dependencies) http.Handler {
 
 				// T-002: system utilities — public IP, binary download, wizard.
 				r.Get("/system/public-ip", h.systemPublicIP)
+				// T-038: 服务化状态 + 上次自动恢复结果（Dashboard "服务化状态" 卡片消费）。
+				r.Get("/system/service-status", h.systemServiceStatus)
 				r.Post("/system/download-bin", h.downloadBin)
 				r.Get("/system/download-status/{kind}", h.downloadStatus)
 				// T-027：取消下载（与 download-bin / download-status 同分组同中间件链）。

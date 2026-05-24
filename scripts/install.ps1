@@ -17,6 +17,7 @@
 # 退出码：0 成功（含 -Help 帮助）
 #         1 前置/环境失败（非管理员 / 非 amd64 / 网络或 API 不可用 / 下载解压失败）
 #         2 服务注册阶段失败（透传 install-service.ps1 的退出码）
+#         4 [boot-autostart-fix] 自检失败（透传 install-service.ps1 的 exit 4：服务已注册但 sc.exe qc 未含 AUTO_START 或 query 未 RUNNING）
 # 说明：本脚本不删除已存在安装中的 frp_easy.toml 与 .frp_easy\ 数据目录；
 #       目标目录已存在 frp-easy.exe 时按"升级"语义处理（覆盖二进制/脚本，保留配置与数据）。
 
@@ -143,6 +144,7 @@ frp_easy 一键安装脚本（Windows）—— 下载滚动发布包（与 main 
   0  成功（含本帮助）
   1  前置/环境失败（非管理员 / 非 amd64 / 网络或 API 不可用 / 下载解压失败）
   2  服务注册阶段失败（透传 install-service.ps1 退出码）
+  4  [boot-autostart-fix] 自检失败（unit 已注册但未 AUTO_START + RUNNING）
 
 卸载:
   以管理员身份运行 PowerShell 执行 C:\Program Files\frp-easy\scripts\uninstall-service.ps1

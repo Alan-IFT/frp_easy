@@ -450,6 +450,67 @@ Step "H.1" "T-037 deletion surface clean (no batch/probe/grouping residue)" {
     }
 }
 
+# --- I. T-038 boot-autostart-hardening static gates ---
+# 双实现对账（insight L26）：与 verify_all.sh I.x 行为一致——按行扫 + 严格行内 -cmatch
+# 而非 Raw + -match（防 insight L26 Raw 假阳性陷阱）。
+Step "I.1" "install-service.sh unit references network-online.target (Wants+After)" {
+    if (-not (Test-Path "scripts/install-service.sh")) {
+        throw "scripts/install-service.sh missing"
+    }
+    $lines = Get-Content "scripts/install-service.sh"
+    $hits = ($lines | Where-Object { $_ -cmatch 'network-online\.target' }).Count
+    if ($hits -lt 2) {
+        throw "expected >=2 'network-online.target' lines, got $hits"
+    }
+}
+
+Step "I.2" "frpconf/render.go has LoginFailExit field" {
+    if (-not (Test-Path "internal/frpconf/render.go")) {
+        throw "internal/frpconf/render.go missing"
+    }
+    $lines = Get-Content "internal/frpconf/render.go"
+    if (-not ($lines | Where-Object { $_ -cmatch 'LoginFailExit' })) {
+        throw "LoginFailExit field missing in render.go"
+    }
+}
+
+Step "I.3" "[boot-autostart-fix] anchor present in README + install-service.sh + ServiceStatusCard.vue" {
+    $files = @(
+        "README.md",
+        "scripts/install-service.sh",
+        "web/src/components/ServiceStatusCard.vue"
+    )
+    $missing = @()
+    foreach ($f in $files) {
+        if (-not (Test-Path $f)) {
+            $missing += $f
+            continue
+        }
+        $lines = Get-Content $f
+        if (-not ($lines | Where-Object { $_ -cmatch '\[boot-autostart-fix\]' })) {
+            $missing += $f
+        }
+    }
+    if ($missing.Count -gt 0) {
+        throw ("missing [boot-autostart-fix] anchor in: " + ($missing -join ', '))
+    }
+}
+
+Step "I.4" "main.go has retryRestoreLoop + retryBackoff" {
+    if (-not (Test-Path "cmd/frp-easy/main.go")) {
+        throw "cmd/frp-easy/main.go missing"
+    }
+    $lines = Get-Content "cmd/frp-easy/main.go"
+    $hasLoop = $lines | Where-Object { $_ -cmatch 'retryRestoreLoop' }
+    $hasBackoff = $lines | Where-Object { $_ -cmatch 'retryBackoff' }
+    $problems = @()
+    if (-not $hasLoop)    { $problems += "retryRestoreLoop missing" }
+    if (-not $hasBackoff) { $problems += "retryBackoff missing" }
+    if ($problems.Count -gt 0) {
+        throw ($problems -join '; ')
+    }
+}
+
 # --- Summary ---
 Write-Host ""
 Write-Host "=== Summary ===" -ForegroundColor Cyan
