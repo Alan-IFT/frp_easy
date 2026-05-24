@@ -275,28 +275,63 @@ else
     fi
 fi
 
-# E.7 — All scripts/*.ps1 must start with UTF-8 BOM (EF BB BF)
-# T-021: 防回归闸门 —— scripts/*.ps1 全部必须 EF BB BF 起始。
-# 设计 02_SOLUTION_DESIGN.md §2.2 + §9 I-1/I-2 (全 11 个加 BOM, 严格粒度)。
+# E.7a/b/c — T-026: 拆分 T-021 的全量 BOM 检查为 white-list 驱动，容纳 install.ps1 反向规则。
+# install.ps1 是 irm | iex 入口；BOM 会被 Invoke-RestMethod 解码为 U+FEFF 进入字符串触发
+# ParserError。其余 10 个 .ps1 仍是磁盘形态调用，PS5.1 + zh-CN 主机无 BOM 时会按 host
+# ANSI codepage (GBK) 误解码中文，必须保留 BOM。
+PS1_REQUIRE_BOM=(archive-task.ps1 build.ps1 harness-sync.ps1 install-hooks.ps1 \
+    install-service.ps1 package.ps1 start-e2e-server.ps1 start.ps1 \
+    uninstall-service.ps1 verify_all.ps1)
+PS1_FORBID_BOM=(install.ps1)
+
 if [[ ! -d scripts ]]; then
-    step "E.7" "scripts/*.ps1 have UTF-8 BOM" "SKIP"
+    step "E.7a" "BOM-required scripts/*.ps1 have UTF-8 BOM" "SKIP"
+    step "E.7b" "iex-entry scripts/*.ps1 MUST NOT have UTF-8 BOM" "SKIP"
+    step "E.7c" "All scripts/*.ps1 classified in E.7a or E.7b" "SKIP"
 else
-    e7_missing=""
-    e7_found_any=false
-    while IFS= read -r f; do
-        e7_found_any=true
-        # POSIX 字节级: head -c 3 + od -An -tx1; od 在 Alpine / 各 minimal 镜像默认存在 (xxd 不保证)
+    # E.7a
+    e7a_missing=""
+    for name in "${PS1_REQUIRE_BOM[@]}"; do
+        f="scripts/$name"
+        if [[ ! -f "$f" ]]; then e7a_missing="$e7a_missing\n$name (MISSING)"; continue; fi
         first3=$(head -c 3 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')
-        if [[ "$first3" != "efbbbf" ]]; then
-            e7_missing="$e7_missing\n$f"
+        if [[ "$first3" != "efbbbf" ]]; then e7a_missing="$e7a_missing\n$name"; fi
+    done
+    if [[ -z "$e7a_missing" ]]; then
+        step "E.7a" "BOM-required scripts/*.ps1 have UTF-8 BOM" "PASS"
+    else
+        step "E.7a" "BOM-required scripts/*.ps1 have UTF-8 BOM" "FAIL" "$(echo -e $e7a_missing)"
+    fi
+
+    # E.7b
+    e7b_wrong=""
+    for name in "${PS1_FORBID_BOM[@]}"; do
+        f="scripts/$name"
+        if [[ ! -f "$f" ]]; then e7b_wrong="$e7b_wrong\n$name (MISSING)"; continue; fi
+        first3=$(head -c 3 "$f" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+        if [[ "$first3" == "efbbbf" ]]; then e7b_wrong="$e7b_wrong\n$name"; fi
+    done
+    if [[ -z "$e7b_wrong" ]]; then
+        step "E.7b" "iex-entry scripts/*.ps1 MUST NOT have UTF-8 BOM" "PASS"
+    else
+        step "E.7b" "iex-entry scripts/*.ps1 MUST NOT have UTF-8 BOM" "FAIL" "$(echo -e $e7b_wrong)"
+    fi
+
+    # E.7c — 防漏白名单：未在两表的 .ps1 触发 WARN，提醒维护者归类
+    known=" ${PS1_REQUIRE_BOM[*]} ${PS1_FORBID_BOM[*]} "
+    e7c_unclassified=""
+    while IFS= read -r f; do
+        base=$(basename "$f")
+        if [[ "$known" != *" $base "* ]]; then
+            e7c_unclassified="$e7c_unclassified\n$base"
         fi
     done < <(find scripts -maxdepth 1 -name '*.ps1' -type f 2>/dev/null)
-    if [[ "$e7_found_any" == "false" ]]; then
-        step "E.7" "scripts/*.ps1 have UTF-8 BOM" "SKIP"
-    elif [[ -z "$e7_missing" ]]; then
-        step "E.7" "scripts/*.ps1 have UTF-8 BOM" "PASS"
+    if [[ -z "$e7c_unclassified" ]]; then
+        step "E.7c" "All scripts/*.ps1 classified in E.7a or E.7b" "PASS"
     else
-        step "E.7" "scripts/*.ps1 have UTF-8 BOM" "FAIL" "$(echo -e $e7_missing)"
+        # G-7 必修条件：WARN 分支显式打印 unclassified 文件名（依 03 §8 G-7 增补）
+        echo "    unclassified:$(echo -e $e7c_unclassified)"
+        step "E.7c" "All scripts/*.ps1 classified in E.7a or E.7b" "WARN" "$(echo -e $e7c_unclassified)"
     fi
 fi
 

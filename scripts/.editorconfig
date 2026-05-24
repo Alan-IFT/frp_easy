@@ -3,3 +3,12 @@
 charset = utf-8-bom
 end_of_line = lf
 insert_final_newline = true
+
+# T-026: install.ps1 是 irm | iex 入口，BOM 会让 irm 解码为 U+FEFF 触发 ParserError。
+# 此例外块覆盖上面的 [*.ps1] charset=utf-8-bom，让编辑器保存时不写 BOM。
+# EditorConfig 规则：后置 section 覆盖前置（最具体的 section 优先）。
+# 此 section 仅锚定 scripts/install.ps1（.editorconfig 在 scripts/ 目录内，相对匹配）。
+[install.ps1]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true

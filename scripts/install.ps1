@@ -1,4 +1,4 @@
-﻿# install.ps1 — frp_easy 一键安装脚本（Windows）
+# install.ps1 — frp_easy 一键安装脚本（Windows）
 #
 # 用途：一条命令完成 frp_easy 的下载、安装与 Windows 服务注册。自动探测架构，
 #       调用 GitHub Releases API 取固定标签 `rolling` 的滚动发布（与 main 分支
@@ -21,9 +21,29 @@
 #       目标目录已存在 frp-easy.exe 时按"升级"语义处理（覆盖二进制/脚本，保留配置与数据）。
 
 # 注意：本脚本既要支持 `.\install.ps1 -Help` 磁盘形态，也要支持 `irm ... | iex` 管道形态。
-# `[CmdletBinding()]` attribute 在 iex inline 上下文不允许（仅允许在 script file 或 function
-# 顶层），会触发 "Invoke-Expression: Unexpected attribute 'CmdletBinding'"。故此处不加。
-# `param` block 在 iex 形态下合法（虽无法从管道传参，$Help 取默认 $false），磁盘形态正常。
+# T-024：`[CmdletBinding()]` attribute 在 iex inline 上下文不允许（仅允许在 script file 或
+# function 顶层），会触发 "Invoke-Expression: Unexpected attribute 'CmdletBinding'"。故此处
+# 不加（insight L36）。
+# T-026 E1 修复：本文件首字节**禁** BOM —— iex 形态下 Invoke-RestMethod 把 EF BB BF 解码为
+# U+FEFF 进入字符串，iex parser 把首字符当 cmdlet 名触发 "'﻿#' is not recognized" ParserError。
+# 配对 verify_all 闸门：E.7b 断言本文件首 3 字节 != EF BB BF；E.7a 断言其余 .ps1 仍有 BOM。
+# scripts/.editorconfig 配对例外 [install.ps1] charset=utf-8（覆盖 [*.ps1] charset=utf-8-bom）。
+# T-026 E2 修复：主体用 `& { ... }` 子作用域包裹（见下文），`exit N` 退子作用域而非杀宿主
+# PowerShell。失败可观测靠既有 stderr `Write-Error` 红字 + 子作用域末尾追加"❌ ..."中文横幅。
+# 本脚本仅支持 -Help 参数；-Verbose/-Debug 等 cmdlet common parameter 需要 [CmdletBinding()]，
+# 因 T-024 / insight L36 已不可加，故不支持（依 03 §8 G-6 增补）。
+param(
+    [switch]$Help
+)
+
+# T-026 D-2：主体放入 scriptblock，& 调用让 exit N 退子作用域不杀宿主。
+# 顶层 $PSBoundParameters splat 进内部 param 透传 -Help（iex 形态下为空 hashtable）。
+# 本脚本仅支持 -Help 参数；-Verbose/-Debug 等 cmdlet common parameter 需要 [CmdletBinding()]，
+# 因 T-024 / insight L36 已不可加，故不支持（依 03 §8 G-6 增补）。
+# 未来在 install.ps1 加新顶层参数时，必须同步在内部 scriptblock param 块加同名同类型参数
+# （@PSBoundParameters splatting 要求 hashtable key 与内层 param 严格对应；否则报"找不到接受
+# 实际参数的位置参数"或静默错位）（依 03 §8 G-15 增补）。
+& {
 param(
     [switch]$Help
 )
@@ -369,3 +389,14 @@ $publicLine$publicHint
 "@ | Write-Host
 
 exit 0
+} @PSBoundParameters
+
+# T-026 D-3 / FR-6 / AC-7：失败可观测横幅（依 02 §4.1）。
+# `& { ... }` 退出后捕获 $LASTEXITCODE：非零则打印中文失败横幅。
+# 即使内部走 exit N（PS 在 scriptblock 内 exit 转为"set $LASTEXITCODE=N + 退当前 scope"），
+# 控制流仍回到 caller 继续执行此 if 块，故横幅与 exit 路径不冲突。
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "❌ frp_easy 安装未完成（退出码=$LASTEXITCODE）。" -ForegroundColor Red
+    Write-Host "   请按上方红字定位失败原因；必要时执行 'sc query frp-easy' 检查服务状态。" -ForegroundColor Red
+}

@@ -265,27 +265,73 @@ Step "E.6" "Adversarial tests section present in completed task reports" {
     if ($bad.Count -gt 0) { throw "Test reports missing '## Adversarial tests' section:`n$($bad -join "`n")" }
 }
 
-Step "E.7" "scripts/*.ps1 have UTF-8 BOM" {
-    # T-021: 防回归闸门 —— scripts/*.ps1 全部必须 EF BB BF 起始。
-    # 设计 02_SOLUTION_DESIGN.md §2.2 + §9 I-1/I-2 (全 11 个加 BOM, 严格粒度)。
+# T-026: 拆分 T-021 的全量 BOM 检查为 white-list 驱动，容纳 install.ps1 的反向规则。
+# install.ps1 是 irm | iex 入口；BOM 会被 Invoke-RestMethod 解码为 U+FEFF 进入字符串触发
+# ParserError（'﻿#' is not recognized）。其余 10 个 .ps1 仍是磁盘形态调用，PS5.1 + zh-CN
+# 主机无 BOM 时会按 host ANSI codepage (GBK) 误解码中文，必须保留 BOM。
+$Ps1RequireBom = @(
+    'archive-task.ps1',
+    'build.ps1',
+    'harness-sync.ps1',
+    'install-hooks.ps1',
+    'install-service.ps1',
+    'package.ps1',
+    'start-e2e-server.ps1',
+    'start.ps1',
+    'uninstall-service.ps1',
+    'verify_all.ps1'
+)
+$Ps1ForbidBom = @(
+    'install.ps1'  # T-026: iex 入口；BOM 会被 irm 解码为 U+FEFF 进入字符串触发 ParserError
+)
+
+Step "E.7a" "BOM-required scripts/*.ps1 have UTF-8 BOM" {
     if (-not (Test-Path "scripts")) { return "SKIP" }
-    $ps1s = Get-ChildItem -Path "scripts" -Filter "*.ps1" -File -ErrorAction SilentlyContinue
-    if (-not $ps1s -or $ps1s.Count -eq 0) { return "SKIP" }
     $missing = @()
-    foreach ($f in $ps1s) {
-        # 使用 .NET API 跨 PS5/7 一致 (Get-Content -Encoding Byte / -AsByteStream 在两版本 flag 不同)
-        $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+    foreach ($name in $Ps1RequireBom) {
+        $full = Join-Path "scripts" $name
+        if (-not (Test-Path -PathType Leaf $full)) {
+            $missing += "$name (MISSING)"
+            continue
+        }
+        $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $full).Path)
         if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
-            # C-4 修订: 加 startsWith guard, 避免 verify_all 从子目录调用时 Substring 越界
-            if (-not $f.FullName.StartsWith($root)) {
-                throw "verify_all 必须从仓库根目录运行 (当前 root: $root)"
-            }
-            $relPath = $f.FullName.Substring($root.Length + 1)
-            $missing += $relPath
+            $missing += $name
         }
     }
-    if ($missing.Count -gt 0) {
-        throw "Missing UTF-8 BOM in:`n$($missing -join "`n")"
+    if ($missing.Count -gt 0) { throw "Missing UTF-8 BOM in:`n$($missing -join "`n")" }
+}
+
+Step "E.7b" "iex-entry scripts/*.ps1 MUST NOT have UTF-8 BOM" {
+    if (-not (Test-Path "scripts")) { return "SKIP" }
+    $wrong = @()
+    foreach ($name in $Ps1ForbidBom) {
+        $full = Join-Path "scripts" $name
+        if (-not (Test-Path -PathType Leaf $full)) {
+            $wrong += "$name (MISSING)"
+            continue
+        }
+        $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $full).Path)
+        if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $wrong += $name
+        }
+    }
+    if ($wrong.Count -gt 0) {
+        throw "iex-entry .ps1 MUST NOT have UTF-8 BOM (BOM -> U+FEFF -> ParserError in iex form):`n$($wrong -join "`n")"
+    }
+}
+
+Step "E.7c" "All scripts/*.ps1 classified in E.7a or E.7b (anti-drift)" {
+    if (-not (Test-Path "scripts")) { return "SKIP" }
+    $known = $Ps1RequireBom + $Ps1ForbidBom
+    $actual = Get-ChildItem -Path "scripts" -Filter "*.ps1" -File -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.Name }
+    $unclassified = @($actual | Where-Object { $known -notcontains $_ })
+    if ($unclassified.Count -gt 0) {
+        # G-7 必修条件：WARN 分支显式打印未分类文件名让维护者一眼定位（依 03 §8 G-7 增补）
+        Write-Host ""
+        Write-Host "       unclassified: $($unclassified -join ', ')" -ForegroundColor Yellow
+        return $false  # WARN 而非 FAIL：提醒维护者归类、不阻塞 CI
     }
 }
 
