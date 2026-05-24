@@ -3,8 +3,6 @@ import type {
   SystemReady,
   PublicIPResponse,
   UploadBinResponse,
-  PortProbeRequest,
-  PortProbeResponse,
 } from '../types'
 
 export async function apiGetReady(): Promise<SystemReady> {
@@ -20,7 +18,7 @@ export async function apiGetPublicIP(): Promise<PublicIPResponse> {
 /**
  * T-018 §A：上传 frpc/frps 二进制（multipart/form-data）。
  *
- * **Content-Type 处理（修订自 B-2，T-023 修复）**：
+ * **Content-Type 处理（T-023 修复）**：
  *   `apiClient` 在 [client.ts](./client.ts) 设了实例级默认 `Content-Type: application/json`，
  *   FormData 请求会继承该 default → axios 1.x 将其视作"用户显式设置"，于是
  *   **不再**自动构造 `multipart/form-data; boundary=<auto>`，服务端报
@@ -33,10 +31,6 @@ export async function apiGetPublicIP(): Promise<PublicIPResponse> {
  *   注意：不要写 `headers: { 'Content-Type': 'multipart/form-data' }` —— 缺
  *   boundary 等于把 multipart 标记空开，部分服务端 / axios 旧版会拒。`undefined`
  *   是文档化的"让 axios 自己来"信号。
- *
- * **B-6 修订（字段顺序无关）**：
- *   后端已改用 `r.ParseMultipartForm` + FormValue/FormFile，前端 append 顺序
- *   不再敏感；保留 kind 在前只是阅读习惯。
  *
  * 大小校验：前端先拦 64 MiB 与后端一致，避免 64 MiB 大文件先传后被拒。
  */
@@ -62,21 +56,6 @@ export async function apiUploadBin(
       },
       timeout: 120_000, // 64 MiB 在慢链路上最长 120s
     },
-  )
-  return res.data
-}
-
-/**
- * T-018 §C.3：探测本机端口可用性。
- *
- * 仅探 TCP；UDP Listen 总成功语义不可靠，本期不做。
- * 端口 < 1024（特权端口）后端不真探，直接返 reason:"privileged"。
- */
-export async function apiProbePorts(ports: number[]): Promise<PortProbeResponse> {
-  const req: PortProbeRequest = { ports }
-  const res = await apiClient.post<PortProbeResponse>(
-    '/api/v1/system/probe-ports',
-    req,
   )
   return res.data
 }

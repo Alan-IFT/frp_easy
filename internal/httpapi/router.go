@@ -100,7 +100,6 @@ func New(d Dependencies) http.Handler {
 
 				r.Get("/proxies", h.listProxies)
 				r.Post("/proxies", h.createProxy)
-				r.Post("/proxies/batch", h.batchProxies) // T-018 §C.1
 				r.Put("/proxies/{id}", h.updateProxy)
 				r.Delete("/proxies/{id}", h.deleteProxy)
 
@@ -122,9 +121,8 @@ func New(d Dependencies) http.Handler {
 				r.Get("/system/download-status/{kind}", h.downloadStatus)
 				// T-027：取消下载（与 download-bin / download-status 同分组同中间件链）。
 				r.Post("/system/download-cancel/{kind}", h.downloadCancel)
-				// T-018: 二进制上传 + 端口可用性探测。
+				// T-018: 二进制上传。
 				r.Post("/system/upload-bin", h.uploadBin)
-				r.Post("/system/probe-ports", h.probePorts)
 				r.Get("/wizard/status", h.wizardStatus)
 				r.Post("/wizard/complete", h.wizardComplete)
 			})

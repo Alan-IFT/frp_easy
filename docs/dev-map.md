@@ -71,8 +71,8 @@ frp_easy/
         ├── api/            ← axios 客户端 + 按端点分组的封装
         │   ├── client.ts   ← axios 实例；CSRF 拦截器；401 重定向
         │   ├── auth.ts     ← /api/v1/auth/* / /api/v1/setup
-        │   ├── system.ts   ← /api/v1/system/ready, /api/v1/system/public-ip; T-018: +apiUploadBin (multipart), +apiProbePorts
-        │   ├── proxies.ts  ← /api/v1/proxies CRUD; T-018: +apiBatchCreateProxies
+        │   ├── system.ts   ← /api/v1/system/ready, /api/v1/system/public-ip; T-018: +apiUploadBin (multipart)
+        │   ├── proxies.ts  ← /api/v1/proxies CRUD（单条新增/编辑/删除；T-037 移除批量）
         │   ├── server.ts   ← /api/v1/server (FrpsConfig)
         │   ├── frpclient.ts← /api/v1/client (FrpcServerConn)
         │   ├── proc.ts     ← /api/v1/proc/{kind}/start|stop|restart, /proc/status
@@ -92,22 +92,30 @@ frp_easy/
         │   ├── statusUtils.ts  ← getTagType / getStateLabel（ProcessState → Naive UI 颜色）
         │   ├── useProxyForm.ts ← ProxyForm 表单逻辑（isTcpUdp / isHttpHttps 等）
         │   ├── usePortPresets.ts ← T-018 §C.2：常用端口预设清单（SSH/RDP/HTTP/HTTPS/MySQL/PostgreSQL/Redis/MongoDB/SMB/VNC）；前端 hardcode
-        │   └── useProxyGrouping.ts ← T-018 §C / B-12：代理规则按 ^(.+)-(\d{1,5})$ 折叠分组（纯视图层；端口区间压缩）
+        │   └── log/             ← T-036：日志查看器纯逻辑层（5 个 composable + 1 个解析器；
+        │                          parseLogLine 双格式 OR regex；useLogBuffer slice(-500) + kindEpoch race；
+        │                          useLogSearch indexOf + 大小写敏感；useLogLevelFilter 6 等级；
+        │                          useFollowTail 32px 阈值状态机；useLogPrefs localStorage + BC-13 内存降级）
         ├── components/
         │   ├── AppLayout.vue    ← 侧边导航 + 头部 + 内容公用布局（T-002: 新增下载按钮；T-018: banner 内追加 UploadBinButton）
         │   ├── StatusBadge.vue  ← ProcessState → 带颜色的 NTag
-        │   ├── ProxyForm.vue    ← Proxy 新增/编辑表单（type 联动字段切换；T-018: 加端口预设 Tag + 单端口探测按钮 + 批量模式开关 + portsExpr）
+        │   ├── ProxyForm.vue    ← Proxy 新增/编辑表单（type 联动字段切换；T-018: 加端口预设 Tag；T-037: 移除批量模式 / 端口探测按钮）
         │   ├── UploadBinButton.vue ← T-018 §A：手动上传 frpc/frps 二进制（multipart；进度条；前端 64 MiB 预校验）
         │   ├── ConfirmDialog.vue← 破坏性操作二次确认弹窗
-        │   ├── LogViewer.vue    ← 日志显示（TailLines 首次显示 + 2s 增量轮询）
+        │   ├── LogViewer.vue    ← T-036 重写：日志查看器壳组件（持有 5 composable 实例 + 协调 4 子组件 + watch kind 切换；< 200 行）
+        │   ├── log/             ← T-036：LogViewer 子组件（4 个）；
+        │   │   ├── LogToolbar.vue        ← 工具条：搜索 + Aa + 等级多选 + 跟随 / 折行 / 自动刷新 + 高度 + 复制 / 清屏 / ↓底部 / 全屏 + 心跳 / 计数 / 失败小红点
+        │   │   ├── LogList.vue           ← 滚动容器 + 5 状态分支（错误 / 加载中 / 空态 / 无命中 / 列表）+ 暂停跟随提示条 sticky banner
+        │   │   ├── LogLine.vue           ← 单行渲染：行号 + timestamp + level + message；先 escape 后 mark 包裹（NFR-7 / ADV-A）
+        │   │   └── FullscreenLogModal.vue← n-modal 全屏包装 LogList；95vw/90vh 走 scoped :deep(.n-card) 无 inline style
         │   ├── FirewallHint.vue ← T-002: Linux ufw/iptables 命令提示（ports[] props）
         │   ├── PublicIpDetector.vue← T-002: 公网 IP 检测按钮 + 结果显示
-        │   └── __tests__/      ← Vitest 组件测试
+        │   └── __tests__/      ← Vitest 组件测试（T-036 +6 个：LogViewer / parseLogLine / useLogBuffer / useLogSearch / useFollowTail / useLogPrefs）
         └── pages/
             ├── Setup.vue     ← 首次安装（username + password）
             ├── Login.vue     ← 登录（429 倒计时支持）
             ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮
-            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-018: 折叠分组渲染 + "新增规则 / 批量新增"按钮 + batchCreate 分支）
+            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组）
             ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint）
             ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken）
             ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）
@@ -128,12 +136,11 @@ frp_easy/
 | FRP 二进制自动下载（T-002 / T-014） | `internal/downloader/downloader.go` | `New(root, logger) *Manager`；`Start(kind) error`；`Status(kind) (DownloadState, bool)`。异步 goroutine 下载 tar.gz/zip，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御（R-2）。T-014：改为下载 fatedier/frp 最新 release（GitHub API 解析 latest tag，`resolveLatestAsset`），不再用写死的 `FRPVersion`。 |
 | frpc admin 客户端 | `internal/frpcadmin/client.go` | `Reload(ctx, strictConfig)` / `Status(ctx)`；5s 超时；basic auth。 |
 | DB → TOML 渲染 | `internal/frpconf/render.go` | `RenderFrpc` / `RenderFrps` / `AtomicWrite`；字段名严格对齐 FRP camelCase TOML 上游（见 02 附录 A）。 |
-| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）；T-018: +3 条（system/upload-bin, system/probe-ports, proxies/batch）。 |
+| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）；T-018: +1 条（system/upload-bin）；T-037: 移除 system/probe-ports + proxies/batch。 |
 | 日志尾部读取 | `internal/logtail/tail.go` | `TailLines(path, n)` / `ReadFrom(path, offset)` 增量 + 新 offset。 |
 | 子进程生命周期 | `internal/procmgr/manager.go` | `Manager`；Start/Stop/Restart/Status/Shutdown；supervisor goroutine；Windows Kill / Linux SIGTERM→SIGKILL；ApplyConfigChange(frpc→reload/restart；frps→restart)。 |
-| 端口表达式解析 (T-018 §C) | `internal/portrange/portrange.go` | `Parse(expr, maxCount) ([]int, error)`；支持 `"6000-6010,7000"` / `"22,80,443"` 等；sentinel：`ErrEmpty / ErrBadSyntax / ErrPortOutOfRange / ErrRangeReversed`；类型 error：`DuplicateError / TooManyError / BadSyntaxError`。被 `httpapi.batchProxies` 调用。 |
 | 数据库迁移（权威 SQL） | `migrations/0001_init.up.sql` / `0001_init.down.sql` | 文件名 `NNNN_<slug>.up.sql / .down.sql`。**绝不修改已合并的迁移**；新改动 = 新文件。dev-db 分区 owned。 |
-| 持久化层（连接 / 迁移引擎 / DAO） | `internal/storage/*.go` | Go 包 `storage`。对外 API：`Open / Close / DataDir / GetAdmin / SetAdmin / CreateSession / GetSession / DeleteSession / PurgeExpiredSessions / KVGet / KVSet / KVDelete / ListProxies / GetProxy / UpsertProxy / DeleteProxy / UpsertProxiesTx`。哨兵错误：`ErrCorruptReset` / `ErrVersionConflict` / `ErrNotFound` / `ErrDuplicateName` / `ErrDuplicateTcpRemote`。dev-db owned；**其它包不写 SQL**。 |
+| 持久化层（连接 / 迁移引擎 / DAO） | `internal/storage/*.go` | Go 包 `storage`。对外 API：`Open / Close / DataDir / GetAdmin / SetAdmin / CreateSession / GetSession / DeleteSession / PurgeExpiredSessions / KVGet / KVSet / KVDelete / ListProxies / GetProxy / UpsertProxy / DeleteProxy`。哨兵错误：`ErrCorruptReset` / `ErrVersionConflict` / `ErrNotFound` / `ErrDuplicateName`。dev-db owned；**其它包不写 SQL**。 |
 | 迁移嵌入副本（给 Go 编译器） | `internal/storage/sqlmigrations/*.sql` | 是 `migrations/` 的字节级镜像；用 `//go:embed` 编入二进制。`TestEmbeddedMigrations_MatchDisk` 防 drift。两份必须一致。 |
 
 ## 可复用工具

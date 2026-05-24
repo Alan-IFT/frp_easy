@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { apiUploadBin, apiProbePorts } from '../system'
-import type { UploadBinResponse, PortProbeResponse } from '../../types'
+import { apiUploadBin } from '../system'
+import type { UploadBinResponse } from '../../types'
 
 vi.mock('../client', () => ({
   default: {
@@ -44,15 +44,12 @@ describe('T-018 §A apiUploadBin', () => {
     // **T-023 修复关键断言**：opts.headers 必须显式 Content-Type=undefined，否则
     // apiClient 实例 default 的 application/json 会污染 FormData 请求，axios 不再
     // 自动补 multipart boundary，服务端 multipart 解析直接 400。
-    // 原 B-2 假设"不传 headers 就等于没设"是错的：实例 default 会注入。
     expect(opts).toBeDefined()
     const optsObj = opts as {
       headers?: Record<string, string | undefined>
       onUploadProgress?: unknown
     }
     expect(optsObj.headers).toBeDefined()
-    // 关键：必须显式列出 Content-Type 键且值为 undefined，axios 1.x 才会抵消
-    // 实例 default。`'Content-Type' in headers` 必须为 true。
     expect(optsObj.headers).toHaveProperty('Content-Type')
     expect(optsObj.headers!['Content-Type']).toBeUndefined()
     expect(optsObj.onUploadProgress).toBeDefined()
@@ -82,32 +79,5 @@ describe('T-018 §A apiUploadBin', () => {
     expect(r.kind).toBe('frps')
     const formData = vi.mocked(apiClient.post).mock.calls[0][1] as FormData
     expect(formData.get('kind')).toBe('frps')
-  })
-})
-
-describe('T-018 §C.3 apiProbePorts', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('POST /api/v1/system/probe-ports 带 ports 数组', async () => {
-    const mockRes: PortProbeResponse = {
-      results: [
-        { port: 22,   available: false, reason: 'privileged' },
-        { port: 9999, available: true,  reason: '' },
-      ],
-    }
-    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: mockRes })
-
-    const r = await apiProbePorts([22, 9999])
-    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/system/probe-ports', { ports: [22, 9999] })
-    expect(r.results).toHaveLength(2)
-    expect(r.results[0].reason).toBe('privileged')
-  })
-
-  it('空数组也允许（合法空批，与后端契约一致）', async () => {
-    vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { results: [] } })
-    const r = await apiProbePorts([])
-    expect(r.results).toEqual([])
   })
 })

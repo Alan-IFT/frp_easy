@@ -432,6 +432,24 @@ Step "G.2" "PM Orchestrator declares Reviewer dispatch protocol (T-034)" {
     }
 }
 
+# --- H. T-037 deletion surface guard ---
+# T-037 删除了"批量代理 / 端口探测 / 折叠分组"三类辅助能力。本闸门防止未来静默回退。
+# 禁词列表覆盖前端 / 后端 / OpenAPI 三层；归档 (docs/features/_archived/*) 豁免。
+# 双实现对账（insight L26）：与 verify_all.sh H.1 行为一致——按行 grep + 同款禁词表。
+Step "H.1" "T-037 deletion surface clean (no batch/probe/grouping residue)" {
+    if (-not (Test-Path ".git")) { return "SKIP" }
+    $pattern = '\b(batchMode|portsExpr|apiBatchCreate|batchProxies|UpsertProxiesTx|apiProbePorts|probePorts|probeOnePort|useProxyGrouping|groupProxiesByPrefix|BatchProxiesRequest|BatchProxiesResponse|PortProbeRequest|PortProbeResult|PortProbeResponse|ErrDuplicateTcpRemote|isDuplicateTcpRemoteError|internal/portrange)\b'
+    $hits = git grep -nE $pattern -- 'web/src/**' 'internal/**' 'openapi.yaml' `
+        ':(exclude)docs/features/_archived/**' ':(exclude).harness/**' 2>$null
+    if ($LASTEXITCODE -gt 1) {
+        # git grep exit code 0=found, 1=no-match, >1=error
+        throw "git grep failed with exit code $LASTEXITCODE"
+    }
+    if ($hits) {
+        throw ("T-037 deletion residue found:`n" + ($hits -join "`n"))
+    }
+}
+
 # --- Summary ---
 Write-Host ""
 Write-Host "=== Summary ===" -ForegroundColor Cyan

@@ -279,9 +279,7 @@ describe('T-032 AC-7: ProxyForm initialValue 引用变化时不进入无限 emit
 
     // 关键断言：上界是 0（因为没有 update:modelValue emit），而非随 N 增长
     expect(wrapper.emitted('update:modelValue') ?? []).toHaveLength(0)
-
-    // 兜底：batchMode / portsExpr emit 不在此用例语义内，但也应 ≤ 常数（初始 false / '' 后无变化）
-    expect((wrapper.emitted('update:batchMode') ?? []).length).toBeLessThanOrEqual(1)
-    expect((wrapper.emitted('update:portsExpr') ?? []).length).toBeLessThanOrEqual(1)
+    // T-037：ProxyForm 已删除全部 emit（不再有任何 'update:*' 事件）
+    expect(Object.keys(wrapper.emitted())).toHaveLength(0)
   })
 })

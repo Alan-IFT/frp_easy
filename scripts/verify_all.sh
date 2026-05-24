@@ -424,6 +424,23 @@ else
     fi
 fi
 
+# --- H. T-037 deletion surface guard ---
+# T-037 删除了"批量代理 / 端口探测 / 折叠分组"三类辅助能力。本闸门防止未来静默回退。
+# 禁词列表覆盖前端 / 后端 / OpenAPI 三层；归档 (docs/features/_archived/*) 豁免。
+# 双实现对账（insight L26）：与 verify_all.ps1 H.1 行为一致——按行 grep + 同款禁词表。
+if [[ ! -d .git ]]; then
+    step "H.1" "T-037 deletion surface clean (no batch/probe/grouping residue)" "SKIP"
+else
+    h1_pattern='\b(batchMode|portsExpr|apiBatchCreate|batchProxies|UpsertProxiesTx|apiProbePorts|probePorts|probeOnePort|useProxyGrouping|groupProxiesByPrefix|BatchProxiesRequest|BatchProxiesResponse|PortProbeRequest|PortProbeResult|PortProbeResponse|ErrDuplicateTcpRemote|isDuplicateTcpRemoteError|internal/portrange)\b'
+    h1_hits=$(git grep -nE "$h1_pattern" -- 'web/src/**' 'internal/**' 'openapi.yaml' \
+        ':(exclude)docs/features/_archived/**' ':(exclude).harness/**' 2>/dev/null || true)
+    if [[ -z "$h1_hits" ]]; then
+        step "H.1" "T-037 deletion surface clean (no batch/probe/grouping residue)" "PASS"
+    else
+        step "H.1" "T-037 deletion surface clean (no batch/probe/grouping residue)" "FAIL" "$h1_hits"
+    fi
+fi
+
 # Summary
 echo ""
 echo "=== Summary ==="
