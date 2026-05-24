@@ -383,8 +383,12 @@ $publicLine$publicHint
   sc start frp-easy        # 手动启动
 
 更新：
-  重新运行同一条一键安装命令即可升级到最新版：
-    irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
+  重新运行同一条一键安装命令即可升级到最新版（推荐 -NoExit，让升级完成后窗口
+  保留以便阅读访问地址 / 公网 IP / 服务状态）：
+    pwsh -NoExit -Command "irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex"
+  （如你已在交互式 PowerShell prompt 内，可省略外层 pwsh -NoExit 直接粘贴
+  `irm ... | iex` 部分，prompt 不会关闭；只在 cmd / Win+R / Windows Terminal
+  从零启动 pwsh 时需要 -NoExit 防 -Command 跑完即退。）
   升级会保留你的配置（frp_easy.toml）与数据（.frp_easy\），
   以及已下载的 frp 二进制（frp_win\）。
 
