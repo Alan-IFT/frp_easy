@@ -54,11 +54,15 @@
 
 **Linux / macOS**（需 root / sudo；以下两条命令二选一）：
 
-```bash
-# 服务端（公网 VM，要让外部 frpc 客户端能连进来）
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server
+服务端（公网 VM，要让外部 frpc 客户端能连进来）：
 
-# 客户端（内网设备，仅本机访问 UI 最安全）
+```bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server
+```
+
+客户端（内网设备，仅本机访问 UI 最安全）：
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role client
 ```
 
@@ -215,9 +219,16 @@ UIBindAddr = "0.0.0.0"
 
 双进程开发：Go API + Vite dev server 同时启动，前端热重载，Go 侧开启 CORS 允许 Vite 代理。
 
+Linux / macOS：
+
 ```bash
-bash scripts/start.sh     # Linux / macOS
-.\scripts\start.ps1       # Windows
+bash scripts/start.sh
+```
+
+Windows：
+
+```powershell
+.\scripts\start.ps1
 ```
 
 - Go API 在 <http://127.0.0.1:7800>
