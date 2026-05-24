@@ -159,7 +159,7 @@ QA 阶段在新 `TestDownloadCancel_ThenUpload_200` 内显式断言 `cancelElaps
 
 ---
 
-## §4 Adversarial tests
+## Adversarial tests
 
 **对抗假设：现实生产里破坏 cancel/upload 不变量的边角场景。** QA 自写独立 reproducer，假设 implementation 错；只有"假设失败、survive"才说明 happy。
 

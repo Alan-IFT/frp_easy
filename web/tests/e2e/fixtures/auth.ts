@@ -34,7 +34,7 @@ export async function assertFreshBackend(page: Page): Promise<void> {
       '修复指引：\n' +
       '  1. 关闭所有占用 127.0.0.1:7800 的本地 frp-easy 实例：\n' +
       '     - Windows (普通进程): Get-Process | Where-Object { $_.Path -like "*frp-easy*" } | Stop-Process -Force\n' +
-      '     - Windows (服务模式 / Session 0 进程拒绝访问时): Stop-Service frp-easy  # 测完跑 Start-Service frp-easy 恢复\n' +
+      '     - Windows (服务模式 / Session 0 进程拒绝访问时): **以管理员身份打开 PowerShell**（Win+X → Terminal (Admin)），然后 Stop-Service frp-easy；测完 Start-Service frp-easy 恢复。普通用户 / 非 elevated session 会报 "Cannot open frp-easy service on computer" 拒绝访问\n' +
       '     - Linux/Mac: lsof -ti :7800 | xargs kill  # systemd 装为服务时改用：sudo systemctl stop frp-easy\n' +
       '  2. 重跑 `cd web && npx playwright test --project=chromium`\n' +
       '  3. 或显式设置 CI=true 强制 Playwright 启全新 webServer + 全新 tmpdir：\n' +

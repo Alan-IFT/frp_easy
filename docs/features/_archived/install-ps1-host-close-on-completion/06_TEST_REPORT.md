@@ -408,7 +408,7 @@ ok  	github.com/frp-easy/frp-easy/internal/storage	(cached)
 
 ---
 
-## §6 Adversarial tests
+## Adversarial tests
 
 > 本段为 QA Tester 强制契约段（L18/L48/L49 红线）。**裸标题** `## Adversarial tests`（无数字前缀），verify_all E.6 闸门按此匹配。
 > 本段聚焦"adversarial verification 的红线证伪结论"，而非测试细节（细节见 §2）。
