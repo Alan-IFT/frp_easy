@@ -380,6 +380,50 @@ else
     fi
 fi
 
+# --- G. Reviewer dispatch protocol (T-034) ---
+# G.1 / G.2 守门 sub-agent 工具白名单 frontmatter 在 SDK 派发上下文可能被裁剪现象。
+# 仅静态守门"契约段在源码里存在"，不试图测运行时派发（不在静态闸门可达范围）。
+
+# G.1 — reviewer agents declare PM_FALLBACK_WRITE sentinel
+if [[ ! -d .harness/agents ]]; then
+    step "G.1" "Reviewer agents declare PM_FALLBACK_WRITE sentinel" "SKIP"
+else
+    g1_missing=""
+    for t in .harness/agents/gate-reviewer.md .harness/agents/code-reviewer.md; do
+        if [[ ! -f "$t" ]]; then
+            g1_missing="$g1_missing\n$t (MISSING)"
+            continue
+        fi
+        if ! grep -qE 'MODE:\s*PM_FALLBACK_WRITE' "$t"; then
+            g1_missing="$g1_missing\n$t (no PM_FALLBACK_WRITE sentinel)"
+        fi
+    done
+    if [[ -z "$g1_missing" ]]; then
+        step "G.1" "Reviewer agents declare PM_FALLBACK_WRITE sentinel" "PASS"
+    else
+        step "G.1" "Reviewer agents declare PM_FALLBACK_WRITE sentinel" "FAIL" "$(echo -e $g1_missing)"
+    fi
+fi
+
+# G.2 — PM Orchestrator declares Reviewer dispatch protocol
+g2_file=".harness/agents/pm-orchestrator.md"
+if [[ ! -f "$g2_file" ]]; then
+    step "G.2" "PM Orchestrator declares Reviewer dispatch protocol" "SKIP"
+else
+    g2_problems=""
+    if ! grep -qE 'Reviewer\s+dispatch\s+protocol' "$g2_file"; then
+        g2_problems="$g2_problems missing 'Reviewer dispatch protocol' heading;"
+    fi
+    if ! grep -qE 'MODE:\s*PM_FALLBACK_WRITE' "$g2_file"; then
+        g2_problems="$g2_problems missing PM_FALLBACK_WRITE sentinel reference;"
+    fi
+    if [[ -z "$g2_problems" ]]; then
+        step "G.2" "PM Orchestrator declares Reviewer dispatch protocol" "PASS"
+    else
+        step "G.2" "PM Orchestrator declares Reviewer dispatch protocol" "FAIL" "$g2_problems"
+    fi
+fi
+
 # Summary
 echo ""
 echo "=== Summary ==="

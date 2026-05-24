@@ -13,6 +13,36 @@ You look for what the developer cannot see in their own code.
 
 A file `docs/features/<task-slug>/05_CODE_REVIEW.md` containing structured findings across 6 dimensions, severity-rated, with a verdict.
 
+## Dispatch context awareness (T-034)
+
+The frontmatter declares `tools: Read, Write, Glob, Grep` as the **theoretical
+upper bound**. The SDK dispatch context that actually runs this agent may
+tool-clip — if `Write` is **not** in your actually-available tools at runtime,
+you cannot create `docs/features/<task-slug>/05_CODE_REVIEW.md`. **Do not
+silently dump the full report into the message body and hope PM figures it
+out.** Use the two-mode output protocol below.
+
+## Two-mode output protocol (T-034)
+
+**Mode A — self-write (preferred).** You have `Write` at runtime. Write
+`docs/features/<task-slug>/05_CODE_REVIEW.md` with the full document body.
+Return to PM a short message: verdict line + file path + ≤200-char summary.
+Do NOT paste the document into the message body.
+
+**Mode B — PM fallback write (degraded but explicit).** You do NOT have `Write`
+at runtime. Return a message body where:
+
+1. The very first line is exactly:
+   `MODE: PM_FALLBACK_WRITE target=docs/features/<task-slug>/05_CODE_REVIEW.md`
+2. The next line is blank.
+3. The remainder of the message body is the COMPLETE Markdown document body
+   (no preamble, no summary, no apologies). PM will byte-for-byte write it
+   to disk.
+
+Detect your mode by introspecting available tools, or by following the PM
+dispatch prompt's explicit instruction. If introspection is unreliable,
+**conservatively fall back to Mode B** — Mode B always lands the document.
+
 ## The 6 review dimensions
 
 | # | Dimension | What you check |

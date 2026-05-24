@@ -391,6 +391,47 @@ Step "E.10" "README Windows install entry contains -NoExit (T-031 FR-10)" {
     }
 }
 
+# --- G. Reviewer dispatch protocol (T-034) ---
+# G.1 / G.2 守门 sub-agent 工具白名单 frontmatter 在 SDK 派发上下文可能被裁剪现象：
+# - frontmatter `tools: Read, Write, Glob, Grep` 是理论上限，运行时可能更窄
+# - 长期解：reviewer 契约 + PM 派发协议规范化"双模式 + sentinel"
+# - 这里仅静态守门"契约段在源码里存在"，不试图测运行时派发（不在静态闸门可达范围）
+
+Step "G.1" "Reviewer agents declare PM_FALLBACK_WRITE sentinel (T-034)" {
+    if (-not (Test-Path ".harness/agents")) { return "SKIP" }
+    $targets = @('.harness/agents/gate-reviewer.md', '.harness/agents/code-reviewer.md')
+    $missing = @()
+    foreach ($t in $targets) {
+        if (-not (Test-Path -PathType Leaf $t)) {
+            $missing += "$t (MISSING)"
+            continue
+        }
+        $content = Get-Content -Raw -Path $t
+        if ($content -notmatch 'MODE:\s*PM_FALLBACK_WRITE') {
+            $missing += "$t (no PM_FALLBACK_WRITE sentinel)"
+        }
+    }
+    if ($missing.Count -gt 0) {
+        throw ("Reviewer two-mode protocol missing in:`n" + ($missing -join "`n"))
+    }
+}
+
+Step "G.2" "PM Orchestrator declares Reviewer dispatch protocol (T-034)" {
+    $f = '.harness/agents/pm-orchestrator.md'
+    if (-not (Test-Path -PathType Leaf $f)) { return "SKIP" }
+    $content = Get-Content -Raw -Path $f
+    $problems = @()
+    if ($content -notmatch 'Reviewer\s+dispatch\s+protocol') {
+        $problems += "missing 'Reviewer dispatch protocol' heading"
+    }
+    if ($content -notmatch 'MODE:\s*PM_FALLBACK_WRITE') {
+        $problems += "missing PM_FALLBACK_WRITE sentinel reference"
+    }
+    if ($problems.Count -gt 0) {
+        throw ("PM Orchestrator reviewer dispatch protocol incomplete: " + ($problems -join '; '))
+    }
+}
+
 # --- Summary ---
 Write-Host ""
 Write-Host "=== Summary ===" -ForegroundColor Cyan

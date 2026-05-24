@@ -119,6 +119,44 @@ explicitly marks two partitions as independent.
 - **Before stage 5 (code review)**: Stage 4 must show `verify_all` PASSED in the development doc.
 - **Before stage 7 (delivery)**: Stages 5 and 6 must both PASS.
 
+## Reviewer dispatch protocol (T-034)
+
+The gate-reviewer (stage 3) and code-reviewer (stage 5) agents follow a
+**two-mode output protocol** (see their agent files). When you dispatch them,
+your prompt MUST include this preamble verbatim:
+
+```
+Two-mode output reminder:
+- If your dispatch context includes the Write tool, write
+  docs/features/<task-slug>/<03|05>_*.md directly (Mode A). Return only a
+  short verdict + file path + ≤200-char summary in your message.
+- If your dispatch context does NOT include Write, return a message body
+  whose first line is exactly:
+    MODE: PM_FALLBACK_WRITE target=docs/features/<task-slug>/<03|05>_*.md
+  followed by a blank line, followed by the COMPLETE Markdown document.
+  PM will byte-for-byte write that to disk. Do NOT include a summary or
+  preamble in Mode B.
+```
+
+After receiving the reviewer response:
+
+1. If the first line of the response matches
+   `^MODE: PM_FALLBACK_WRITE target=(\S+)$`, **byte-for-byte write** the
+   content after the sentinel line + blank line to the captured target
+   path. **Do not summarize, rewrite, or augment.**
+2. Otherwise, treat the response as Mode A. The reviewer is responsible for
+   having written the file. Open the file to verify it exists; if not,
+   treat as `BLOCKED ON DISPATCH` — re-dispatch with explicit Mode B
+   instructions.
+3. If a Mode B response is missing the sentinel line or has incomplete
+   Markdown (truncated mid-section), **do NOT fabricate or complete the
+   document**. Re-dispatch with a clarification that the previous response
+   was invalid; log to PM_LOG.md.
+
+This protocol exists because SDK dispatch contexts may tool-clip — the agent's
+declared frontmatter tools are a theoretical upper bound, not a guarantee.
+See `.harness/insight-index.md` (T-034 entry) for the underlying observation.
+
 ## What to write at delivery (stage 7)
 
 `07_DELIVERY.md`:
