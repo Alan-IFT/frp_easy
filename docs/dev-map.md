@@ -27,6 +27,7 @@ frp_easy/
 │                     install.{sh,ps1}（T-012 新增 / T-013 改：一键安装编排脚本，curl|bash / irm|iex 形态；查 releases/tags/rolling 滚动发布 → 解压 → 调 install-service.* 注册服务）
 │                     T-021：scripts/*.ps1 全部 11 个统一 UTF-8 BOM（首 3 字节 EF BB BF），让 PS 5.1 + zh-CN 主机磁盘加载形态正确解码中文；verify_all E.7 + scripts/.editorconfig 双层防回归（git blob 字节为持久层、editorconfig 为编辑器层 belt）
 │                     T-026：scripts/install.ps1 因 iex 入口**禁** BOM（irm 把 EF BB BF 解码为 U+FEFF 进入字符串触发 ParserError）；其余 10 个 .ps1 继续要 BOM（磁盘形态防 GBK 误解码）；主体 `& { ... } @PSBoundParameters` 子作用域包裹让 `exit N` 在交互式宿主下退子作用域不杀宿主；verify_all E.7 拆 a/b/c 白名单（E.7a 必须 BOM / E.7b 禁 BOM / E.7c anti-drift WARN）；scripts/.editorconfig 追加 [install.ps1] charset=utf-8 例外块覆盖 [*.ps1] charset=utf-8-bom
+│                     T-031：scripts/install.ps1 末尾 `exit 0` 改为 `$global:LASTEXITCODE = 0` 防御性置零（消解 R4 假设；`$global:` 修饰符让 child scope 写穿到根 scope）；README Windows 推荐入口改 `pwsh -NoExit -Command "irm ... | iex"`（PowerShell `-NoExit` about_PowerShell_Exe 文档化语义）让 cmd / Win+R / Windows Terminal 入口窗口不在脚本结束时关闭；PS5.1 段同步给 `powershell -NoExit` 替代；install-service.ps1 字节零变（OQ-5 a）；verify_all 新 E.8 (forbid Read-Host/[Console]::ReadKey/裸 pause/Wait-Event in install.ps1+install-service.ps1, FR-3 红线；单走 Select-String 按行扫描天然 multiline) / E.9 (forbid wrapper.cmd/install*.bat) / E.10 (README -NoExit) 三闸门，PASS 21→24（Quick 实测）
 ├── migrations/     ← SQLite 迁移（权威源；NNNN_<slug>.up.sql / .down.sql）
 ├── cmd/frp-easy/   ← Go 程序入口（main.go；单二进制）
 │                     T-019：service_windows.go（//go:build windows）实现 Windows Service ABI

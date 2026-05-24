@@ -6,12 +6,15 @@
 
 ## 进行中
 
-（无）
+| ID | Slug | 阶段 | 模式 | 文档目录 |
+|---|---|---|---|---|
+| T-032 | proxy-form-vmodel-oom-fix | test | full | `docs/features/proxy-form-vmodel-oom-fix/` |
 
 ## 已完成
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-031 | install-ps1-host-close-on-completion | DELIVERED | 2026-05-24 | `docs/features/_archived/install-ps1-host-close-on-completion/` |
 | T-030 | reviewer-agent-write-tool-frontmatter | DELIVERED | 2026-05-24 | trivial 直接修复（.harness/agents/gate-reviewer.md + code-reviewer.md frontmatter `tools` 字段 + harness-sync 同步 .claude/agents/，无阶段文档）：insight L41/L48 + T-027 第 3 次复现"reviewer 不落盘"陷阱（200+ 行 Markdown 塞消息体让 PM 代写），根因是 frontmatter tools 仅 Read/Glob/Grep；加 Write 工具与 developer/qa-tester 对齐 |
 | T-029 | readme-ps51-zhcn-disk-form-warning | DELIVERED | 2026-05-24 | trivial 直接修复（README.md +1 段，无阶段文档）：T-026 删 install.ps1 BOM 后 PS5.1+zh-CN 磁盘形态会显示中文乱码（OOS-9 接受），README 一键安装 Windows 段加引导块明示"iex 形态首选；磁盘形态请用 PS7 跑 pwsh 或保持 iex" |
 | T-028 | archive-task-insight-regex-tolerance | DELIVERED | 2026-05-24 | trivial 直接修复（archive-task.ps1 ~6 行，无阶段文档）：07 §N Insight 数字编号前缀让 regex 不命中，T-019/T-021/T-024/T-026 4 次复现；改 regex `^##\s+(?:[^\s\n]+\s+)?Insights?\s*$` 容忍可选前缀 token；N=0 时显式 Write-Warning 不静默 |

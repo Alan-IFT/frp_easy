@@ -64,15 +64,23 @@ curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/inst
 
 > 注意 `sudo -E` 的 `-E` 不能省 —— 它让 sudo 透传 `FRP_EASY_ROLE` 环境变量到子进程，否则脚本会因为缺少 role 退出码 3 并报错（保护用户避免静默装错角色）。
 
-**Windows**（管理员 PowerShell）：
+**Windows**（管理员 PowerShell 7，推荐）：
 
 ```powershell
-irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex
+pwsh -NoExit -Command "irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex"
 ```
+
+> 关键参数说明：`-NoExit` 让 PowerShell 进程在脚本结束后**保留窗口**进入交互式 prompt，让你能完整读完第 8 步的访问地址、公网 IP、服务状态横幅；如果省略 `-NoExit`，用 cmd / Win+R / Windows Terminal 启动的窗口会在脚本结束**立即关闭**（PowerShell 官方文档化行为，不是 bug）。读完后手动关窗口或输入 `exit` 退出。
+
+> **PowerShell 5.1（Win10/11 自带，没装 PS7 时的备选）**：把 `pwsh` 换成 `powershell` 即可，`-NoExit` 语义相同：
+> ```powershell
+> powershell -NoExit -Command "irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1 | iex"
+> ```
+> 注意 PS5.1 + 中文系统（zh-CN）下若改走"先下载脚本再 `.\install.ps1` 执行"的**磁盘形态**，PS5.1 在中文系统码页（GBK）下会把脚本里的中文按 GBK 误解码、显示为乱码（脚本仍能跑完，仅中文进度提示乱码）；磁盘形态请优先用 `pwsh -File install.ps1`（PS7 默认 UTF-8 不受码页影响）。
 
 > Windows 路径目前不区分服务端 / 客户端（默认监听 `0.0.0.0`，与历史行为一致）；如需仅本机访问，装完后编辑 `frp_easy.toml` 把 `UIBindAddr` 改为 `127.0.0.1` 并重启服务。
 
-> **PowerShell 5.1 + 中文系统（zh-CN）用户提示**：上面 `irm | iex` **管道形态**是首选，全程中文正常显示；如改为"先下载脚本再 `.\install.ps1` 执行"的**磁盘形态**，PowerShell 5.1 在中文系统码页（GBK）下会把脚本里的中文按 GBK 误解码、显示为乱码（脚本仍能跑完，仅中文进度提示乱码）。两种解法二选一：(a) 保持 `irm | iex` 管道形态（推荐）；(b) 用 PowerShell 7（`pwsh`）跑磁盘形态，PS7 默认 UTF-8 不受码页影响。
+> **如你看到的是旧入口**（不带 `-NoExit` 的 `irm ... | iex`）：旧字串**仍能跑成功**，只是用 cmd / Win+R / Windows Terminal 启动时窗口会在 step 8 横幅打完后立即关闭——读不到访问地址。请改用上面带 `-NoExit` 的新字串重跑，或者**先**手动打开一个 PowerShell 7 窗口（开始菜单搜 `pwsh`，右键以管理员身份运行），**在已打开的窗口里**粘贴旧 `irm | iex` 字串——这种"已打开的交互式 prompt 粘贴管道"形态下脚本结束后窗口也不会关闭。
 
 > 安全提示：`curl | bash` / `irm | iex` 会以高权限执行远程脚本。谨慎用户可先下载脚本审阅后再运行，详见 **[docs/DEPLOYMENT.md A.0 一键安装](docs/DEPLOYMENT.md)**。
 

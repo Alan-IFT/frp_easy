@@ -335,6 +335,51 @@ else
     fi
 fi
 
+# T-031 E.8 — AC-5 静态闸门：install.ps1 / install-service.ps1 禁交互阻塞（FR-3 硬红线）
+# grep -nE 天然按行扫描，'^' / '$' 按行匹配（无需 PCRE multiline 标志）。
+# 跳过 # 开头注释行 + 含元描述词（禁/forbidden/FR-3/red.?line）的合法字面量行。
+e8_hits=""
+for t in scripts/install.ps1 scripts/install-service.ps1; do
+    [[ -f "$t" ]] || continue
+    while IFS= read -r ln; do
+        [[ -z "$ln" ]] && continue
+        content=$(echo "$ln" | cut -d: -f2-)
+        trimmed=$(echo "$content" | sed 's/^[[:space:]]*//')
+        # 跳过注释
+        [[ "$trimmed" =~ ^# ]] && continue
+        # 跳过含元描述词
+        echo "$content" | grep -qE '禁|red\.?line|forbidden|FR-3|破\s*FR-3' && continue
+        e8_hits="$e8_hits\n$t:$ln"
+    done < <(grep -nE 'Read-Host|\[Console\]::ReadKey|^[[:space:]]*pause[[:space:]]*$|Wait-Event' "$t" 2>/dev/null || true)
+done
+if [[ -z "$e8_hits" ]]; then
+    step "E.8" "install.ps1 / install-service.ps1 forbid interactive blockers" "PASS"
+else
+    step "E.8" "install.ps1 / install-service.ps1 forbid interactive blockers" "FAIL" "$(echo -e $e8_hits)"
+fi
+
+# T-031 E.9 — AC-10 静态闸门：无 wrapper.cmd / install*.bat
+e9_stray=$(find scripts -maxdepth 1 -type f \( -iname 'install*.cmd' -o -iname 'install*.bat' \) 2>/dev/null)
+if [[ -z "$e9_stray" ]]; then
+    step "E.9" "No wrapper.cmd / install*.bat in scripts/" "PASS"
+else
+    step "E.9" "No wrapper.cmd / install*.bat in scripts/" "FAIL" "$e9_stray"
+fi
+
+# T-031 E.10 — README Windows 入口必须含 -NoExit
+if [[ ! -f README.md ]]; then
+    step "E.10" "README Windows install entry contains -NoExit" "SKIP"
+else
+    entry=$(awk '/\*\*Windows\*\*/{f=1} f && /^```powershell/{p=1; next} p && /^```/{exit} p' README.md)
+    if [[ -z "$entry" ]]; then
+        step "E.10" "README Windows install entry contains -NoExit" "FAIL" "Windows powershell block not found"
+    elif echo "$entry" | grep -q -- '-NoExit'; then
+        step "E.10" "README Windows install entry contains -NoExit" "PASS"
+    else
+        step "E.10" "README Windows install entry contains -NoExit" "FAIL" "$entry"
+    fi
+fi
+
 # Summary
 echo ""
 echo "=== Summary ==="

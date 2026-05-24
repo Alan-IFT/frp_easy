@@ -335,6 +335,62 @@ Step "E.7c" "All scripts/*.ps1 classified in E.7a or E.7b (anti-drift)" {
     }
 }
 
+# T-031: AC-5 静态闸门 —— install.ps1 / install-service.ps1 禁交互阻塞（FR-3 硬红线）。
+# 任何 Read-Host / [Console]::ReadKey / 裸 `pause` 行 / Wait-Event 都会让自动化场景挂死。
+# 实现：单走 `Select-String -Pattern` 按行扫描（天然 multiline，'^' / '$' 按行匹配），
+# 跳过 # 开头注释行 + 含元描述词（禁/forbidden/FR-3/red.?line）的合法字面量行。
+# C-1：直接用 Select-String 替代"先 -match 再 Select-String"两段式（避免 Get-Content -Raw
+# 无 (?m) 标志下 '^\s*pause\s*$' 漏报，03 §E15）。
+Step "E.8" "install.ps1 / install-service.ps1 forbid interactive blockers (FR-3)" {
+    if (-not (Test-Path "scripts")) { return "SKIP" }
+    $targets = @('scripts\install.ps1', 'scripts\install-service.ps1')
+    $forbidden = @('Read-Host', '\[Console\]::ReadKey', '^\s*pause\s*$', 'Wait-Event')
+    $hits = @()
+    foreach ($t in $targets) {
+        if (-not (Test-Path -PathType Leaf $t)) { continue }
+        foreach ($pat in $forbidden) {
+            $lines = Select-String -Path $t -Pattern $pat -ErrorAction SilentlyContinue | Where-Object {
+                $trimmed = $_.Line.TrimStart()
+                # 跳过 # 开头注释行
+                if ($trimmed.StartsWith('#')) { return $false }
+                # 跳过含元描述词的合法字面量行（如本任务注释 / 说明引用 'Read-Host'）
+                if ($_.Line -match '禁|red\.?line|forbidden|FR-3|破\s*FR-3') { return $false }
+                return $true
+            }
+            foreach ($ln in $lines) {
+                $hits += ("{0}:{1}: {2}" -f $t, $ln.LineNumber, $ln.Line.Trim())
+            }
+        }
+    }
+    if ($hits.Count -gt 0) {
+        throw ("Interactive blockers found (破 FR-3 红线):`n" + ($hits -join "`n"))
+    }
+}
+
+# T-031: AC-10 静态闸门 —— 仓库无 scripts/install*.cmd / scripts/install*.bat（FR-8 单脚本红线）
+Step "E.9" "No wrapper.cmd / install*.bat in scripts/ (FR-8 single-script invariant)" {
+    if (-not (Test-Path "scripts")) { return "SKIP" }
+    $stray = Get-ChildItem -Path "scripts" -File -ErrorAction SilentlyContinue |
+             Where-Object { $_.Name -match '^install.*\.(cmd|bat)$' }
+    if ($stray) {
+        throw ("Forbidden wrapper files found:`n" + (($stray | ForEach-Object { $_.FullName }) -join "`n"))
+    }
+}
+
+# T-031: AC-额外 闸门 —— README 推荐 Windows 入口字串必须含 -NoExit（防回归 FR-10）
+Step "E.10" "README Windows install entry contains -NoExit (T-031 FR-10)" {
+    if (-not (Test-Path "README.md")) { return "SKIP" }
+    $content = Get-Content -Raw -Path "README.md"
+    # 提取"**Windows**" 段后第一个 powershell code block
+    if ($content -notmatch '(?ms)\*\*Windows\*\*[^\n]*\n+```powershell\s*\n([^`]+?)\n```') {
+        throw "README.md 'Windows' install entry powershell code block not found."
+    }
+    $entryBlock = $matches[1]
+    if ($entryBlock -notmatch '-NoExit\b') {
+        throw ("README.md Windows install entry missing -NoExit flag (T-031 FR-1 / FR-10):`n" + $entryBlock)
+    }
+}
+
 # --- Summary ---
 Write-Host ""
 Write-Host "=== Summary ===" -ForegroundColor Cyan

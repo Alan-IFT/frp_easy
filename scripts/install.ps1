@@ -32,6 +32,12 @@
 # PowerShell。失败可观测靠既有 stderr `Write-Error` 红字 + 子作用域末尾追加"❌ ..."中文横幅。
 # 本脚本仅支持 -Help 参数；-Verbose/-Debug 等 cmdlet common parameter 需要 [CmdletBinding()]，
 # 因 T-024 / insight L36 已不可加，故不支持（依 03 §8 G-6 增补）。
+# T-031: T-026 子作用域包裹仅在**交互式** PowerShell console host 下保护宿主（insight L44）；
+# 入口 `pwsh -Command "..."` / `pwsh -File ...` 是 PowerShell 文档化的"-Command 跑完即退"模式，
+# 脚本侧无法逆转（除非引入 Read-Host 类阻塞，破 FR-3 红线）。本任务的解：README 推荐入口改为
+# `pwsh -NoExit -Command "irm ... | iex"`（pwsh -NoExit 让进程在 -Command 跑完后保持交互式
+# prompt），让 cmd / Run 框 / Windows Terminal 等入口的窗口都能让用户读完 step 8 横幅。
+# 引用 MS 官方 about_PowerShell_Exe：-NoExit "Don't exit after running startup commands"。
 param(
     [switch]$Help
 )
@@ -388,7 +394,11 @@ $publicLine$publicHint
 ============================================================
 "@ | Write-Host
 
-exit 0
+# T-031: 不显式 exit 0；依赖 Write-Host 成功后 $LASTEXITCODE 自然为 0。
+# 防御性显式置 0 让"成功路径"$LASTEXITCODE = 0 永远成立（防前置命令陈旧非零值）。
+# `$global:VAR` scope 修饰符让 child scope `& { ... }` 内的赋值直接写根 scope
+# （about_Scopes 文档化），下方子作用域外 `if ($LASTEXITCODE -ne 0)` 失败横幅判定可靠。
+$global:LASTEXITCODE = 0
 } @PSBoundParameters
 
 # T-026 D-3 / FR-6 / AC-7：失败可观测横幅（依 02 §4.1）。

@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 14,
   "created": "2026-05-16",
   "updated": "2026-05-24",
   "test_count": 367,
@@ -7,5 +7,5 @@
   "go_tests": 265,
   "frontend_tests": 102,
   "warnings_baseline": 0,
-  "notes": "T-027 download-cancel-and-upload-decouple delivered. 后端 Manager.Cancel(kind) + ctx 化 doDownload + StatusCanceled 新状态 + 新 POST /api/v1/system/download-cancel/{kind} 端点（200/422/503）+ uploadBin 409 文案精化 'Cancel 下载按钮' + OpenAPI / TS 三层 enum 一致。Go: 246 -> 265 (+19 = Dev 16 cancel/F3/F4/N=10 + QA 3 端到端 cancel-then-upload + AC-http-cancel-200 真起 + 409 文案 runtime 校验). Frontend: 96 -> 102 (+6 = downloader.spec.ts 4 + UploadBinButton.spec.ts 2). verify_all 仍 PASS 22 / WARN 0 / FAIL 0. baseline test_count=367（go 265 + fe 102）. T-026 history: install.ps1 删 BOM + iex 子作用域. T-025 history: downloader.Manager 拆 apiClient/downloadClient (Client.Timeout=0). T-022 history: exposureNotice dual-channel. T-021 history: .ps1 BOM applied (11/11); E.7 added. T-019 history: windows-service-scm-1053-fix. T-018 history: Go 174->237."
+  "notes": "T-031 install-ps1-host-close-on-completion delivered. install.ps1 末尾 `exit 0` 改为 `$global:LASTEXITCODE = 0` 防御性置零（消解 RA R4 假设）；README Windows 推荐入口字串改 `pwsh -NoExit -Command \"irm ... | iex\"` 让 cmd/Win+R/Windows Terminal 入口窗口不在脚本结束时关闭（PowerShell `-NoExit` 是 about_PowerShell_Exe 文档化语义）；PS5.1 段同步给 `powershell -NoExit` 替代字串；新增'如你看到的是旧入口'反向兼容段。verify_all 新 3 道静态闸门：E.8 (forbid Read-Host / [Console]::ReadKey / 裸 pause / Wait-Event in install.ps1 + install-service.ps1, FR-3 红线；C-1 单走 Select-String 按行扫描天然 multiline)、E.9 (forbid scripts/install*.cmd|bat, FR-8 单脚本)、E.10 (README Windows entry contains -NoExit). verify_all PASS 21 -> 24 (+3) / WARN 0 / FAIL 0 / SKIP 0（Quick 模式实测）. install-service.ps1 字节零变（OQ-5 a）. .editorconfig 不动（T-026 决议保留）. T-027 history: Manager.Cancel(kind) + ctx 化 doDownload + StatusCanceled. T-026 history: install.ps1 删 BOM + iex 子作用域. T-025 history: downloader.Manager 拆 apiClient/downloadClient (Client.Timeout=0). T-022 history: exposureNotice dual-channel. T-021 history: .ps1 BOM applied (11/11); E.7 added. T-019 history: windows-service-scm-1053-fix. T-018 history: Go 174->237."
 }

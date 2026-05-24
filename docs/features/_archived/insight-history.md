@@ -57,3 +57,12 @@ T-016 已用此真相替换主索引第 18 行。
 - GitHub API 未认证请求的限流响应（HTTP 403）响应体是合法 JSON；查询 release 必须"先判 HTTP 状态码、后解析 JSON"，且查询步骤不能用 `curl -f`（否则 403/404 直接变 curl 错误，丢失分流能力）。证据：本任务 install.sh API 步骤。
 - `softprops/action-gh-release@v2`（实测 v2.6.2）**没有** `clean_release_attachments` 输入参数，且对已存在的 release 不会自动把底层 git tag ref 移到新 commit。滚动发布（固定 tag 反复移动 + 资产名含 commit hash 每次不同名）必须自己加 `git tag -f` step 移 tag、加 `gh release delete-asset` step 清旧资产。证据：本任务 04 对 action 的源码级核实。
 - GitHub Actions `concurrency.group` 用于滚动发布时必须含 `${{ github.ref }}`；否则 main 分支触发与 `v*` tag 触发会落入同一并发组、`cancel-in-progress` 会让两类发布互相取消。证据：本任务 release.yml 设计。
+
+## Rotated 2026-05-24
+
+- 改为下载 frp "latest" 后，frp 版本不再受 frp_easy 控制。未来 frp 大版本若变更 TOML schema，`internal/frpconf` 渲染的 frpc.toml/frps.toml 可能被新版 frpc/frps 拒绝、导致子进程启动失败。本期按 out-of-scope 不做版本适配；后续若出现兼容性问题，需引入 frp 版本探测/适配或锁定已知兼容版本。证据：T-014 设计 §5 R-2。
+- GitHub API 查询 `fatedier/frp` releases 必须带 `User-Agent` 头，否则被 GitHub 拒为 403；且 `http.Client`（不同于 curl）对 4xx/5xx 不返回 error，可天然"先判 resp.StatusCode 再解析 JSON"。证据：T-014 downloader.go resolveLatestAsset。
+- **2026-05-23** · bash 双引号 + parameter expansion 的 quote-removal 陷阱：`"${p// /\\x20}"` 中 REPLACEMENT 段的 `\\` 先被 quote-removal 还原为单 `\`、再被 expansion 解析吞掉，结果丢反斜杠（实测 `frpx20easy`）；要让 REPLACEMENT 含字面反斜杠须用 4 反斜杠 `"${p// /\\\\x20}"` 或先存到单引号变量 `local esc='\x20'; "${p// /$esc}"`。验证字符级替换必须 verbatim source committed 函数，不能复用"等价" ad-hoc 测试脚本 · evidence: T-016 install-progress-and-systemd-unit-fix D-1
+- **2026-05-23** · install.sh 解包后必须对运行时可写路径（frp_easy.toml、.frp_easy/、frp_linux/）chown 给 RUN_USER（systemd `User=` 同款 `${SUDO_USER:-$(id -un)}` 两段式），否则 systemd 进程以 RUN_USER 启动时 appconf.Load() 写默认配置失败 → permission denied → 死循环重启。修复模式：解包后局部 chown（绝不全量 `chown -R /opt/<app>/`）+ 预生成 frp_easy.toml 让 appconf 走"已存在"分支 · evidence: T-017 install-role-and-public-ip
+- **2026-05-23** · 公网 IP 探测在国内 VM 上 api.ipify.org / ifconfig.me / icanhazip.com 三常用候选有高概率全部失败；必须提供用户手动覆盖通道（`FRP_EASY_PUBLIC_IP` 环境变量 + 函数首行 short-circuit）+ 失败横幅显式打印"登云控制台复制出口 IP"提示。仅靠多候选 URL 轮询在国内环境不够 · evidence: T-017 install-role-and-public-ip
+- **2026-05-23** · 前端 TS 接口与后端 Go struct 的 JSON 字段名漂移在双方 mock 测试都 PASS 时无法被捕获；本任务出现两处 P0：`size↔sizeBytes` 与 `basename↔namePrefix`，前端 spec mock 用自定字段名，后端单测用 OpenAPI 字段名，各自绿但生产必崩。补救：spec 测试用 OpenAPI codegen（如 openapi-typescript）做"契约一锤定音"，而非两边各自从 OpenAPI 抄一遍 · evidence: T-018 05_CODE_REVIEW P0-1/P0-2
