@@ -13,6 +13,8 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-033 | e2e-setup-spec-flake-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/e2e-setup-spec-flake-fix/` |
+| T-034 | reviewer-write-tool-dispatch-verify | DELIVERED | 2026-05-24 | `docs/features/_archived/reviewer-write-tool-dispatch-verify/` |
 | T-032 | proxy-form-vmodel-oom-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/proxy-form-vmodel-oom-fix/` |
 | T-031 | install-ps1-host-close-on-completion | DELIVERED | 2026-05-24 | `docs/features/_archived/install-ps1-host-close-on-completion/` |
 | T-030 | reviewer-agent-write-tool-frontmatter | DELIVERED | 2026-05-24 | trivial 直接修复（.harness/agents/gate-reviewer.md + code-reviewer.md frontmatter `tools` 字段 + harness-sync 同步 .claude/agents/，无阶段文档）：insight L41/L48 + T-027 第 3 次复现"reviewer 不落盘"陷阱（200+ 行 Markdown 塞消息体让 PM 代写），根因是 frontmatter tools 仅 Read/Glob/Grep；加 Write 工具与 developer/qa-tester 对齐 |
