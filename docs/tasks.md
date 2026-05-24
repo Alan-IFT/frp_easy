@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-035 | install-sh-role-cli-arg-passthrough | DELIVERED | 2026-05-24 | `docs/features/_archived/install-sh-role-cli-arg-passthrough/` |
 | T-033 | e2e-setup-spec-flake-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/e2e-setup-spec-flake-fix/` |
 | T-034 | reviewer-write-tool-dispatch-verify | DELIVERED | 2026-05-24 | `docs/features/_archived/reviewer-write-tool-dispatch-verify/` |
 | T-032 | proxy-form-vmodel-oom-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/proxy-form-vmodel-oom-fix/` |

@@ -56,13 +56,17 @@
 
 ```bash
 # 服务端（公网 VM，要让外部 frpc 客户端能连进来）
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server
 
 # 客户端（内网设备，仅本机访问 UI 最安全）
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role client
 ```
 
-> 注意 `sudo -E` 的 `-E` 不能省 —— 它让 sudo 透传 `FRP_EASY_ROLE` 环境变量到子进程，否则脚本会因为缺少 role 退出码 3 并报错（保护用户避免静默装错角色）。
+> 上面这条 CLI 形态在 Ubuntu 24/26 LTS、Debian 13 等 **较新 sudo 默认不允许 `-E` 保留环境变量**（如打印 `sudo: '-E' is ignored`）的发行版上**必需**。`bash -s --` 中的 `--` 是 POSIX 参数终止符，省去后 bash 会把 `--role` 当成自己的非法选项报错（`bash: --: invalid option`），脚本根本不执行——**不可省**。
+
+> **兼容回退**：如果你的发行版 sudo 允许 env 透传（如 Ubuntu 22 LTS 及更旧），仍可使用旧的环境变量形态 `... | FRP_EASY_ROLE=client sudo -E bash`。脚本同时支持 CLI 参数与 `FRP_EASY_ROLE` 环境变量（CLI 优先）。
+
+> 如你看到旧群文档 / 旧博客里的 `... | FRP_EASY_ROLE=... sudo -E bash` 入口在 Ubuntu 24/26 上失败，请改用上方 CLI 形态命令；脚本的错误提示也会现场引导你换形态。
 
 **Windows**（管理员 PowerShell 7，推荐）：
 
@@ -89,14 +93,14 @@ pwsh -NoExit -Command "irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/m
 服务端安装结束横幅会尝试通过 `api.ipify.org` / `ifconfig.me` / `icanhazip.com` 三家探测公网出口 IP；国内云厂商网络下这三家**经常全部不可达**。这种情况脚本会打印降级文案，让你直接登腾讯云 / 阿里云 / 华为云控制台复制实例公网 IP，并提供绕过探测的命令：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_PUBLIC_IP=<你的公网IP> FRP_EASY_ROLE=server sudo -E bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo FRP_EASY_PUBLIC_IP=<你的公网IP> bash -s -- --role server
 ```
 
 #### 如何更新
 
 重新运行**与首装相同 role** 的那条一键安装命令即可升级。升级会停服、覆盖主二进制与脚本、重注册服务，并完整保留你的配置（`frp_easy.toml`）、数据目录（`.frp_easy/`），以及 `frp_linux/` / `frp_win/` 下你已下载的 frp 二进制。
 
-> 切换角色（如客户端转服务端）必须先卸载（`sudo /opt/frp-easy/scripts/uninstall-service.sh`）再用新 role 装；脚本默认拒绝静默切换角色避免误操作，必要时可加 `FRP_EASY_FORCE_ROLE=yes` 强制覆盖。
+> 切换角色（如客户端转服务端）必须先卸载（`sudo /opt/frp-easy/scripts/uninstall-service.sh`）再用新 role 装；脚本默认拒绝静默切换角色避免误操作，必要时可加 `--force-role` CLI 参数（或环境变量 `FRP_EASY_FORCE_ROLE=yes`）强制覆盖。
 
 一键安装会把 frp_easy 装到固定目录（Linux/macOS `/opt/frp-easy`、Windows `C:\Program Files\frp-easy`）并注册为系统服务。
 

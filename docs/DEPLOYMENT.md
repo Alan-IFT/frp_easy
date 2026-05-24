@@ -41,15 +41,17 @@
 
 ```bash
 # 服务端（公网 VM，要让外部 frpc 客户端能连进来）
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server
 
 # 客户端（内网设备，仅本机访问 UI 最安全）
-curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash
+curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role client
 ```
 
-> `sudo -E` 的 `-E` 不能省 —— 让 sudo 透传 `FRP_EASY_ROLE` 环境变量到子进程；否则脚本以退出码 3 提示你补上 role。
+> 上面这条 CLI 形态在 Ubuntu 24/26 LTS、Debian 13 等"较新 sudo 默认不允许 `-E` 保留环境变量"的发行版上**必需**。`bash -s --` 中的 `--` 是 POSIX 参数终止符，省去后 bash 会把 `--role` 当成自己的非法选项报错（`bash: --: invalid option`，rc=2）——**不可省**。
 
-> 国内 VM 公网 IP 探测兜底：脚本横幅会尝试通过 `api.ipify.org` / `ifconfig.me` / `icanhazip.com` 三家探测公网出口 IP，国内云厂商网络下这三家**经常全部不可达**。这种情况脚本会打印降级文案，让你直接登云厂商控制台复制实例公网 IP，并给出绕过探测的命令：`curl ... | FRP_EASY_PUBLIC_IP=<你的公网IP> FRP_EASY_ROLE=server sudo -E bash`。
+> **兼容回退**：如果你的发行版 sudo 允许 env 透传（如 Ubuntu 22 LTS 及更旧），仍可用旧的环境变量形态 `... | FRP_EASY_ROLE=client sudo -E bash`。脚本同时支持 CLI 参数与 `FRP_EASY_ROLE` 环境变量（CLI 优先）。
+
+> 国内 VM 公网 IP 探测兜底：脚本横幅会尝试通过 `api.ipify.org` / `ifconfig.me` / `icanhazip.com` 三家探测公网出口 IP，国内云厂商网络下这三家**经常全部不可达**。这种情况脚本会打印降级文案，让你直接登云厂商控制台复制实例公网 IP，并给出绕过探测的命令：`curl ... | sudo FRP_EASY_PUBLIC_IP=<你的公网IP> bash -s -- --role server`。
 
 **Windows**（以管理员身份运行 PowerShell）：
 
@@ -64,7 +66,7 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 > ```bash
 > curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh -o install.sh
 > # 审阅 install.sh 内容后
-> sudo FRP_EASY_ROLE=server bash install.sh  # 或 client
+> sudo bash install.sh --role server  # 或 client
 > ```
 
 > 安全提示：`irm | iex` 会在当前会话执行远程脚本。谨慎用户可先下载脚本审阅：
@@ -89,7 +91,7 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 > 若想了解服务的状态查询 / 日志 / 卸载命令，见下方[路径 C](#路径-c--作为系统服务)。
 > macOS 因无 systemd / launchd 模板，一键安装会下载安装后提示手动启动，不注册服务。
 
-**如何更新**：重新运行**与首装相同 role** 的那条一键安装命令即可升级。升级会停服 → 覆盖主二进制与脚本 → 重注册服务，并完整保留 `frp_easy.toml`、`.frp_easy/` 数据目录，以及 `frp_linux/`/`frp_win/` 下你已下载的 frp 二进制（升级不触碰它们）。切换角色（如客户端转服务端）必须先卸载再用新 role 装；脚本默认拒绝静默切换避免误操作，必要时可加 `FRP_EASY_FORCE_ROLE=yes` 强制覆盖。
+**如何更新**：重新运行**与首装相同 role** 的那条一键安装命令即可升级。升级会停服 → 覆盖主二进制与脚本 → 重注册服务，并完整保留 `frp_easy.toml`、`.frp_easy/` 数据目录，以及 `frp_linux/`/`frp_win/` 下你已下载的 frp 二进制（升级不触碰它们）。切换角色（如客户端转服务端）必须先卸载再用新 role 装；脚本默认拒绝静默切换避免误操作，必要时可加 `--force-role` CLI 参数（或环境变量 `FRP_EASY_FORCE_ROLE=yes`）强制覆盖。
 
 > 不想用一键安装？下方 **A.1–A.3 手动安装（备选）** 是不使用一键安装时的备选路径。
 

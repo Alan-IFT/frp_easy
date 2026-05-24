@@ -6,24 +6,30 @@
 #       同步、每次 push main 自动刷新），下载并校验发布包，解压到固定安装目录，
 #       再调用解压包内的 install-service.sh 注册 systemd 服务。
 # 用法：
-#   推荐（curl | bash 形态，需 root/sudo）：
+#   推荐（CLI 形态，跨发行版稳定 —— Ubuntu 24+/Debian 13+ 必需，需 root/sudo）：
 #     服务端（公网 VM，监听 0.0.0.0，需要公网 IP）：
-#       curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash
+#       curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server
 #     客户端（内网设备，仅监听 127.0.0.1，最安全）：
-#       curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash
+#       curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role client
+#     注意：`bash -s --` 中的 `--` 是 POSIX 参数终止符，省去后 bash 会把 `--role` 当成自己的非法选项报错——不可省。
+#   兼容（环境变量形态，仅在 sudo 允许 env 透传的发行版上有效，Ubuntu 22 LTS 及更旧）：
+#     服务端：curl -fsSL .../install.sh | FRP_EASY_ROLE=server sudo -E bash
+#     客户端：curl -fsSL .../install.sh | FRP_EASY_ROLE=client sudo -E bash
 #   谨慎用户（先下载审阅再执行）：
 #     curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh -o install.sh
-#     FRP_EASY_ROLE=server sudo -E bash install.sh
+#     sudo bash install.sh --role server   # 或 client
 # 参数：-h | --help              显示本帮助后退出（退出码 0）
-#       环境变量 FRP_EASY_ROLE          server | client（必填；server 监听 0.0.0.0、client 监听 127.0.0.1）
-#       环境变量 FRP_EASY_FORCE_ROLE    yes（升级期与已装 role 冲突时强制覆盖 .role 并重写配置；危险）
+#       --role server|client     必填（CLI 优先）；与环境变量 FRP_EASY_ROLE 等价；亦支持 --role=server / --role=client 等号形态
+#       --force-role             与环境变量 FRP_EASY_FORCE_ROLE=yes 等价；升级期切换 role 时强制覆盖
+#       环境变量 FRP_EASY_ROLE          server | client（兼容回退；CLI 形态优先）
+#       环境变量 FRP_EASY_FORCE_ROLE    yes（与 --force-role 等价）
 #       环境变量 FRP_EASY_PUBLIC_IP     合法 IPv4/IPv6（绕过公网 IP 自动探测，server 模式适用）
 #       环境变量 FRP_EASY_INSTALL_DIR   覆盖安装目录（默认 /opt/frp-easy），高级用法
 # 输出：stdout 中文进度行（每阶段一行）；stderr 仅错误。
 # 退出码：0 成功（含 -h 帮助、macOS 降级收尾）
 #         1 前置/环境失败（非 root / 缺依赖 / 非 amd64 / 网络或 API 不可用 / 下载解压失败）
 #         2 服务注册阶段失败（透传 install-service.sh 的退出码）
-#         3 FRP_EASY_ROLE 未指定 / 非法 / 升级期 role 冲突且无 FRP_EASY_FORCE_ROLE
+#         3 ROLE 未指定 / 非法 / 升级期 role 冲突且无 --force-role / FRP_EASY_FORCE_ROLE
 # 说明：本脚本不删除已存在安装中的 frp_easy.toml 与 .frp_easy/ 数据目录；
 #       目标目录已存在 frp-easy 时按"升级"语义处理（覆盖二进制/脚本，保留配置与数据）。
 
@@ -35,35 +41,56 @@ INSTALL_DIR="${FRP_EASY_INSTALL_DIR:-/opt/frp-easy}"
 TMP_DIR=""
 
 # ---- 步骤 0：参数解析与 -h/--help（必须在依赖检测之前）----
+# CLI 参数解析设计（T-035）：
+#   - 长选项 `--role <value>` + 等号形态 `--role=<value>` 双支持（GNU getopt 风格）
+#   - `--role X --role Y` 行为 = "last wins"（GNU 主流约定；与 bash case 顺序 shift 一致）
+#   - `--role` 后若下一个 token 以 `--` 开头视为"缺 value"错误（防 `--role --force-role` 吞参）
+#   - CLI 优先级 > 环境变量：解析完毕后做 ROLE = ROLE_FROM_CLI || FRP_EASY_ROLE 归一化
+#   - 不引入 getopt 外部依赖（发行版 getopt 行为差异大）—— 纯 bash case + shift 自给自足
+#   - 设计依据：T-035 02 §3.1
+ROLE_FROM_CLI=""
+FORCE_ROLE_FROM_CLI=""
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h|--help)
             cat <<'EOF'
-用法: install.sh [-h|--help]
+用法: install.sh [-h|--help] [--role server|client] [--force-role]
 
 frp_easy 一键安装脚本（Linux / macOS）—— 下载滚动发布包（与 main 分支同步）、
 安装到固定目录、注册 systemd 开机自启。
 
-必填环境变量：
-  FRP_EASY_ROLE=server  —— 服务端（公网 VM；监听 0.0.0.0，对外提供 frps + Web UI）
-  FRP_EASY_ROLE=client  —— 客户端（内网设备；仅监听 127.0.0.1，最安全）
+必填：--role server|client（也可通过环境变量 FRP_EASY_ROLE 提供）
+  --role server  —— 服务端（公网 VM；监听 0.0.0.0，对外提供 frps + Web UI）
+  --role client  —— 客户端（内网设备；仅监听 127.0.0.1，最安全）
 
-推荐用法（curl | bash 形态，需 root / sudo 权限；sudo -E 透传环境变量）:
+推荐用法（CLI 形态，跨发行版稳定 —— Ubuntu 24+/Debian 13+ 必需，需 root / sudo）:
+  服务端：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server
+  客户端：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role client
+
+  注意：`bash -s --` 中的 `--` 是 POSIX 参数终止符，省去后 bash 会把 `--role` 当作自己的
+        非法选项报错（bash: --: invalid option，rc=2，脚本不会执行）——不可省。
+
+兼容用法（环境变量形态，仅在 sudo 允许 env 透传的发行版上有效，Ubuntu 22 LTS 及更旧）:
   服务端：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash
   客户端：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash
 
 谨慎用户（先下载脚本审阅后再执行）:
   curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh -o install.sh
-  FRP_EASY_ROLE=server sudo -E bash install.sh
+  sudo bash install.sh --role server   # 或 client
 
 参数:
-  -h, --help    显示本帮助后退出
+  -h, --help              显示本帮助后退出
+  --role server|client    必填（CLI 优先）；亦支持 --role=server 等号形态；
+                          也可通过环境变量 FRP_EASY_ROLE 提供（兼容回退）
+  --force-role            升级期与已装 .role 冲突时强制覆盖；
+                          与环境变量 FRP_EASY_FORCE_ROLE=yes 等价
 
 环境变量:
-  FRP_EASY_ROLE           server | client（必填）。server 监听 0.0.0.0；client 监听 127.0.0.1。
-  FRP_EASY_FORCE_ROLE     yes（升级期与已装 .role 冲突时强制覆盖；将备份旧 frp_easy.toml 后重写）。
-  FRP_EASY_PUBLIC_IP      合法 IPv4 / IPv6 字面量（绕过公网 IP 自动探测，server 模式适用；国内 VM 推荐）。
-  FRP_EASY_INSTALL_DIR    覆盖安装目录（默认 /opt/frp-easy），高级用法。
+  FRP_EASY_ROLE           server | client（CLI 优先；env 仅作兼容回退）
+  FRP_EASY_FORCE_ROLE     yes（与 --force-role 等价）
+  FRP_EASY_PUBLIC_IP      合法 IPv4 / IPv6 字面量（绕过公网 IP 自动探测，server 模式适用；国内 VM 推荐）
+  FRP_EASY_INSTALL_DIR    覆盖安装目录（默认 /opt/frp-easy），高级用法
 
 安装目录:
   默认 /opt/frp-easy（可由 FRP_EASY_INSTALL_DIR 覆盖）。
@@ -78,12 +105,44 @@ frp_easy 一键安装脚本（Linux / macOS）—— 下载滚动发布包（与
   0  成功（含本帮助、macOS 降级收尾）
   1  前置/环境失败（非 root / 缺依赖 / 非 amd64 / 网络或 API 不可用 / 下载解压失败）
   2  服务注册阶段失败（透传 install-service.sh 退出码）
-  3  FRP_EASY_ROLE 未指定 / 非法 / 升级期 role 冲突且无 FRP_EASY_FORCE_ROLE
+  3  ROLE 未指定 / 非法 / 升级期 role 冲突且无 --force-role / FRP_EASY_FORCE_ROLE
 
 卸载:
   sudo /opt/frp-easy/scripts/uninstall-service.sh
 EOF
             exit 0
+            ;;
+        --role)
+            # 形态 1：`--role <value>` —— 与 GNU getopt long-option 主流一致。
+            # `[[ "$2" == --* ]]` 检测下一个 token 是否以 `--` 开头：是则判为"缺 value"
+            # 防 `--role --force-role` 吞掉 --force-role；ROLE 取值仅 server|client，
+            # 后续校验段（§0.5）会拒绝任何 `-` 开头的非法值，故不再 case 内深查。
+            # 依赖 bash `[[ ]]` 内 `||` 短路评估：当 $# -lt 2 时 $2 不被展开，set -u 安全；
+            # 切勿改为外部 `[ ... || ... ]`（外部 test 不短路 + set -u 下访问 $2 会立即报错）。
+            if [[ $# -lt 2 || "$2" == --* ]]; then
+                echo "错误：--role 缺少取值（server|client）。" >&2
+                exit 3
+            fi
+            ROLE_FROM_CLI="$2"
+            shift 2
+            ;;
+        --role=*)
+            # 形态 2：`--role=<value>` —— `${1#--role=}` 剥前缀；空值显式报错。
+            ROLE_FROM_CLI="${1#--role=}"
+            if [[ -z "$ROLE_FROM_CLI" ]]; then
+                echo "错误：--role= 后必须紧跟取值（server|client），不能为空。" >&2
+                exit 3
+            fi
+            shift
+            ;;
+        --force-role)
+            FORCE_ROLE_FROM_CLI="yes"
+            shift
+            ;;
+        --)
+            # POSIX 终止符：之后的参数不再解析（兼容未来扩展位置参数场景）。
+            shift
+            break
             ;;
         *)
             echo "错误：未识别的参数 $1，运行 bash install.sh --help 查看用法。" >&2
@@ -92,20 +151,48 @@ EOF
     esac
 done
 
-# ---- 步骤 0.5：FRP_EASY_ROLE 解析与校验（T-017）----
-# 设计依据：02 §5.1 + PM 决议 AMBIG-C 子问题 C1.a = (a) 拒绝静默默认。
-# 必须设置 FRP_EASY_ROLE=server|client；其它取值（含未设置、含空串）一律 exit 3。
-# 用户原话："服务端需要公网 IP，客户端监听 127.0.0.1 最安全" —— 静默默认值会让用户
-# 错装客户端到公网 VM 或反之，安全风险高，因此宁可显式失败也不猜测。
-ROLE="${FRP_EASY_ROLE:-}"
+# ---- 步骤 0.4：合并 CLI 与环境变量到 ROLE / FORCE_ROLE_EFFECTIVE（T-035）----
+# 优先级：CLI > env。设计依据 02 §3.1 + 03 Q-2。
+# 这样旧用户复用旧 env 入口（兼容路径）仍 work；新用户用 CLI 形态在新发行版上跨 sudo 边界稳定。
+if [[ -n "$ROLE_FROM_CLI" ]]; then
+    ROLE="$ROLE_FROM_CLI"
+    ROLE_SOURCE="CLI (--role)"
+else
+    ROLE="${FRP_EASY_ROLE:-}"
+    ROLE_SOURCE="环境变量 (FRP_EASY_ROLE)"
+fi
+
+if [[ -n "$FORCE_ROLE_FROM_CLI" ]]; then
+    FORCE_ROLE_EFFECTIVE="yes"
+else
+    FORCE_ROLE_EFFECTIVE="${FRP_EASY_FORCE_ROLE:-no}"
+fi
+
+# ---- 步骤 0.5：ROLE 校验（T-017 拒绝静默默认 + T-035 CLI 形态主推荐）----
+# 设计依据：T-017 02 §5.1 + PM 决议 AMBIG-C 子问题 C1.a = (a) 拒绝静默默认。
+# 必须通过 --role server|client 或 FRP_EASY_ROLE=server|client 指定；其它取值
+# （含未设置、含空串、大小写不符）一律 exit 3。用户原话："服务端需要公网 IP，
+# 客户端监听 127.0.0.1 最安全" —— 静默默认值会让用户错装客户端到公网 VM 或反之。
+# T-035：错误提示按 3 段呈现（CLI 主推荐 → env 兼容回退 → sudo -E 诊断引导），
+# 让 Ubuntu 24+/Debian 13+ 用户即便复用旧 env 入口踩坑也能从现场提示找到出路。
 if [[ -z "$ROLE" || ( "$ROLE" != "server" && "$ROLE" != "client" ) ]]; then
-    echo "错误：必须指定 FRP_EASY_ROLE=server|client（不允许静默默认）" >&2
-    echo "  服务端（公网 VM）：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash" >&2
-    echo "  客户端（内网设备）：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash" >&2
-    echo "  说明：sudo 需 -E 才能透传环境变量；服务端默认监听 0.0.0.0，客户端默认监听 127.0.0.1。" >&2
+    echo "错误：必须指定 --role server|client（不允许静默默认）" >&2
+    echo "" >&2
+    echo "推荐用法（CLI 形态，跨发行版稳定 —— Ubuntu 24+/Debian 13+ 必需）:" >&2
+    echo "  服务端：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server" >&2
+    echo "  客户端：curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role client" >&2
+    echo "  注意：'bash -s --' 中的 '--' 是 POSIX 参数终止符，省去后 bash 会把 --role 当成自己的非法选项报错——不可省。" >&2
+    echo "" >&2
+    echo "兼容用法（环境变量形态，仅在 sudo 允许 env 透传的发行版上有效，Ubuntu 22 LTS 及更旧）:" >&2
+    echo "  curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash" >&2
+    echo "" >&2
+    echo "诊断：如果你刚才看到 sudo 输出 \"'-E' is ignored\" 或类似 env 透传被拒提示，" >&2
+    echo "       说明本机 sudo 安全策略不允许保留环境变量。请改用上方 \"CLI 形态\" 命令。" >&2
+    echo "" >&2
+    echo "说明：服务端默认监听 0.0.0.0，客户端默认监听 127.0.0.1。" >&2
     exit 3
 fi
-echo "    role=${ROLE}"
+echo "    role=${ROLE}  (来源: ${ROLE_SOURCE})"
 
 # ---- 函数：render_frp_easy_toml ----
 # 意图：按 ROLE 渲染 frp_easy.toml 的字面文本到 stdout，供步骤 6.5 预生成配置。
@@ -203,7 +290,7 @@ fi
 
 if [[ "$(id -u)" -ne 0 ]]; then
     echo "错误：请以 root / sudo 运行（安装到 /opt 与配置 systemd 需 root 权限）。" >&2
-    echo "      用法：curl -fsSL <url> | sudo bash" >&2
+    echo "      推荐用法：curl -fsSL <url> | sudo bash -s -- --role ${ROLE}" >&2
     exit 1
 fi
 
@@ -397,13 +484,13 @@ if [[ "$OS" == "linux" ]]; then
     if [[ -f "$ROLE_FILE" ]]; then
         OLD_ROLE="$(head -n1 "$ROLE_FILE" 2>/dev/null | tr -d '[:space:]' || true)"
         if [[ "$OLD_ROLE" != "$ROLE" ]]; then
-            if [[ "${FRP_EASY_FORCE_ROLE:-no}" != "yes" ]]; then
+            if [[ "$FORCE_ROLE_EFFECTIVE" != "yes" ]]; then
                 echo "错误：已检测到 role=${OLD_ROLE}，本次指定 role=${ROLE} 冲突。" >&2
                 echo "  如需切换 role，请先运行卸载脚本再重装：" >&2
                 echo "    sudo ${INSTALL_DIR}/scripts/uninstall-service.sh" >&2
                 echo "    sudo rm -f ${INSTALL_DIR}/.role ${INSTALL_DIR}/frp_easy.toml" >&2
                 echo "  或显式覆盖（将备份旧 frp_easy.toml 后重写）：" >&2
-                echo "    FRP_EASY_ROLE=${ROLE} FRP_EASY_FORCE_ROLE=yes sudo -E bash ..." >&2
+                echo "    curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role ${ROLE} --force-role" >&2
                 exit 3
             fi
             # 强制覆盖路径：备份旧 toml → 重写 toml → 重写 .role。
@@ -527,7 +614,7 @@ frp_easy 一键安装完成！（角色：客户端）
 
 更新：
   重新运行同一条一键安装命令即可升级到最新版：
-    curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=client sudo -E bash
+    curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role client
   升级会保留你的配置（frp_easy.toml）与数据（.frp_easy/），
   以及已下载的 frp 二进制（frp_linux/）。
 
@@ -571,7 +658,7 @@ else
         echo ""
         echo "    国内 VM（腾讯云 / 阿里云 / 华为云）可登云控制台 → 实例详情复制公网 IP。"
         echo "    确认后重新运行（绕过探测）："
-        echo "      curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_PUBLIC_IP=<your-ip> FRP_EASY_ROLE=server sudo -E bash"
+        echo "      curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo FRP_EASY_PUBLIC_IP=<your-ip> bash -s -- --role server"
     fi
     # FR-C.6：server 模式必须打印防火墙 / 安全组提示。
     echo ""
@@ -586,7 +673,7 @@ else
     echo ""
     echo "更新："
     echo "  重新运行同一条一键安装命令即可升级到最新版："
-    echo "    curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | FRP_EASY_ROLE=server sudo -E bash"
+    echo "    curl -fsSL https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.sh | sudo bash -s -- --role server"
     echo "  升级会保留你的配置（frp_easy.toml）与数据（.frp_easy/），"
     echo "  以及已下载的 frp 二进制（frp_linux/）。"
     echo ""
