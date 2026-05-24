@@ -8,12 +8,12 @@
 
 | ID | Slug | 阶段 | 模式 | 文档目录 |
 |---|---|---|---|---|
-| T-036 | log-ui-ux-polish | review | full | `docs/features/log-ui-ux-polish/` |
 
 ## 已完成
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-036 | log-ui-ux-polish | DELIVERED | 2026-05-24 | `docs/features/_archived/log-ui-ux-polish/` |
 | T-037 | proxy-rules-simplify-and-port-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/proxy-rules-simplify-and-port-fix/` |
 | T-035 | install-sh-role-cli-arg-passthrough | DELIVERED | 2026-05-24 | `docs/features/_archived/install-sh-role-cli-arg-passthrough/` |
 | T-033 | e2e-setup-spec-flake-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/e2e-setup-spec-flake-fix/` |

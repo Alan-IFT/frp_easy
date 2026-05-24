@@ -1,94 +1,244 @@
 <template>
-  <div>
-    <n-space justify="space-between" align="center" style="margin-bottom: 8px">
-      <n-text strong>{{ kindLabel }} 日志</n-text>
-      <n-space align="center">
-        <n-text depth="3" style="font-size: 12px">自动刷新</n-text>
-        <n-switch v-model:value="autoRefresh" @update:value="handleAutoRefreshChange" />
-        <n-button size="small" @click="loadTail">刷新</n-button>
-      </n-space>
-    </n-space>
-    <n-code
-      :code="logText"
-      language="text"
-      style="max-height: 500px; overflow-y: auto; background: #1a1a1a; padding: 12px; border-radius: 6px; font-size: 12px; font-family: monospace; white-space: pre-wrap; word-break: break-all"
+  <div class="log-viewer-root" :style="rootCssVars">
+    <log-toolbar
+      :search="search.query.value"
+      :case-sensitive="prefs.caseSensitive.value"
+      :levels="filter.activeLevels.value"
+      :follow-tail="follow.enabled.value"
+      :wrap="prefs.wrap.value"
+      :height="prefs.height.value"
+      :last-updated="buf.lastUpdatedAt.value"
+      :count="buf.lines.value.length"
+      :max-count="MAX_LINES"
+      :auto-refresh="buf.autoRefresh.value"
+      :fail-count="buf.consecutiveFailCount.value"
+      :last-error="buf.lastError.value"
+      @update:search="search.setQuery"
+      @update:case-sensitive="prefs.setCaseSensitive"
+      @update:levels="filter.setActiveLevels"
+      @update:follow-tail="onToggleFollow"
+      @update:wrap="prefs.setWrap"
+      @update:height="prefs.setHeight"
+      @update:auto-refresh="onSetAutoRefresh"
+      @copy="onCopy"
+      @clear="onClear"
+      @fullscreen="onOpenFullscreen"
+      @scroll-to-bottom="follow.scrollToBottom"
+    />
+
+    <log-list
+      v-show="!fullscreenOpen"
+      :visible-lines="search.visibleLines.value"
+      :buffer-empty="buf.lines.value.length === 0"
+      :no-match-hint="noMatchHint"
+      :wrap="prefs.wrap.value"
+      :height-px="prefs.heightPx.value"
+      :font-size-px="prefs.fontSizePx.value"
+      :loading="buf.firstLoading.value"
+      :first-load-error="buf.firstLoadError.value"
+      :follow-tail="follow.enabled.value"
+      :paused="follow.paused.value"
+      @scroll="follow.onScroll"
+      @retry="onRetry"
+      @resume-follow="follow.resume"
+      @clear-filters="onClearFilters"
+      @scroll-el-ready="onScrollElReady"
+    />
+
+    <fullscreen-log-modal
+      v-if="fullscreenOpen"
+      :show="fullscreenOpen"
+      :kind="kindLabel"
+      :visible-lines="search.visibleLines.value"
+      :buffer-empty="buf.lines.value.length === 0"
+      :no-match-hint="noMatchHint"
+      :wrap="prefs.wrap.value"
+      :height-px="fullscreenHeightPx"
+      :font-size-px="prefs.fontSizePx.value"
+      :loading="buf.firstLoading.value"
+      :first-load-error="buf.firstLoadError.value"
+      :follow-tail="follow.enabled.value"
+      :paused="follow.paused.value"
+      @update:show="fullscreenOpen = $event"
+      @scroll="follow.onScroll"
+      @retry="onRetry"
+      @resume-follow="follow.resume"
+      @clear-filters="onClearFilters"
+      @scroll-el-ready="onScrollElReady"
     />
   </div>
 </template>
 
 <script setup lang="ts">
+// T-036 / log-ui-ux-polish · 02 §3.1
+// 壳组件：持有全部 composable 实例 + 子组件协调；< 200 行。
+// :style="rootCssVars" 是 NFR-4 单点豁免（C-3）：把 useThemeVars 投到 CSS 变量，
+// 子组件全部走 var(--log-error) 等读取 → 切主题 0 额外代码即跟随（AC-13）。
+
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { NSpace, NText, NSwitch, NButton, NCode } from 'naive-ui'
-import { apiGetLogsTail, apiGetLogsIncremental } from '../api/logs'
+import { useMessage, useThemeVars } from 'naive-ui'
+import LogToolbar from './log/LogToolbar.vue'
+import LogList from './log/LogList.vue'
+import FullscreenLogModal from './log/FullscreenLogModal.vue'
+import { useLogPrefs } from '../composables/log/useLogPrefs'
+import { useLogBuffer } from '../composables/log/useLogBuffer'
+import { useLogLevelFilter } from '../composables/log/useLogLevelFilter'
+import { useLogSearch } from '../composables/log/useLogSearch'
+import { useFollowTail } from '../composables/log/useFollowTail'
+
+const MAX_LINES = 500
 
 const props = defineProps<{
   kind: string
 }>()
 
-const kindLabel = computed(() => props.kind === 'frpc' ? 'frpc' : 'frps')
-const lines = ref<string[]>([])
-const logText = computed(() => lines.value.join('\n') || '（暂无日志）')
-const autoRefresh = ref(false)
-const currentOffset = ref(0)
-const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
+const themeVars = useThemeVars()
+const message = useMessage()
 
-async function loadTail() {
-  try {
-    const res = await apiGetLogsTail(props.kind, 500)
-    lines.value = res.lines
-    // 重置偏移量以便下次增量获取（0 = 从文件末尾重新读取）
-    currentOffset.value = 0
-  } catch {
-    // ignore
-  }
-}
+const prefs = useLogPrefs()
+const buf = useLogBuffer(() => props.kind, {
+  max: MAX_LINES,
+  message,
+}) as ReturnType<typeof useLogBuffer> & { __bumpEpoch: () => void }
+const filter = useLogLevelFilter(buf.parsedLines)
+const search = useLogSearch(filter.filteredLines, prefs.caseSensitive)
+const follow = useFollowTail(prefs.followTail)
 
-async function loadIncremental() {
-  try {
-    const res = await apiGetLogsIncremental(props.kind, currentOffset.value)
-    if (res.data) {
-      const newLines = res.data.split('\n').filter((l) => l !== '')
-      lines.value = [...lines.value, ...newLines].slice(-500)
-    }
-    currentOffset.value = res.nextOffset
-  } catch {
-    // ignore
-  }
-}
+const fullscreenOpen = ref(false)
 
-function handleAutoRefreshChange(val: boolean) {
-  if (val) {
-    startPolling()
-  } else {
-    stopPolling()
-  }
-}
+const kindLabel = computed(() => (props.kind === 'frpc' ? 'frpc' : 'frps'))
 
-function startPolling() {
-  if (pollingTimer.value !== null) return
-  pollingTimer.value = setInterval(() => {
-    void loadIncremental()
-  }, 2000)
-}
-
-function stopPolling() {
-  if (pollingTimer.value !== null) {
-    clearInterval(pollingTimer.value)
-    pollingTimer.value = null
-  }
-}
-
-watch(() => props.kind, () => {
-  stopPolling()
-  autoRefresh.value = false
-  void loadTail()
+const fullscreenHeightPx = computed(() => {
+  if (typeof window === 'undefined') return 800
+  return Math.max(400, Math.floor(window.innerHeight * 0.78))
 })
 
+const noMatchHint = computed(() => {
+  if (filter.activeLevels.value.length === 0) {
+    return '请至少选择一个日志等级'
+  }
+  return '无匹配日志（已应用筛选 / 搜索）'
+})
+
+const rootCssVars = computed<Record<string, string>>(() => {
+  const t = themeVars.value
+  return {
+    '--log-error': t.errorColor,
+    '--log-warn': t.warningColor,
+    '--log-text': t.textColor1,
+    '--log-text-3': t.textColor3,
+    '--log-divider': t.dividerColor,
+    '--log-bg': (t.codeColor as string | undefined) ?? t.cardColor,
+    '--log-mark-bg': t.primaryColorSuppl,
+  }
+})
+
+function onToggleFollow(v: boolean) {
+  prefs.setFollowTail(v)
+  follow.toggle(v)
+}
+
+function onSetAutoRefresh(v: boolean) {
+  buf.setAutoRefresh(v)
+}
+
+async function onCopy() {
+  const text = search.visibleLines.value.map((v) => v.parsed.raw).join('\n')
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success('已复制到剪贴板')
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('aria-hidden', 'true')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    let ok = false
+    try {
+      ok = document.execCommand('copy')
+    } catch {
+      ok = false
+    } finally {
+      document.body.removeChild(ta)
+    }
+    if (ok) {
+      message.success('已复制到剪贴板')
+    } else {
+      message.error('复制失败：请手动选择文本复制')
+    }
+  }
+}
+
+function onClear() {
+  buf.clear()
+}
+
+function onOpenFullscreen() {
+  fullscreenOpen.value = true
+}
+
+function onRetry() {
+  void buf.loadTail()
+}
+
+function onClearFilters() {
+  search.setQuery('')
+  filter.setActiveLevels(['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE', 'PLAIN'])
+}
+
+function onScrollElReady(el: HTMLElement | null) {
+  follow.bindScrollEl(el)
+}
+
+watch(
+  () => props.kind,
+  () => {
+    buf.stopPolling()
+    buf.setAutoRefresh(false)
+    buf.__bumpEpoch()
+    buf.clear()
+    void buf.loadTail()
+  },
+)
+
+watch(
+  () => buf.lines.value.length,
+  () => {
+    follow.onNewLines()
+  },
+  { flush: 'post' },
+)
+
 onMounted(() => {
-  void loadTail()
+  void buf.loadTail()
 })
 
 onUnmounted(() => {
-  stopPolling()
+  buf.stopPolling()
+  prefs.flush()
+})
+
+defineExpose({
+  __testing: {
+    prefs,
+    buf,
+    filter,
+    search,
+    follow,
+    rootCssVars,
+    fullscreenOpen,
+    onCopy,
+    onClear,
+    onClearFilters,
+    onRetry,
+  },
 })
 </script>
+
+<style scoped>
+.log-viewer-root {
+  width: 100%;
+}
+</style>
