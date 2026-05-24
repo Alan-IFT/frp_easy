@@ -12,6 +12,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-029 | readme-ps51-zhcn-disk-form-warning | DELIVERED | 2026-05-24 | trivial 直接修复（README.md +1 段，无阶段文档）：T-026 删 install.ps1 BOM 后 PS5.1+zh-CN 磁盘形态会显示中文乱码（OOS-9 接受），README 一键安装 Windows 段加引导块明示"iex 形态首选；磁盘形态请用 PS7 跑 pwsh 或保持 iex" |
 | T-028 | archive-task-insight-regex-tolerance | DELIVERED | 2026-05-24 | trivial 直接修复（archive-task.ps1 ~6 行，无阶段文档）：07 §N Insight 数字编号前缀让 regex 不命中，T-019/T-021/T-024/T-026 4 次复现；改 regex `^##\s+(?:[^\s\n]+\s+)?Insights?\s*$` 容忍可选前缀 token；N=0 时显式 Write-Warning 不静默 |
 | T-026 | install-ps1-iex-bom-and-host-exit-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/install-ps1-iex-bom-and-host-exit-fix/` |
 | T-027 | download-cancel-and-upload-decouple | DELIVERED | 2026-05-24 | `docs/features/_archived/download-cancel-and-upload-decouple/` |

@@ -72,6 +72,8 @@ irm https://raw.githubusercontent.com/Alan-IFT/frp_easy/main/scripts/install.ps1
 
 > Windows 路径目前不区分服务端 / 客户端（默认监听 `0.0.0.0`，与历史行为一致）；如需仅本机访问，装完后编辑 `frp_easy.toml` 把 `UIBindAddr` 改为 `127.0.0.1` 并重启服务。
 
+> **PowerShell 5.1 + 中文系统（zh-CN）用户提示**：上面 `irm | iex` **管道形态**是首选，全程中文正常显示；如改为"先下载脚本再 `.\install.ps1` 执行"的**磁盘形态**，PowerShell 5.1 在中文系统码页（GBK）下会把脚本里的中文按 GBK 误解码、显示为乱码（脚本仍能跑完，仅中文进度提示乱码）。两种解法二选一：(a) 保持 `irm | iex` 管道形态（推荐）；(b) 用 PowerShell 7（`pwsh`）跑磁盘形态，PS7 默认 UTF-8 不受码页影响。
+
 > 安全提示：`curl | bash` / `irm | iex` 会以高权限执行远程脚本。谨慎用户可先下载脚本审阅后再运行，详见 **[docs/DEPLOYMENT.md A.0 一键安装](docs/DEPLOYMENT.md)**。
 
 #### 国内 VM 公网 IP 探测兜底
