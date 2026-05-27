@@ -181,3 +181,48 @@ export interface SystemServiceStatusResponse {
     last_runs?: Record<string, AutoRestoreLastRun>
   }
 }
+
+// ---------------------------------------------------------------
+// T-041 server-monitor-page-ui：frps 运行态（消费 T-039 API）
+// ---------------------------------------------------------------
+
+export interface ServerRuntimeInfo {
+  version?: string
+  bindPort?: number
+  kcpBindPort?: number
+  quicBindPort?: number
+  vhostHTTPPort?: number
+  vhostHTTPSPort?: number
+  subdomainHost?: string
+  clientCounts: number
+  curConns: number
+  proxyTypeCount?: Record<string, number>
+  totalTrafficIn?: number
+  totalTrafficOut?: number
+}
+
+export interface ServerRuntimeProxyStatus {
+  name: string
+  type?: string
+  /** "online" | "offline" | 兜底其它 → 红色 dot（02 §3.4 D-3） */
+  status?: string
+  lastStartTime?: string
+  lastCloseTime?: string
+  todayTrafficIn?: number
+  todayTrafficOut?: number
+  curConns?: number
+  clientVersion?: string
+}
+
+export interface ServerRuntimeProxiesResponse {
+  /** key = type（tcp/udp/http/...）；value = 该类型 proxy 数组 */
+  proxies: Record<string, ServerRuntimeProxyStatus[]>
+  /** 上游某些 type 失败时按 type 收集错误文案；不存在的 type key 不出现 */
+  errors?: Record<string, string>
+}
+
+export interface ServerRuntimeTraffic {
+  name: string
+  trafficIn: number[]
+  trafficOut: number[]
+}

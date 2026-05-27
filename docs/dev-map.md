@@ -75,6 +75,7 @@ frp_easy/
         │   ├── system.ts   ← /api/v1/system/ready, /api/v1/system/public-ip; T-018: +apiUploadBin (multipart)
         │   ├── proxies.ts  ← /api/v1/proxies CRUD（单条新增/编辑/删除；T-037 移除批量）
         │   ├── server.ts   ← /api/v1/server (FrpsConfig)
+        │   ├── serverRuntime.ts ← T-041：/api/v1/server/runtime/{info,proxies,traffic/{name}} 客户端，消费 T-039 后端 REST
         │   ├── frpclient.ts← /api/v1/client (FrpcServerConn)
         │   ├── proc.ts     ← /api/v1/proc/{kind}/start|stop|restart, /proc/status
         │   ├── logs.ts     ← /api/v1/logs/{kind} tail / incremental
@@ -93,6 +94,7 @@ frp_easy/
         │   ├── statusUtils.ts  ← getTagType / getStateLabel（ProcessState → Naive UI 颜色）
         │   ├── useProxyForm.ts ← ProxyForm 表单逻辑（isTcpUdp / isHttpHttps 等）
         │   ├── usePortPresets.ts ← T-018 §C.2：常用端口预设清单（SSH/RDP/HTTP/HTTPS/MySQL/PostgreSQL/Redis/MongoDB/SMB/VNC）；前端 hardcode
+        │   ├── useServerRuntime.ts ← T-041：frps 运行态轮询 composable（双 endpoint Promise.all + epoch race + 3 次失败自动停 + visibilitychange 自管 listener + onUnmounted 清理 timer/listener；T-042 也复用）
         │   └── log/             ← T-036：日志查看器纯逻辑层（5 个 composable + 1 个解析器；
         │                          parseLogLine 双格式 OR regex；useLogBuffer slice(-500) + kindEpoch race；
         │                          useLogSearch indexOf + 大小写敏感；useLogLevelFilter 6 等级；
@@ -119,6 +121,7 @@ frp_easy/
             ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮
             ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组）
             ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor）
+            ├── ServerMonitor.vue ← T-041：frps 服务端运行态监控页（消费 T-039 API；5s 轮询 + visibilitychange 自动暂停；ServerInfo 卡片 + n-tabs 分 type proxy 表格 + 状态条 + 三态完备）
             ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken）
             ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）
             ├── Settings.vue  ← 修改密码表单
@@ -137,6 +140,7 @@ frp_easy/
 | FRP 二进制定位 | `internal/binloc/binloc.go` | `NewDefault(root)` 按 `runtime.GOOS` 选 frp_win/frp_linux；Missing() 反馈缺失项（AC-13）。 |
 | FRP 二进制自动下载（T-002 / T-014） | `internal/downloader/downloader.go` | `New(root, logger) *Manager`；`Start(kind) error`；`Status(kind) (DownloadState, bool)`。异步 goroutine 下载 tar.gz/zip，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御（R-2）。T-014：改为下载 fatedier/frp 最新 release（GitHub API 解析 latest tag，`resolveLatestAsset`），不再用写死的 `FRPVersion`。 |
 | frpc admin 客户端 | `internal/frpcadmin/client.go` | `Reload(ctx, strictConfig)` / `Status(ctx)`；5s 超时；basic auth。 |
+| 服务端运行态监控页 | `web/src/pages/ServerMonitor.vue` | T-041 新增。useServerRuntime composable 持有 info / proxies / isPolling / error，5s setInterval polling + visibilitychange 自动暂停 + 3 次失败自动停 + epoch race 保护 unmount in-flight。表格按 type tabs 分组；status 三色 dot（toLowerCase 防御大小写）；流量人类友好单位（B/KiB/MiB/GiB/TiB）。 |
 | frps admin 客户端（T-039） | `internal/frpsadmin/client.go` | `ServerInfo(ctx)` / `Proxies(ctx, type)` / `ProxyDetail(ctx, type, name)` / `Traffic(ctx, name)`；5s 超时；basic auth；sentinel error `ErrUnauthorized` / `ErrNotFound` / `ErrUnavailable`。 |
 | DB → TOML 渲染 | `internal/frpconf/render.go` | `RenderFrpc` / `RenderFrps` / `AtomicWrite`；字段名严格对齐 FRP camelCase TOML 上游（见 02 附录 A）。T-040：`RenderFrps` 支持 `allowPorts` 数组段渲染 + 导出 `ValidateFrpsAllowPorts`（互斥 / 范围 / 闭区间重叠 / 上限 100）。 |
 | HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）；T-018: +1 条（system/upload-bin）；T-037: 移除 system/probe-ports + proxies/batch；T-038: +1 条（system/service-status）；T-039: +4 条（server/runtime/info|proxies|proxy/{type}/{name}|traffic/{name}）；T-040: `FrpsConfig` schema 扩 `allowPorts: []AllowPortRange`，`PUT /api/v1/server` 校验互斥 / 范围 / 重叠 / 上限。 |
@@ -161,6 +165,7 @@ frp_easy/
 | IP 速率限制 | 是 | `internal/auth/ratelimit.go` | per-IP 5次/60s 滑窗；基于 kv 持久化失败计数；返回 retryAfter。 |
 | FRP 二进制路径 | 是 | `internal/binloc/binloc.go` | NewDefault("") 自动推算仓库根目录。 |
 | frpc reload / status | 是 | `internal/frpcadmin/client.go` | `New(addr, port, user, pass)` 构建客户端；Reload / Status。 |
+| frps 运行态轮询（双 endpoint + epoch race） | 是 | `web/src/composables/useServerRuntime.ts` | T-041 引入。`useServerRuntime(intervalMs=5000)` → `{ info, proxies, isPolling, error, lastUpdated, consecutiveFailCount, start, stop, refresh, restart }`。F-5.6 失败保留上次数据；F-5.7 不在 mount 自动 start；BC-7 用户显式 stop 后 visibility 恢复不自动 resume。T-042 也消费。 |
 | FRP TOML 渲染 | 是 | `internal/frpconf/render.go` | RenderFrpc / RenderFrps；AtomicWrite 原子写文件。 |
 | HTTP 中间件（全套） | 是 | `internal/httpapi/middleware.go` | ReadyGate(C-3) / Recover / RequestID / Logger(C-5) / CORS / SessionAuth / CSRF。 |
 | 日志尾读 | 是 | `internal/logtail/tail.go` | TailLines / ReadFrom 增量。 |

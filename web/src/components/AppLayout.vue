@@ -122,6 +122,8 @@ const collapsed = ref(false)
 const activeKey = computed(() => {
   const path = route.path
   if (path.startsWith('/logs/')) return path
+  // T-041：/server/monitor 与 /server 同根但不同 menu item，需精确匹配
+  if (path === '/server/monitor') return 'server/monitor'
   return path.replace(/^\//, '') || 'dashboard'
 })
 
@@ -140,6 +142,12 @@ const menuOptions: MenuOption[] = [
     label: '服务端配置',
     key: 'server',
     icon: () => h('span', { class: 'n-icon' }, '⚙'),
+  },
+  {
+    // T-041 server-monitor-page-ui：frps 运行态监控入口
+    label: '服务端监控',
+    key: 'server/monitor',
+    icon: () => h('span', { class: 'n-icon' }, '◉'),
   },
   {
     label: '客户端配置',

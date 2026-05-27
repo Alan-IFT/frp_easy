@@ -16,6 +16,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'dashboard', component: () => import('./pages/Dashboard.vue') },
       { path: 'proxies', component: () => import('./pages/Proxies.vue') },
       { path: 'server', component: () => import('./pages/Server.vue') },
+      // T-041 server-monitor-page-ui：frps 服务端运行态监控页（嵌 AppLayout 子路由继承 SessionAuth）
+      { path: 'server/monitor', component: () => import('./pages/ServerMonitor.vue') },
       { path: 'client', component: () => import('./pages/Client.vue') },
       { path: 'logs/frpc', component: () => import('./pages/Logs.vue'), props: { kind: 'frpc' } },
       { path: 'logs/frps', component: () => import('./pages/Logs.vue'), props: { kind: 'frps' } },

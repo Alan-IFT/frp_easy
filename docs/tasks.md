@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-041 | server-monitor-page-ui | DELIVERED | 2026-05-28 | `docs/features/server-monitor-page-ui/`（pending archive） |
 | T-040 | frps-allow-ports-policy | DELIVERED | 2026-05-27 | `docs/features/frps-allow-ports-policy/`（pending archive） |
 | T-039 | frpsadmin-server-runtime-api | DELIVERED | 2026-05-27 | `docs/features/_archived/frpsadmin-server-runtime-api/` |
 | T-038 | boot-autostart-hardening | DELIVERED | 2026-05-25 | `docs/features/_archived/boot-autostart-hardening/` |
