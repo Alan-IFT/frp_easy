@@ -102,6 +102,7 @@ frp_easy/
         │   ├── StatusBadge.vue  ← ProcessState → 带颜色的 NTag
         │   ├── ProxyForm.vue    ← Proxy 新增/编辑表单（type 联动字段切换；T-018: 加端口预设 Tag；T-037: 移除批量模式 / 端口探测按钮）
         │   ├── UploadBinButton.vue ← T-018 §A：手动上传 frpc/frps 二进制（multipart；进度条；前端 64 MiB 预校验）
+        │   ├── AllowPortsEditor.vue ← T-040 端口策略编辑器：单端口 / 范围混合 list + 实时校验 + defineExpose getAllowPortsInput()/hasValidationError()；继承 T-032 单向数据流范式
         │   ├── ConfirmDialog.vue← 破坏性操作二次确认弹窗
         │   ├── LogViewer.vue    ← T-036 重写：日志查看器壳组件（持有 5 composable 实例 + 协调 4 子组件 + watch kind 切换；< 200 行）
         │   ├── log/             ← T-036：LogViewer 子组件（4 个）；
@@ -117,7 +118,7 @@ frp_easy/
             ├── Login.vue     ← 登录（429 倒计时支持）
             ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮
             ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组）
-            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint）
+            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor）
             ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken）
             ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）
             ├── Settings.vue  ← 修改密码表单
@@ -137,8 +138,8 @@ frp_easy/
 | FRP 二进制自动下载（T-002 / T-014） | `internal/downloader/downloader.go` | `New(root, logger) *Manager`；`Start(kind) error`；`Status(kind) (DownloadState, bool)`。异步 goroutine 下载 tar.gz/zip，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御（R-2）。T-014：改为下载 fatedier/frp 最新 release（GitHub API 解析 latest tag，`resolveLatestAsset`），不再用写死的 `FRPVersion`。 |
 | frpc admin 客户端 | `internal/frpcadmin/client.go` | `Reload(ctx, strictConfig)` / `Status(ctx)`；5s 超时；basic auth。 |
 | frps admin 客户端（T-039） | `internal/frpsadmin/client.go` | `ServerInfo(ctx)` / `Proxies(ctx, type)` / `ProxyDetail(ctx, type, name)` / `Traffic(ctx, name)`；5s 超时；basic auth；sentinel error `ErrUnauthorized` / `ErrNotFound` / `ErrUnavailable`。 |
-| DB → TOML 渲染 | `internal/frpconf/render.go` | `RenderFrpc` / `RenderFrps` / `AtomicWrite`；字段名严格对齐 FRP camelCase TOML 上游（见 02 附录 A）。 |
-| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）；T-018: +1 条（system/upload-bin）；T-037: 移除 system/probe-ports + proxies/batch；T-038: +1 条（system/service-status）；T-039: +4 条（server/runtime/info|proxies|proxy/{type}/{name}|traffic/{name}）。 |
+| DB → TOML 渲染 | `internal/frpconf/render.go` | `RenderFrpc` / `RenderFrps` / `AtomicWrite`；字段名严格对齐 FRP camelCase TOML 上游（见 02 附录 A）。T-040：`RenderFrps` 支持 `allowPorts` 数组段渲染 + 导出 `ValidateFrpsAllowPorts`（互斥 / 范围 / 闭区间重叠 / 上限 100）。 |
+| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）；T-018: +1 条（system/upload-bin）；T-037: 移除 system/probe-ports + proxies/batch；T-038: +1 条（system/service-status）；T-039: +4 条（server/runtime/info|proxies|proxy/{type}/{name}|traffic/{name}）；T-040: `FrpsConfig` schema 扩 `allowPorts: []AllowPortRange`，`PUT /api/v1/server` 校验互斥 / 范围 / 重叠 / 上限。 |
 | 日志尾部读取 | `internal/logtail/tail.go` | `TailLines(path, n)` / `ReadFrom(path, offset)` 增量 + 新 offset。 |
 | 子进程生命周期 | `internal/procmgr/manager.go` | `Manager`；Start/Stop/Restart/Status/Shutdown；supervisor goroutine；Windows Kill / Linux SIGTERM→SIGKILL；ApplyConfigChange(frpc→reload/restart；frps→restart)。 |
 | 服务化状态探测（T-038） | `internal/svcprobe/probe.go` + `probe_<os>.go` | `Probe(ctx) Status{Supervised, Supervisor, BootAutostart, RunAs}`；Linux 用 `$INVOCATION_ID + systemctl is-enabled`，Windows 用 `svc.IsWindowsService + sc.exe qc`；build tag 分平台；探测失败降级 supervised=false（fail-safe）。 |

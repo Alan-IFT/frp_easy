@@ -202,6 +202,294 @@ func TestRenderFrps_WithDashboard(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// T-040: allowPorts 端口策略渲染 + 校验测试集
+// 覆盖 02 §7.1 的 11 个用例 + AC-1~6 + OQ-1/2/6
+// ---------------------------------------------------------------------------
+
+func TestRenderFrps_AllowPorts_Empty(t *testing.T) {
+	// AC-2：nil 与 [] 都不渲染 [[allowPorts]] 段
+	cases := []struct {
+		name string
+		in   FrpsRenderInput
+	}{
+		{"nil", FrpsRenderInput{BindPort: 7000}},
+		{"empty", FrpsRenderInput{BindPort: 7000, AllowPorts: []FrpsAllowPortRange{}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data, err := RenderFrps(c.in)
+			if err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			s := string(data)
+			if strings.Contains(s, "[[allowPorts]]") || strings.Contains(s, "allowPorts") {
+				t.Errorf("allowPorts 段不应出现，got:\n%s", s)
+			}
+		})
+	}
+}
+
+func TestRenderFrps_AllowPorts_SingleRange(t *testing.T) {
+	// AC-1：一个 range entry
+	in := FrpsRenderInput{
+		BindPort:   7000,
+		AllowPorts: []FrpsAllowPortRange{{Start: 6000, End: 7000}},
+	}
+	data, err := RenderFrps(in)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "[[allowPorts]]") {
+		t.Errorf("missing [[allowPorts]]: %s", s)
+	}
+	if !strings.Contains(s, "start = 6000") || !strings.Contains(s, "end = 7000") {
+		t.Errorf("missing start/end: %s", s)
+	}
+	if strings.Contains(s, "single") {
+		t.Errorf("range entry 不应含 single 字面: %s", s)
+	}
+}
+
+func TestRenderFrps_AllowPorts_MultiRange(t *testing.T) {
+	// OQ-6：顺序保留（两 range + 一 single）
+	in := FrpsRenderInput{
+		BindPort: 7000,
+		AllowPorts: []FrpsAllowPortRange{
+			{Start: 6000, End: 7000},
+			{Single: 9000},
+			{Start: 10000, End: 11000},
+		},
+	}
+	data, err := RenderFrps(in)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	s := string(data)
+	// 三段都应出现
+	if strings.Count(s, "[[allowPorts]]") != 3 {
+		t.Errorf("expected 3 [[allowPorts]] blocks, got:\n%s", s)
+	}
+	// 顺序检查：start=6000 应在 single=9000 之前
+	idx6000 := strings.Index(s, "6000")
+	idx9000 := strings.Index(s, "single = 9000")
+	idx10000 := strings.Index(s, "10000")
+	if idx6000 == -1 || idx9000 == -1 || idx10000 == -1 {
+		t.Fatalf("missing markers in:\n%s", s)
+	}
+	if !(idx6000 < idx9000 && idx9000 < idx10000) {
+		t.Errorf("顺序错乱：6000@%d, 9000@%d, 10000@%d", idx6000, idx9000, idx10000)
+	}
+}
+
+func TestRenderFrps_AllowPorts_SingleOnly(t *testing.T) {
+	// AC-1：单 single entry
+	in := FrpsRenderInput{
+		BindPort:   7000,
+		AllowPorts: []FrpsAllowPortRange{{Single: 9000}},
+	}
+	data, err := RenderFrps(in)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "single = 9000") {
+		t.Errorf("missing single=9000: %s", s)
+	}
+	if strings.Contains(s, "start = ") || strings.Contains(s, "end = ") {
+		t.Errorf("single entry 不应含 start/end 字面: %s", s)
+	}
+}
+
+func TestRenderFrps_AllowPorts_BoundaryMinMax(t *testing.T) {
+	// AC-6：边界 1 / 65535 合法
+	in := FrpsRenderInput{
+		BindPort: 7000,
+		AllowPorts: []FrpsAllowPortRange{
+			{Single: 1},
+			{Start: 65534, End: 65535},
+		},
+	}
+	data, err := RenderFrps(in)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	s := string(data)
+	if !strings.Contains(s, "single = 1") {
+		t.Errorf("missing single=1: %s", s)
+	}
+	if !strings.Contains(s, "end = 65535") {
+		t.Errorf("missing end=65535: %s", s)
+	}
+}
+
+func TestRenderFrps_AllowPorts_StartGreaterThanEnd(t *testing.T) {
+	// AC-3
+	in := FrpsRenderInput{
+		BindPort:   7000,
+		AllowPorts: []FrpsAllowPortRange{{Start: 80, End: 70}},
+	}
+	_, err := RenderFrps(in)
+	if err == nil {
+		t.Fatal("expected error for start > end")
+	}
+	if !strings.Contains(err.Error(), "start=80") || !strings.Contains(err.Error(), "end=70") {
+		t.Errorf("错误文案缺定位: %v", err)
+	}
+}
+
+func TestRenderFrps_AllowPorts_Mutex(t *testing.T) {
+	// AC-4：Single + Start/End 同设
+	cases := []struct {
+		name string
+		in   FrpsAllowPortRange
+	}{
+		{"single_and_start", FrpsAllowPortRange{Single: 80, Start: 100}},
+		{"single_and_end", FrpsAllowPortRange{Single: 80, End: 100}},
+		{"single_and_both", FrpsAllowPortRange{Single: 80, Start: 100, End: 200}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := RenderFrps(FrpsRenderInput{BindPort: 7000, AllowPorts: []FrpsAllowPortRange{c.in}})
+			if err == nil {
+				t.Fatalf("expected error for %+v", c.in)
+			}
+			if !strings.Contains(err.Error(), "互斥") {
+				t.Errorf("错误文案应含 '互斥': %v", err)
+			}
+		})
+	}
+}
+
+func TestRenderFrps_AllowPorts_Overlap(t *testing.T) {
+	// AC-5：两 range 重叠
+	in := FrpsRenderInput{
+		BindPort: 7000,
+		AllowPorts: []FrpsAllowPortRange{
+			{Start: 1000, End: 2000},
+			{Start: 1500, End: 2500},
+		},
+	}
+	_, err := RenderFrps(in)
+	if err == nil {
+		t.Fatal("expected error for overlapping ranges")
+	}
+	if !strings.Contains(err.Error(), "重叠") {
+		t.Errorf("错误文案应含 '重叠': %v", err)
+	}
+}
+
+func TestRenderFrps_AllowPorts_OverlapBoundary(t *testing.T) {
+	// OQ-2：闭区间边界重叠（2000 同属两段）
+	in := FrpsRenderInput{
+		BindPort: 7000,
+		AllowPorts: []FrpsAllowPortRange{
+			{Start: 1000, End: 2000},
+			{Start: 2000, End: 3000},
+		},
+	}
+	_, err := RenderFrps(in)
+	if err == nil {
+		t.Fatal("expected error for boundary-touching ranges (闭区间语义)")
+	}
+}
+
+func TestRenderFrps_AllowPorts_OverlapSingleVsRange(t *testing.T) {
+	// 补充覆盖：单端口与范围重叠
+	in := FrpsRenderInput{
+		BindPort: 7000,
+		AllowPorts: []FrpsAllowPortRange{
+			{Start: 1000, End: 2000},
+			{Single: 1500},
+		},
+	}
+	_, err := RenderFrps(in)
+	if err == nil {
+		t.Fatal("expected error for single-in-range overlap")
+	}
+}
+
+func TestRenderFrps_AllowPorts_OutOfRange(t *testing.T) {
+	// AC-6 反向：0 / 65536 各种姿势
+	cases := []struct {
+		name string
+		in   FrpsAllowPortRange
+	}{
+		{"single_zero", FrpsAllowPortRange{Single: 0, Start: 0, End: 0}}, // empty entry
+		{"single_neg_via_overflow", FrpsAllowPortRange{Start: 0, End: 100}},
+		{"end_too_big", FrpsAllowPortRange{Start: 100, End: 65536}},
+		{"start_too_big", FrpsAllowPortRange{Start: 65536, End: 65537}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := RenderFrps(FrpsRenderInput{BindPort: 7000, AllowPorts: []FrpsAllowPortRange{c.in}})
+			if err == nil {
+				t.Fatalf("expected error for %+v", c.in)
+			}
+		})
+	}
+}
+
+func TestRenderFrps_AllowPorts_TooMany(t *testing.T) {
+	// OQ-1：上限 100
+	list := make([]FrpsAllowPortRange, 101)
+	for i := range list {
+		// 用 single 且互不重叠
+		list[i] = FrpsAllowPortRange{Single: 1000 + i}
+	}
+	_, err := RenderFrps(FrpsRenderInput{BindPort: 7000, AllowPorts: list})
+	if err == nil {
+		t.Fatal("expected error for >100 entries")
+	}
+	if !strings.Contains(err.Error(), "100") {
+		t.Errorf("错误文案应含上限数字: %v", err)
+	}
+
+	// 边界：100 条正好通过
+	list = list[:100]
+	if _, err := RenderFrps(FrpsRenderInput{BindPort: 7000, AllowPorts: list}); err != nil {
+		t.Fatalf("100 条应通过: %v", err)
+	}
+}
+
+func TestRenderFrps_AllowPorts_TOMLRoundTrip(t *testing.T) {
+	// 反序列化验证 frp 上游 schema 字面
+	in := FrpsRenderInput{
+		BindPort: 7000,
+		AllowPorts: []FrpsAllowPortRange{
+			{Start: 6000, End: 7000},
+			{Single: 9000},
+		},
+	}
+	data, err := RenderFrps(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := toml.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, data)
+	}
+	arr, ok := got["allowPorts"].([]any)
+	if !ok || len(arr) != 2 {
+		t.Fatalf("allowPorts: %T len=%d", got["allowPorts"], len(arr))
+	}
+	first := arr[0].(map[string]any)
+	if int(first["start"].(int64)) != 6000 || int(first["end"].(int64)) != 7000 {
+		t.Errorf("first entry: %v", first)
+	}
+	if _, has := first["single"]; has {
+		t.Errorf("range entry 不应含 single key: %v", first)
+	}
+	second := arr[1].(map[string]any)
+	if int(second["single"].(int64)) != 9000 {
+		t.Errorf("second entry: %v", second)
+	}
+	if _, has := second["start"]; has {
+		t.Errorf("single entry 不应含 start key: %v", second)
+	}
+}
+
 func TestAtomicWrite_ReplacesExisting(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "frpc.toml")

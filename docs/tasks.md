@@ -13,7 +13,8 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
-| T-039 | frpsadmin-server-runtime-api | DELIVERED | 2026-05-27 | `docs/features/_archived/frpsadmin-server-runtime-api/`（pending archive） |
+| T-040 | frps-allow-ports-policy | DELIVERED | 2026-05-27 | `docs/features/frps-allow-ports-policy/`（pending archive） |
+| T-039 | frpsadmin-server-runtime-api | DELIVERED | 2026-05-27 | `docs/features/_archived/frpsadmin-server-runtime-api/` |
 | T-038 | boot-autostart-hardening | DELIVERED | 2026-05-25 | `docs/features/_archived/boot-autostart-hardening/` |
 | T-036 | log-ui-ux-polish | DELIVERED | 2026-05-24 | `docs/features/_archived/log-ui-ux-polish/` |
 | T-037 | proxy-rules-simplify-and-port-fix | DELIVERED | 2026-05-24 | `docs/features/_archived/proxy-rules-simplify-and-port-fix/` |

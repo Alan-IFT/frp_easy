@@ -65,6 +65,11 @@
             />
           </n-form-item>
         </template>
+
+        <!-- T-040: 端口策略段 (allowPorts) -->
+        <n-form-item label="端口策略" :show-feedback="false" style="margin-top: 8px">
+          <allow-ports-editor :initial="initialAllowPorts" ref="allowPortsEditorRef" />
+        </n-form-item>
       </n-form>
       <template #action>
         <n-space>
@@ -90,11 +95,19 @@ import { apiGetServer, apiPutServer } from '../api/server'
 import { extractErrorMessage } from '../api/client'
 import PublicIpDetector from '../components/PublicIpDetector.vue'
 import FirewallHint from '../components/FirewallHint.vue'
+import AllowPortsEditor from '../components/AllowPortsEditor.vue'
+import type { AllowPortRange } from '../types'
 
 const message = useMessage()
 const formRef = ref<FormInst | null>(null)
 const saving = ref(false)
 const savedPorts = ref<number[]>([])
+
+// T-040 单向数据流（insight L13）：
+// initialAllowPorts 是父侧 ref，loadConfig 时写一次种子，AllowPortsEditor setup 读一次。
+// 保存时通过 ref 拉子组件 getAllowPortsInput()，不引入 v-model 桥。
+const allowPortsEditorRef = ref<InstanceType<typeof AllowPortsEditor> | null>(null)
+const initialAllowPorts = ref<AllowPortRange[]>([])
 
 const form = ref({
   bindPort: 7000,
@@ -127,6 +140,8 @@ async function loadConfig(reveal = false) {
     form.value.dashboardPort = cfg.dashboardPort ?? 7500
     form.value.dashboardUser = cfg.dashboardUser ?? 'admin'
     form.value.dashboardPass = cfg.dashboardPass ?? ''
+    // T-040 种子：AllowPortsEditor 在 setup 时读一次此 ref（不 watch）
+    initialAllowPorts.value = cfg.allowPorts ?? []
   } catch (e) {
     message.error(extractErrorMessage(e, '加载配置失败'))
   }
@@ -143,6 +158,14 @@ async function handleSave() {
     return
   }
 
+  // T-040：端口策略前端守门。任一行非法 → 不发 PUT。
+  // 后端 ValidateFrpsAllowPorts 仍是真值源（前端绕过场景由后端 422 兜底）。
+  if (allowPortsEditorRef.value?.hasValidationError()) {
+    message.error('端口策略存在非法项，请修复后再保存')
+    return
+  }
+  const allowPorts = allowPortsEditorRef.value?.getAllowPortsInput() ?? []
+
   saving.value = true
   try {
     await apiPutServer({
@@ -153,6 +176,7 @@ async function handleSave() {
       dashboardPort: form.value.dashboardEnabled ? form.value.dashboardPort : undefined,
       dashboardUser: form.value.dashboardEnabled ? form.value.dashboardUser : undefined,
       dashboardPass: form.value.dashboardEnabled ? form.value.dashboardPass : undefined,
+      allowPorts: allowPorts.length > 0 ? allowPorts : undefined,
     })
     message.success('服务端配置已保存（重启 frps 后生效）')
 

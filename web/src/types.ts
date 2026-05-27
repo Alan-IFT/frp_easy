@@ -48,6 +48,18 @@ export interface ModeState {
   frps: boolean
 }
 
+/**
+ * T-040: frps allowPorts 单条端口策略 entry。
+ *
+ * 互斥规则：每个 entry 必须含 single 或 start+end 之一（不能同时填）。
+ * 后端 ValidateFrpsAllowPorts 守门；前端 AllowPortsEditor 实时镜像校验。
+ */
+export interface AllowPortRange {
+  start?: number
+  end?: number
+  single?: number
+}
+
 export interface FrpsConfig {
   bindPort: number
   authMethod?: string
@@ -57,6 +69,8 @@ export interface FrpsConfig {
   dashboardPort?: number
   dashboardUser?: string
   dashboardPass?: string
+  /** T-040: 端口策略白名单。留空 = 允许所有端口；最长 100 条。 */
+  allowPorts?: AllowPortRange[]
 }
 
 export interface FrpcServerConn {

@@ -56,6 +56,33 @@ type frpsRoot struct {
 	Log       *frpLog       `toml:"log,omitempty"`
 	Auth      *frpAuth      `toml:"auth,omitempty"`
 	WebServer *frpWebServer `toml:"webServer,omitempty"`
+	// AllowPorts 是 [[allowPorts]] 数组段（T-040）。放 struct 末尾，让 go-toml
+	// 按字段定义顺序输出时，所有表段 ([log] / [auth] / [webServer]) 在前、
+	// 数组段在后，符合 TOML 规范"表段不能出现在数组段之后"。
+	AllowPorts []frpsAllowPort `toml:"allowPorts,omitempty"`
+}
+
+// frpsAllowPort 是单条 [[allowPorts]] 渲染体（T-040）。
+// Start/End/Single 三字段都带 omitempty：Single != 0 时不输出 start/end，反之亦然。
+// frp 上游接受 single 或 start+end 二选一；本结构通过 omitempty + Validate 双层保证不会同时输出。
+type frpsAllowPort struct {
+	Start  int `toml:"start,omitempty"`
+	End    int `toml:"end,omitempty"`
+	Single int `toml:"single,omitempty"`
+}
+
+// FrpsAllowPortRange 是单条 allowPorts 配置项（T-040）。
+//
+// 互斥规则：
+//   - Single != 0：Start 与 End 必须 0；TOML 渲染为 `single = N`。
+//   - Single == 0：Start 与 End 必须均 ∈ [1,65535] 且 Start ≤ End；TOML 渲染为 `start = X\nend = Y`。
+//   - 三者全 0：非法（空 entry）。
+//
+// 字段含义与 httpapi.AllowPortRange / openapi AllowPortRange 一一对应。
+type FrpsAllowPortRange struct {
+	Start  int
+	End    int
+	Single int
 }
 
 type frpAuth struct {
@@ -106,6 +133,10 @@ type FrpcRenderInput struct {
 }
 
 // FrpsRenderInput 是渲染 frps.toml 的全部输入（02 §3.4 + 01 B-15）。
+//
+// AllowPorts（T-040）为 nil 或 空切片时，TOML 输出不含 `[[allowPorts]]` 段
+// （= frp 上游"允许所有端口"默认语义）。非空时调用方 *必须* 已经过校验，
+// 或由 RenderFrps 内部调用 ValidateFrpsAllowPorts 守门。
 type FrpsRenderInput struct {
 	BindPort         int
 	AuthMethod       string
@@ -118,6 +149,7 @@ type FrpsRenderInput struct {
 	LogPath          string
 	LogLevel         string
 	LogMaxDays       int
+	AllowPorts       []FrpsAllowPortRange // T-040：nil 或 [] = 不渲染段
 }
 
 // RenderFrpc 渲染 frpc.toml 字节。
@@ -207,7 +239,83 @@ func RenderFrps(in FrpsRenderInput) ([]byte, error) {
 	if in.LogPath != "" {
 		root.Log = buildLog(in.LogPath, in.LogLevel, in.LogMaxDays)
 	}
+	// T-040: allowPorts 段。nil / [] 跳过；非空则先校验再渲染。
+	// 校验与渲染同源避免重复实现漂移；调用方（handlers_server）通常会先调一次 Validate
+	// 让 PUT 时能给前端定位错误 + 422，但 RenderFrps 内部再调一次是 belt-and-suspenders。
+	if len(in.AllowPorts) > 0 {
+		if err := ValidateFrpsAllowPorts(in.AllowPorts); err != nil {
+			return nil, err
+		}
+		out := make([]frpsAllowPort, 0, len(in.AllowPorts))
+		for _, r := range in.AllowPorts {
+			if r.Single != 0 {
+				out = append(out, frpsAllowPort{Single: r.Single})
+			} else {
+				out = append(out, frpsAllowPort{Start: r.Start, End: r.End})
+			}
+		}
+		root.AllowPorts = out
+	}
 	return toml.Marshal(&root)
+}
+
+// ValidateFrpsAllowPorts 校验 allowPorts 数组（T-040）。
+//
+// 规则（与 02 §3.5 + 01 OQ-1/2 一致）：
+//   - 数组长度 ≤ 100；
+//   - 每个 entry 满足互斥规则（Single != 0 时 Start/End 必须 0；反之亦然；三者全 0 非法）；
+//   - 每个端口 ∈ [1, 65535]；
+//   - Start ≤ End；
+//   - 多个 entry 之间不允许区间重叠（闭区间语义：[1000,2000] 与 [2000,3000] 算重叠，
+//     因为 2000 同时属于两段）。
+//
+// 错误文本均为中文（用户面向），含 `allowPorts[i]` 字面定位首个非法 entry。
+// 暴露为导出函数让 internal/httpapi 直接调用，避免双实现漂移。
+func ValidateFrpsAllowPorts(in []FrpsAllowPortRange) error {
+	if len(in) > 100 {
+		return fmt.Errorf("allowPorts 最多 100 条（当前 %d）", len(in))
+	}
+	type span struct{ lo, hi, idx int }
+	spans := make([]span, 0, len(in))
+	for i, r := range in {
+		// 互斥 + 必填校验
+		if r.Single != 0 && (r.Start != 0 || r.End != 0) {
+			return fmt.Errorf("allowPorts[%d] single 与 start/end 互斥，不能同时设置", i)
+		}
+		if r.Single == 0 && r.Start == 0 && r.End == 0 {
+			return fmt.Errorf("allowPorts[%d] 必须设置 single 或 start+end", i)
+		}
+		var lo, hi int
+		if r.Single != 0 {
+			if r.Single < 1 || r.Single > 65535 {
+				return fmt.Errorf("allowPorts[%d] single=%d 超出 [1,65535]", i, r.Single)
+			}
+			lo, hi = r.Single, r.Single
+		} else {
+			if r.Start < 1 || r.Start > 65535 {
+				return fmt.Errorf("allowPorts[%d] start=%d 超出 [1,65535]", i, r.Start)
+			}
+			if r.End < 1 || r.End > 65535 {
+				return fmt.Errorf("allowPorts[%d] end=%d 超出 [1,65535]", i, r.End)
+			}
+			if r.Start > r.End {
+				return fmt.Errorf("allowPorts[%d] start=%d 必须 ≤ end=%d", i, r.Start, r.End)
+			}
+			lo, hi = r.Start, r.End
+		}
+		spans = append(spans, span{lo, hi, i})
+	}
+	// overlap 检测：O(n²) on n≤100；语义清晰胜过 sweep line。
+	// 闭区间相交条件：a.lo <= b.hi && b.lo <= a.hi
+	for i := 0; i < len(spans); i++ {
+		for j := i + 1; j < len(spans); j++ {
+			a, b := spans[i], spans[j]
+			if a.lo <= b.hi && b.lo <= a.hi {
+				return fmt.Errorf("allowPorts[%d] 与 allowPorts[%d] 区间重叠", a.idx, b.idx)
+			}
+		}
+	}
+	return nil
 }
 
 func buildLog(path, level string, maxDays int) *frpLog {

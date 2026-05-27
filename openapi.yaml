@@ -231,6 +231,36 @@ components:
           type: string
         dashboardPass:
           type: string
+        allowPorts:
+          type: array
+          description: |
+            T-040 · 端口策略白名单。每个 entry 必须含 single 或 start+end（互斥）；
+            所有端口 ∈ [1,65535]；start ≤ end；entry 之间不允许区间重叠（闭区间语义，
+            [1000,2000] 与 [2000,3000] 算重叠）；数组长度 ≤ 100；留空 = 允许所有端口。
+            PUT 时若任一规则违反 → 422 + field="allowPorts"。改动后 frps 自动重启生效。
+          items:
+            $ref: '#/components/schemas/AllowPortRange'
+          maxItems: 100
+
+    AllowPortRange:
+      type: object
+      description: T-040 · frps allowPorts 单条 entry（互斥规则见 FrpsConfig.allowPorts 描述）
+      properties:
+        single:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          description: 单端口；与 start/end 互斥
+        start:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          description: 范围起始端口；与 single 互斥
+        end:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          description: 范围结束端口；start ≤ end
 
     FrpcServerConn:
       type: object

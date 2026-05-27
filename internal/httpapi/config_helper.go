@@ -141,6 +141,9 @@ func (h *handlers) renderAndApplyFrps(ctx context.Context) error {
 		DashboardUser:    cfg.DashboardUser,
 		DashboardPass:    cfg.DashboardPass,
 		LogPath:          logPath,
+		// T-040：allowPorts 透传给 frpconf 渲染。校验已在 putServer 完成；
+		// 若 KV 中是历史数据（理论上不会绕过校验落盘），RenderFrps 内部再校验一次兜底。
+		AllowPorts: toFrpconfAllowPorts(cfg.AllowPorts),
 	}
 	data, err := frpconf.RenderFrps(in)
 	if err != nil {
