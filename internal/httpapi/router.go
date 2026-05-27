@@ -127,6 +127,14 @@ func New(d Dependencies) http.Handler {
 				r.Post("/system/upload-bin", h.uploadBin)
 				r.Get("/wizard/status", h.wizardStatus)
 				r.Post("/wizard/complete", h.wizardComplete)
+
+				// T-039: server runtime monitoring — frps admin API 代理。
+				// 4 条 GET 路由让前端查 frps 在线 client / proxy 状态 / 流量；
+				// 凭据从 KV frps.config（用户填值）+ frps.dashboard.autogen（fallback）合并。
+				r.Get("/server/runtime/info", h.serverRuntimeInfo)
+				r.Get("/server/runtime/proxies", h.serverRuntimeProxies)
+				r.Get("/server/runtime/proxy/{type}/{name}", h.serverRuntimeProxyDetail)
+				r.Get("/server/runtime/traffic/{name}", h.serverRuntimeTraffic)
 			})
 		})
 	})

@@ -112,6 +112,24 @@ func (h *handlers) renderAndApplyFrps(ctx context.Context) error {
 		cfg.BindPort = 7000
 	}
 
+	// T-039 (FR-3.3 / FR-3.4)：dashboard 凭据自动生成补齐。
+	// - DashboardEnabled=false：用户明示禁用 → 不动（保留原行为；凭据 fallback 不发生）。
+	// - DashboardEnabled=true 且 user/pass 任一空 → 从 KV `frps.dashboard.autogen` 补齐。
+	// 这让用户在 Server 页只勾选 "启用 dashboard" + 保存 即可（零配置）。
+	// 用户填的非空字段优先，autogen 不覆盖（FR-3.4）。
+	if cfg.DashboardEnabled && (cfg.DashboardUser == "" || cfg.DashboardPass == "") {
+		var auto FrpsDashboardCreds
+		if v, ok, _ := h.deps.Store.KVGet(ctx, kvFrpsDashboardAutogen); ok {
+			_ = json.Unmarshal([]byte(v), &auto)
+		}
+		if cfg.DashboardUser == "" {
+			cfg.DashboardUser = auto.User
+		}
+		if cfg.DashboardPass == "" {
+			cfg.DashboardPass = auto.Pass
+		}
+	}
+
 	// 2. TOML 生成
 	in := frpconf.FrpsRenderInput{
 		BindPort:         cfg.BindPort,

@@ -46,6 +46,7 @@ frp_easy/
 │   ├── browseropen/← T-010 新增：跨平台浏览器自动打开（rundll32/open/xdg-open）+ TTY 检测 + --no-browser/env opt-out
 │   ├── downloader/ ← frp 二进制自动下载（T-002）：异步下载 tar.gz/zip，进度追踪，原子安装
 │   ├── frpcadmin/  ← frpc admin HTTP 客户端（/api/reload、/api/status）
+│   ├── frpsadmin/  ← frps admin HTTP 客户端（T-039：/api/serverinfo、/api/proxy/{type}、/api/proxy/{type}/{name}、/api/traffic/{name}）
 │   ├── frpconf/    ← DB → TOML 渲染器（AtomicWrite；camelCase 字段对齐 FRP 上游）
 │   ├── httpapi/    ← chi router + 全部 REST handler（T-001: 22 条；T-002: +5 条）+ 中间件链
 │   ├── logrotate/  ← T-010 新增：基于 lumberjack 的 ui.log 三轴轮转（size/backups/age）+ FRP_EASY_LOG_MAX_* env 覆盖
@@ -135,8 +136,9 @@ frp_easy/
 | FRP 二进制定位 | `internal/binloc/binloc.go` | `NewDefault(root)` 按 `runtime.GOOS` 选 frp_win/frp_linux；Missing() 反馈缺失项（AC-13）。 |
 | FRP 二进制自动下载（T-002 / T-014） | `internal/downloader/downloader.go` | `New(root, logger) *Manager`；`Start(kind) error`；`Status(kind) (DownloadState, bool)`。异步 goroutine 下载 tar.gz/zip，io.TeeReader 追踪进度，原子 rename 安装，Zip Slip 防御（R-2）。T-014：改为下载 fatedier/frp 最新 release（GitHub API 解析 latest tag，`resolveLatestAsset`），不再用写死的 `FRPVersion`。 |
 | frpc admin 客户端 | `internal/frpcadmin/client.go` | `Reload(ctx, strictConfig)` / `Status(ctx)`；5s 超时；basic auth。 |
+| frps admin 客户端（T-039） | `internal/frpsadmin/client.go` | `ServerInfo(ctx)` / `Proxies(ctx, type)` / `ProxyDetail(ctx, type, name)` / `Traffic(ctx, name)`；5s 超时；basic auth；sentinel error `ErrUnauthorized` / `ErrNotFound` / `ErrUnavailable`。 |
 | DB → TOML 渲染 | `internal/frpconf/render.go` | `RenderFrpc` / `RenderFrps` / `AtomicWrite`；字段名严格对齐 FRP camelCase TOML 上游（见 02 附录 A）。 |
-| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）；T-018: +1 条（system/upload-bin）；T-037: 移除 system/probe-ports + proxies/batch；T-038: +1 条（system/service-status）。 |
+| HTTP 路由层 | `internal/httpapi/router.go` | chi router；中间件链 ReadyGate→Recover→RequestID→Logger(C-5脱敏)→CORS(dev)→SessionAuth→CSRF。T-001: 22 条路由；T-002: +5 条（public-ip, download-bin, download-status/{kind}, wizard/status, wizard/complete）；T-018: +1 条（system/upload-bin）；T-037: 移除 system/probe-ports + proxies/batch；T-038: +1 条（system/service-status）；T-039: +4 条（server/runtime/info|proxies|proxy/{type}/{name}|traffic/{name}）。 |
 | 日志尾部读取 | `internal/logtail/tail.go` | `TailLines(path, n)` / `ReadFrom(path, offset)` 增量 + 新 offset。 |
 | 子进程生命周期 | `internal/procmgr/manager.go` | `Manager`；Start/Stop/Restart/Status/Shutdown；supervisor goroutine；Windows Kill / Linux SIGTERM→SIGKILL；ApplyConfigChange(frpc→reload/restart；frps→restart)。 |
 | 服务化状态探测（T-038） | `internal/svcprobe/probe.go` + `probe_<os>.go` | `Probe(ctx) Status{Supervised, Supervisor, BootAutostart, RunAs}`；Linux 用 `$INVOCATION_ID + systemctl is-enabled`，Windows 用 `svc.IsWindowsService + sc.exe qc`；build tag 分平台；探测失败降级 supervised=false（fail-safe）。 |

@@ -255,6 +255,11 @@ func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 	adminCfg := ensureFrpcAdminCreds(store, logger)
 	reloader := frpcadmin.New(adminCfg.Addr, adminCfg.Port, adminCfg.User, adminCfg.Pass)
 
+	// T-039: frps dashboard 凭据自动生成（与 ensureFrpcAdminCreds 对称镜像）。
+	// 仅在 KV 无值时生成；写入 KV `frps.dashboard.autogen`，handler 通过
+	// resolveFrpsDashboard 与用户在 Server 设置页填的值合并使用。
+	ensureFrpsDashboardCreds(store, logger)
+
 	pm := procmgr.New(procmgr.Config{
 		Locator:     loc,
 		ConfigPaths: map[string]string{"frpc": frpcTOML, "frps": frpsTOML},
@@ -441,6 +446,45 @@ type frpcAdminCreds struct {
 }
 
 const kvFrpcAdmin = "frpc.admin"
+
+// T-039: kvFrpsDashboardAutogen 是 ensureFrpsDashboardCreds 持久化 autogen 凭据的 KV key。
+// httpapi.kvFrpsDashboardAutogen 在 internal/httpapi/handlers_server_runtime.go
+// 持有同款字面常量；两处必须字面一致（adversarial test ADV-4 守门）。
+const kvFrpsDashboardAutogen = "frps.dashboard.autogen"
+
+// ensureFrpsDashboardCreds 读 kv.frps.dashboard.autogen；不存在则生成 + 持久化。
+//
+// 与 ensureFrpcAdminCreds 对称镜像：3s context 超时、auth.GenerateCSRFToken、
+// fail-soft logger.Warn 不阻塞启动。本函数**仅生成一次**——
+// 后续每次进程启动都直接 KV 命中走早返路径，**不旋转**（Q-3 PM-DECIDED）。
+//
+// 不返回值：handler 自己从 KV lazy 读，避免 Dependencies 结构扩展。
+// 与 ensureFrpcAdminCreds 的区别：frpc reload 需要 Dependencies 持有恒定 client
+// 故凭据走 struct 字段；frps dashboard 仅 monitoring handler 用，5s timeout 小对象，
+// 池化无收益，每次请求新建即可。
+func ensureFrpsDashboardCreds(store *storage.Store, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if v, ok, err := store.KVGet(ctx, kvFrpsDashboardAutogen); err == nil && ok && v != "" {
+		return // 已有，不动
+	}
+	user, uerr := auth.GenerateCSRFToken()
+	pass, perr := auth.GenerateCSRFToken()
+	if uerr != nil || perr != nil || len(user) < 8 {
+		// crypto/rand 极不太可能失败；失败时 fail-soft（不阻塞启动）。
+		logger.Warn("generate frps dashboard creds failed",
+			"user_err", uerr, "pass_err", perr, "user_len", len(user))
+		return
+	}
+	payload := map[string]string{
+		"user": "frp_easy_" + user[:8],
+		"pass": pass,
+	}
+	b, _ := json.Marshal(payload)
+	if err := store.KVSet(ctx, kvFrpsDashboardAutogen, string(b)); err != nil {
+		logger.Warn("persist frps dashboard creds failed", "err", err)
+	}
+}
 
 // ensureFrpcAdminCreds 读 kv.frpc.admin；不存在则生成 + 持久化。
 func ensureFrpcAdminCreds(store *storage.Store, logger *slog.Logger) frpcAdminCreds {

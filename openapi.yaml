@@ -379,6 +379,129 @@ components:
           type: string
           description: 仅当同 kind 子进程正在运行时附带（提示用户手动重启）
 
+    # T-039 新增 schemas — frps 运行时监控（代理 frps admin HTTP API）
+
+    ServerRuntimeInfo:
+      type: object
+      description: |
+        frps /api/serverinfo 响应透传（仅取常用字段；其它字段 omitempty 透传）。
+        前端用此构建"frps 服务概览"卡片。
+      properties:
+        version:
+          type: string
+          description: frps 版本号（如 "0.58.1"）
+        bindPort:
+          type: integer
+        kcpBindPort:
+          type: integer
+        quicBindPort:
+          type: integer
+        vhostHTTPPort:
+          type: integer
+        vhostHTTPSPort:
+          type: integer
+        tcpmuxHTTPConnectPort:
+          type: integer
+        subdomainHost:
+          type: string
+        maxPoolCount:
+          type: integer
+          format: int64
+        maxPortsPerClient:
+          type: integer
+          format: int64
+        heartbeatTimeout:
+          type: integer
+          format: int64
+        clientCounts:
+          type: integer
+          description: 当前在线 client 数
+        curConns:
+          type: integer
+          description: 当前活动连接数
+        proxyTypeCount:
+          type: object
+          additionalProperties:
+            type: integer
+          description: 按 type 统计的 proxy 数（如 {"tcp":2,"http":1}）
+        totalTrafficIn:
+          type: integer
+          format: int64
+        totalTrafficOut:
+          type: integer
+          format: int64
+
+    ServerRuntimeProxyStatus:
+      type: object
+      description: 单条 proxy 状态（用于 /server/runtime/proxies 数组项 + /proxy/{type}/{name} 单条）。
+      required: [name]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          description: "tcp | udp | http | https | stcp | sudp | xtcp"
+        status:
+          type: string
+          description: "online | offline"
+        lastStartTime:
+          type: string
+        lastCloseTime:
+          type: string
+        todayTrafficIn:
+          type: integer
+          format: int64
+        todayTrafficOut:
+          type: integer
+          format: int64
+        curConns:
+          type: integer
+        clientVersion:
+          type: string
+        conf:
+          type: object
+          description: frps 上游 conf 透传（结构因 proxy type 不同）
+          additionalProperties: true
+
+    ServerRuntimeProxiesResponse:
+      type: object
+      description: |
+        聚合 N 个 type 的 proxy 列表。
+        部分 type 上游失败 → errors[type] 含错误文案，整体仍 200（Q-1 PM-DECIDED）。
+        全部 type 都 fatal → handler 返 503，不进 200 body。
+      required: [proxies]
+      properties:
+        proxies:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/ServerRuntimeProxyStatus'
+          description: key = proxy type；value = 该 type 下所有 proxy 数组
+        errors:
+          type: object
+          additionalProperties:
+            type: string
+          description: 仅当 per-type 失败时出现；key = type，value = 错误文案
+
+    ServerRuntimeTraffic:
+      type: object
+      description: 单条 proxy 的日级流量序列（透传 frps /api/traffic/{name}）。
+      required: [name, trafficIn, trafficOut]
+      properties:
+        name:
+          type: string
+        trafficIn:
+          type: array
+          items:
+            type: integer
+            format: int64
+        trafficOut:
+          type: array
+          items:
+            type: integer
+            format: int64
+
 paths:
 
   /api/v1/health:
@@ -1416,6 +1539,166 @@ paths:
                 $ref: '#/components/schemas/ErrorBody'
         '500':
           description: 内部存储错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  # T-039 新增 4 条 — frps 运行时监控 API 代理
+  # 鉴权：cookieAuth（与既有 read 端点一致）
+  # 凭据合并：frps.config（用户填值）优先 → frps.dashboard.autogen（启动期自动生成）fallback
+  # 上游错误映射：401 → 502（区分本应用 401 SessionAuth）/ 404 → 404 / 连接拒绝 / 5xx → 503
+
+  /api/v1/server/runtime/info:
+    get:
+      summary: 获取 frps 服务概览（代理 frps /api/serverinfo）
+      operationId: getServerRuntimeInfo
+      tags: [server-runtime]
+      responses:
+        '200':
+          description: frps 服务概览
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerRuntimeInfo'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '502':
+          description: 上游 frps dashboard 凭据校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '503':
+          description: frps dashboard 未启用 / 进程不可达
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/server/runtime/proxies:
+    get:
+      summary: 聚合查询全部 type 的 proxy 状态（代理 frps /api/proxy/{type} × N）
+      operationId: getServerRuntimeProxies
+      tags: [server-runtime]
+      responses:
+        '200':
+          description: |
+            按 type 分组的 proxy 列表。部分 type 失败时返 200 + errors 字段（不阻塞整体）。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerRuntimeProxiesResponse'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '502':
+          description: 上游凭据校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '503':
+          description: dashboard 未启用 / 全部 type 上游均不可达
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/server/runtime/proxy/{type}/{name}:
+    get:
+      summary: 查询单条 proxy 详情（代理 frps /api/proxy/{type}/{name}）
+      operationId: getServerRuntimeProxyDetail
+      tags: [server-runtime]
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            description: "tcp | udp | http | https | stcp | sudp | xtcp"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: proxy 详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerRuntimeProxyStatus'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          description: proxy 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '502':
+          description: 上游凭据校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '503':
+          description: dashboard 未启用 / frps 不可达
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/server/runtime/traffic/{name}:
+    get:
+      summary: 查询单条 proxy 的日级流量序列（代理 frps /api/traffic/{name}）
+      operationId: getServerRuntimeTraffic
+      tags: [server-runtime]
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 流量序列
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerRuntimeTraffic'
+        '401':
+          description: 未登录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          description: proxy 不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '502':
+          description: 上游凭据校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '503':
+          description: dashboard 未启用 / frps 不可达
           content:
             application/json:
               schema:
