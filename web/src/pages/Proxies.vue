@@ -56,9 +56,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, h, onMounted } from 'vue'
+// T-042 / proxy-runtime-status-merge · 02 § 3.3
+// 在 T-037 基础上叠加 runtime 列（运行状态 / 流量），调 T-041 useServerRuntime 5s 轮询。
+// 继承 T-032 单向数据流：Proxies.vue 只读 runtime ref，不 v-model 绑回。
+// 降级：runtime 失败 → runtime 列灰点 + "监控不可用"；配置 CRUD 通路零关联。
+// SFC 自检：script 段纯逻辑行数（去 import / 注释 / interface）目标 < 200（insight L31）。
+
+import { ref, h, computed, onMounted } from 'vue'
 import {
-  NPageHeader, NButton, NDataTable, NModal, NSpace, NTag, NEmpty,
+  NPageHeader, NButton, NDataTable, NModal, NSpace, NTag, NEmpty, NTooltip,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
@@ -66,8 +72,11 @@ import ProxyForm from '../components/ProxyForm.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import FirewallHint from '../components/FirewallHint.vue'
 import { useProxiesStore } from '../stores/proxies'
+import { useServerRuntime } from '../composables/useServerRuntime'
+import { formatBytes, formatTime } from '../utils/format'
+import { getProxyStatusTag } from '../utils/proxyStatus'
 import { extractErrorMessage } from '../api/client'
-import type { Proxy, ProxyInput } from '../types'
+import type { Proxy, ProxyInput, ServerRuntimeProxyStatus } from '../types'
 
 const proxiesStore = useProxiesStore()
 const message = useMessage()
@@ -84,6 +93,27 @@ const proxyFormRef = ref<{
 const firewallPorts = ref<number[]>([])
 const firewallProto = ref<'tcp' | 'udp' | 'both'>('both')
 
+// T-042：runtime polling 5s（与 ServerMonitor 同节拍；composable onUnmounted 自清）
+const runtime = useServerRuntime(5000)
+
+// runtime.proxies.value.proxies 是 Record<type, Status[]>；摊平为 Map<name, Status>
+// 行 render 调用 O(1) 查找；polling 每 tick 触发 computed 重算一次
+const runtimeMap = computed<Map<string, ServerRuntimeProxyStatus>>(() => {
+  const m = new Map<string, ServerRuntimeProxyStatus>()
+  const buckets = runtime.proxies.value?.proxies ?? {}
+  for (const t of Object.keys(buckets)) {
+    for (const r of buckets[t] ?? []) {
+      m.set(r.name, r)
+    }
+  }
+  return m
+})
+
+// 降级判定：从未拿到 runtime 数据 + 有 error → frps 不可达
+const runtimeUnavailable = computed(
+  () => runtime.proxies.value === null && runtime.error.value !== null,
+)
+
 const defaultFormData = (): ProxyInput => ({
   name: '',
   type: 'tcp',
@@ -95,7 +125,6 @@ const defaultFormData = (): ProxyInput => ({
 /**
  * T-032：仅作为 ProxyForm 的初始种子；由 handleAdd / handleEdit 在打开模态框前写入。
  * 用户编辑期间它**不更新**——最终值用 proxyFormRef.value?.getProxyInput() 取（单向数据流）。
- * 禁止在 template / computed / 跨组件 prop 中绑此 ref 做实时显示。
  */
 const formData = ref<ProxyInput>(defaultFormData())
 
@@ -179,6 +208,41 @@ async function handleSubmit() {
   }
 }
 
+// T-042：runtime 状态列 render（提取为 fn 让 columns 数组保持紧凑）
+function renderRuntimeStatus(row: Proxy) {
+  if (runtimeUnavailable.value) {
+    const vis = getProxyStatusTag(null)
+    return h(NTooltip, { trigger: 'hover' }, {
+      trigger: () => h(NTag, { type: vis.type, size: 'small', round: true },
+        { default: () => '监控不可用' }),
+      default: () => 'frps 未运行 / 监控暂不可达',
+    })
+  }
+  const r = runtimeMap.value.get(row.name)
+  const vis = getProxyStatusTag(r?.status)
+  const lastStart = formatTime(r?.lastStartTime)
+  const tooltipText = r
+    ? `状态：${vis.text}\n上次启动：${lastStart}\n当前连接：${r.curConns ?? 0}`
+    : '该 proxy 未在 frps 端注册（离线）'
+  return h(NTooltip, { trigger: 'hover', style: 'white-space: pre-line' }, {
+    trigger: () => h(NTag, { type: vis.type, size: 'small', round: true },
+      { default: () => vis.text }),
+    default: () => tooltipText,
+  })
+}
+
+// T-042：runtime 流量列 render
+function renderRuntimeTraffic(row: Proxy) {
+  if (runtimeUnavailable.value) return '—'
+  const r = runtimeMap.value.get(row.name)
+  if (!r) return '—'
+  const text = `${formatBytes(r.todayTrafficIn)} / ${formatBytes(r.todayTrafficOut)}`
+  return h(NTooltip, { trigger: 'hover' }, {
+    trigger: () => text,
+    default: () => `当前连接：${r.curConns ?? 0}`,
+  })
+}
+
 const columns: DataTableColumns<Proxy> = [
   {
     title: '名称',
@@ -213,6 +277,17 @@ const columns: DataTableColumns<Proxy> = [
       size: 'small',
     }, { default: () => row.enabled ? '启用' : '禁用' }),
   },
+  // T-042：分两列展示 runtime（不与"启用"合并，避免 insight L29 同列名不同语义源陷阱）
+  {
+    title: '运行状态',
+    key: 'runtimeStatus',
+    render: renderRuntimeStatus,
+  },
+  {
+    title: '流量（入 / 出）',
+    key: 'runtimeTraffic',
+    render: renderRuntimeTraffic,
+  },
   {
     title: '操作',
     key: 'actions',
@@ -234,5 +309,23 @@ const columns: DataTableColumns<Proxy> = [
 
 onMounted(() => {
   void proxiesStore.fetchProxies()
+  // T-042：启动 runtime polling；不 await（让配置表先加载）
+  runtime.start()
+  void runtime.refresh()
+})
+
+// 暴露给测试的 handle（与 ServerMonitor.vue 同款）
+defineExpose({
+  __testing: {
+    runtime,
+    runtimeMap,
+    runtimeUnavailable,
+    renderRuntimeStatus,
+    renderRuntimeTraffic,
+    columns,
+    handleAdd,
+    handleEdit,
+    handleDeleteRequest,
+  },
 })
 </script>

@@ -134,3 +134,9 @@ T-016 已用此真相替换主索引第 18 行。
 - 2026-05-24 · SDK 派发上下文对 sub-agent 工具集做二次裁剪：frontmatter `tools: ...` 是理论上限，运行时可能更窄；PM 派发上下文 SDK Opus 实测无 Task / Bash / PowerShell（声明的 7 工具中下发只剩 5），与 reviewer 派发上下文实测无 Write 同源同方向，证伪"frontmatter 加 Write 单点修复"假设 · evidence: T-034 04 §3+§5 / 05 §4 / 07 §"核心证据 E-0" 4 次同任务独立复现
 - 2026-05-24 · Claude Code auto-mode classifier 在工具层主动拦截 `.claude/` 直接 Write，把 CLAUDE.md / `.harness/rules/00-core.md` "禁编辑 .claude/" 红线从纸面规则升级为运行时硬约束，进一步迫使 sync 必须走 stop-hook 自动路径 —— 维护期里"红线靠人记" 被 "红线由工具执行" 替代，是项目质量基础设施的一次质变 · evidence: T-034 04 §5 实测 Write 被 classifier 拒绝
 - 2026-05-24 · Harness pipeline 元任务（self-modify agent 契约 / verify_all 闸门）应当在设计阶段就把"PM 在派发上下文里跑 sync / verify_all"作为可能不可达的步骤明确 deferred 到 stop-hook，而不是在 stage 4 才发现执行不了 —— 元任务的 dispatch order 必须包含"deferred-to-hook" 显式 step 而非视为运行时漂移 · evidence: T-034 05 §4 设计 §11 step 2/3 事后 deferred 的反思
+
+## Rotated 2026-05-28
+
+- 2026-05-24 · 静态闸门反向证伪（adversarial）= 临时破坏闸门期望的字面串 → grep 命中数从 1 跌到 0 → 恢复 → 命中数回到 1，是验证 "verify_all step 非假阳性 PASS" 的最小成本、最高确定性手段；可作为未来项目所有 grep-based 静态闸门的标准 QA 范式（成本：每闸门 4 个工具调用 / 30 秒） · evidence: T-034 06 §4 + 07 ## Adversarial tests AC-1 / AC-3 实测
+- 2026-05-24 · Playwright `reuseExistingServer: !process.env.CI` 是 e2e 本地 flake 类问题最常见但**最隐性**的根因 —— CI 永不复现（CI=true → 永远 fresh server）让 dev 容易盲目假设环境正常，本地却长期偶发 FAIL；fix 的最佳路径是**测试侧主动调 `/api/v1/system/ready` 守门 + Error.message 包含具体根因 + 修复指引**（而非改 reuseExistingServer 默认值，那会让本地每次跑 verify_all 强启 webServer 损害 dev 体验），将隐性环境耦合显性化让维护者立即知道"为什么 + 怎么修" · evidence: T-033 02 §13 方案 A vs B vs C vs D 决策矩阵 + fixtures/auth.ts:21-44 assertFreshBackend 三分支实现
+- 2026-05-24 · e2e fixture 类 helper（前置条件守门 / 状态查询）不应用 Vitest mock 测试 —— mock `page.request.get` 等于复制实现，零 adversarial value；它们的"测试"就是 spec 自身在反向构造场景中触发 / 不触发的实测行为，由 QA stage 6 用独立 reproducer 验证。这是与"业务逻辑 composable / store 必须有 Vitest 单测" (T-032) 的对称镜像约定 · evidence: T-033 03 GR Q4 pre-answered + 06 §"Boundary tests added" 解释

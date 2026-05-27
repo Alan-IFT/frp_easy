@@ -119,7 +119,7 @@ frp_easy/
             ├── Setup.vue     ← 首次安装（username + password）
             ├── Login.vue     ← 登录（429 倒计时支持）
             ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮
-            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组）
+            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组；T-042: 叠加 runtime 列「运行状态 / 流量（入/出）」，消费 useServerRuntime；frps 不可达时降级灰点 + 配置 CRUD 通路零关联）
             ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor）
             ├── ServerMonitor.vue ← T-041：frps 服务端运行态监控页（消费 T-039 API；5s 轮询 + visibilitychange 自动暂停；ServerInfo 卡片 + n-tabs 分 type proxy 表格 + 状态条 + 三态完备）
             ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken）
@@ -167,6 +167,8 @@ frp_easy/
 | frpc reload / status | 是 | `internal/frpcadmin/client.go` | `New(addr, port, user, pass)` 构建客户端；Reload / Status。 |
 | frps 运行态轮询（双 endpoint + epoch race） | 是 | `web/src/composables/useServerRuntime.ts` | T-041 引入。`useServerRuntime(intervalMs=5000)` → `{ info, proxies, isPolling, error, lastUpdated, consecutiveFailCount, start, stop, refresh, restart }`。F-5.6 失败保留上次数据；F-5.7 不在 mount 自动 start；BC-7 用户显式 stop 后 visibility 恢复不自动 resume。T-042 也消费。 |
 | FRP TOML 渲染 | 是 | `internal/frpconf/render.go` | RenderFrpc / RenderFrps；AtomicWrite 原子写文件。 |
+| 字节友好单位 / 时间空值格式化 | 是 | `web/src/utils/format.ts` | T-042 抽取。`formatBytes(n)`（B/KiB/MiB/GiB/TiB/PiB；undefined/null/NaN/负数 → "—"；0 → "0 B"）+ `formatTime(s)`（空/"0001-..." → "—"）。共享方：ServerMonitor.vue + Proxies.vue runtime 列。 |
+| proxy runtime status → 视觉/文案 | 是 | `web/src/utils/proxyStatus.ts` | T-042 抽取。`getProxyStatusTag(raw)` → `{type, text, dotColor, online}`。大小写防御 + 空字符串归 "离线"（与"无此 proxy"语义合并）。共享方：ServerMonitor.vue 状态列 + Proxies.vue runtime 列。 |
 | HTTP 中间件（全套） | 是 | `internal/httpapi/middleware.go` | ReadyGate(C-3) / Recover / RequestID / Logger(C-5) / CORS / SessionAuth / CSRF。 |
 | 日志尾读 | 是 | `internal/logtail/tail.go` | TailLines / ReadFrom 增量。 |
 | 子进程管理 | 是 | `internal/procmgr/manager.go` | Start/Stop/Restart/Status/Shutdown/ApplyConfigChange。 |

@@ -154,6 +154,8 @@ import {
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { useServerRuntime } from '../composables/useServerRuntime'
+import { formatBytes, formatTime } from '../utils/format'
+import { getProxyStatusTag } from '../utils/proxyStatus'
 import type { ServerRuntimeProxyStatus } from '../types'
 
 const router = useRouter()
@@ -238,27 +240,7 @@ const lastUpdatedLabel = computed(() => {
   return `${Math.floor(delta / 3_600_000)} 小时前刷新`
 })
 
-// FR-1.4 / AC-13：流量字节格式化
-function formatBytes(n: number | undefined): string {
-  if (n === undefined || n === null || Number.isNaN(n)) return '—'
-  if (n === 0) return '0 B'
-  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
-  let v = n
-  let u = 0
-  while (v >= 1024 && u < units.length - 1) {
-    v /= 1024
-    u++
-  }
-  const s = u === 0 ? `${v}` : v.toFixed(1).replace(/\.0$/, '')
-  return `${s} ${units[u]}`
-}
-
-// BC-3：lastStartTime 空 / "0001-01-01..." → "—"
-function formatTime(s: string | undefined): string {
-  if (!s) return '—'
-  if (s.startsWith('0001-')) return '—'
-  return s
-}
+// FR-1.4 / AC-13 流量字节格式化、BC-3 时间格式化：T-042 抽到 web/src/utils/format.ts
 
 function tabLabel(t: string): string {
   const n = rt.proxies.value?.proxies[t]?.length ?? 0
@@ -281,12 +263,9 @@ const columns: DataTableColumns<ServerRuntimeProxyStatus> = [
     title: '状态',
     key: 'status',
     render: (row) => {
-      // GR C-5：status 大小写防御（frps 上游可能返回 "Online" / "online" 不一致）
-      const raw = (row.status ?? '').toLowerCase()
-      const type: 'success' | 'default' | 'error' =
-        raw === 'online' ? 'success' : raw === 'offline' ? 'default' : 'error'
-      const text = raw === 'online' ? '在线' : raw === 'offline' ? '离线' : (row.status || '未知')
-      return h(NTag, { type, size: 'small', round: true }, { default: () => text })
+      // GR C-5 大小写防御：T-042 抽到 web/src/utils/proxyStatus.ts
+      const vis = getProxyStatusTag(row.status)
+      return h(NTag, { type: vis.type, size: 'small', round: true }, { default: () => vis.text })
     },
   },
   {
