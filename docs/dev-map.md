@@ -85,7 +85,7 @@ frp_easy/
         ├── stores/         ← Pinia store
         │   ├── auth.ts     ← user / csrfToken；login / logout / checkMe / fetchCsrf
         │   ├── proc.ts     ← frpc/frps ProcessInfo；2s 轮询
-        │   ├── proxies.ts  ← Proxy[] CRUD
+        │   ├── proxies.ts  ← Proxy[] CRUD（T-047: fetchProxies 自捕获并暴露 error ref，区分"加载失败" vs "暂无规则"）
         │   ├── app.ts      ← initialized / binMissing / version
         │   ├── downloader.ts← frpc/frps DownloadState；1s 轮询；downloadBin/startPolling
         │   ├── wizard.ts   ← wizardHandled / shouldShow / checked；checkWizard / completeWizard
@@ -118,11 +118,11 @@ frp_easy/
         └── pages/
             ├── Setup.vue     ← 首次安装（username + password）
             ├── Login.vue     ← 登录（429 倒计时支持）
-            ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮
-            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组；T-042: 叠加 runtime 列「运行状态 / 流量（入/出）」，消费 useServerRuntime；frps 不可达时降级灰点 + 配置 CRUD 通路零关联）
-            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor）
+            ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮（T-047: 自动启动开关获取失败不再静默 → warning + 失败态开关 disabled + tooltip + 刷新入口）
+            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组；T-042: 叠加 runtime 列「运行状态 / 流量（入/出）」，消费 useServerRuntime；frps 不可达时降级灰点 + 配置 CRUD 通路零关联；T-047: 区分加载失败 n-result+重试 vs 暂无规则 empty 态）
+            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor；T-047: 加载三态 skeleton/n-result+重试/loaded + Dashboard 三字段补校验）
             ├── ServerMonitor.vue ← T-041：frps 服务端运行态监控页（消费 T-039 API；5s 轮询 + visibilitychange 自动暂停；ServerInfo 卡片 + n-tabs 分 type proxy 表格 + 状态条 + 三态完备）
-            ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken）
+            ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken；T-047: 加载三态 skeleton/n-result+重试/loaded）
             ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）
             ├── Settings.vue  ← 修改密码表单
             └── Wizard.vue    ← T-002: 部署向导（顶级路由 /wizard，3 步）

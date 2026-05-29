@@ -23,12 +23,28 @@
           <template #header-extra>
             <n-space align="center">
               <n-text depth="3" style="font-size: 13px">自动启动</n-text>
+              <!-- T-047 A2：状态获取失败时禁用开关 + tooltip 提示 + 重试入口，不静默撒谎 -->
+              <n-tooltip v-if="modeFetchFailed" trigger="hover">
+                <template #trigger>
+                  <n-switch :value="modeState.frpc" disabled />
+                </template>
+                状态获取失败，请点击刷新
+              </n-tooltip>
               <n-switch
+                v-else
                 :value="modeState.frpc"
                 :disabled="appStore.frpcMissing || modeLoading.frpc"
                 :loading="modeLoading.frpc"
                 @update:value="handleModeToggle('frpc', $event)"
               />
+              <n-button
+                v-if="modeFetchFailed"
+                size="tiny"
+                tertiary
+                @click="retryFetchMode"
+              >
+                刷新状态
+              </n-button>
               <status-badge :state="procStore.frpcInfo.state" />
             </n-space>
           </template>
@@ -94,12 +110,28 @@
           <template #header-extra>
             <n-space align="center">
               <n-text depth="3" style="font-size: 13px">自动启动</n-text>
+              <!-- T-047 A2：状态获取失败时禁用开关 + tooltip 提示 + 重试入口，不静默撒谎 -->
+              <n-tooltip v-if="modeFetchFailed" trigger="hover">
+                <template #trigger>
+                  <n-switch :value="modeState.frps" disabled />
+                </template>
+                状态获取失败，请点击刷新
+              </n-tooltip>
               <n-switch
+                v-else
                 :value="modeState.frps"
                 :disabled="appStore.frpsMissing || modeLoading.frps"
                 :loading="modeLoading.frps"
                 @update:value="handleModeToggle('frps', $event)"
               />
+              <n-button
+                v-if="modeFetchFailed"
+                size="tiny"
+                tertiary
+                @click="retryFetchMode"
+              >
+                刷新状态
+              </n-button>
               <status-badge :state="procStore.frpsInfo.state" />
             </n-space>
           </template>
@@ -162,10 +194,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted, onUnmounted } from 'vue'
+import { reactive, ref, onMounted, onUnmounted } from 'vue'
 import {
   NPageHeader, NCard, NGrid, NGi, NSpace, NButton, NAlert,
-  NDescriptions, NDescriptionsItem, NText, NSwitch,
+  NDescriptions, NDescriptionsItem, NText, NSwitch, NTooltip,
   useMessage,
 } from 'naive-ui'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -183,15 +215,26 @@ const message = useMessage()
 const loadingMap = reactive<Record<string, boolean>>({})
 const modeState = reactive({ frpc: false, frps: false })
 const modeLoading = reactive({ frpc: false, frps: false })
+// T-047 A2：自动启动状态获取失败标记
+const modeFetchFailed = ref(false)
 
+// T-047 A2：自动启动开关获取失败不再静默。失败时给出可见信号（warning + 失败态开关），
+// 否则两个 n-switch 停在 false 与真实状态不符 = UI 撒谎。
 async function fetchMode() {
+  modeFetchFailed.value = false
   try {
     const s = await apiGetMode()
     modeState.frpc = s.frpc
     modeState.frps = s.frps
-  } catch {
-    // 非致命性错误，静默忽略
+  } catch (e) {
+    modeFetchFailed.value = true
+    message.warning(extractErrorMessage(e, '自动启动状态获取失败，请点击刷新重试'))
   }
+}
+
+// T-047 A2：开关状态获取失败标记。true 时禁用开关并展示重试入口。
+function retryFetchMode(): void {
+  void fetchMode()
 }
 
 async function handleModeToggle(kind: 'frpc' | 'frps', enabled: boolean) {
@@ -274,5 +317,17 @@ onMounted(() => {
 
 onUnmounted(() => {
   procStore.stopPolling()
+})
+
+// 暴露给测试的 handle（getExposed 范式；禁用 wrapper.vm.__testing）
+defineExpose({
+  __testing: {
+    modeState,
+    modeLoading,
+    modeFetchFailed,
+    fetchMode,
+    retryFetchMode,
+    handleModeToggle,
+  },
 })
 </script>

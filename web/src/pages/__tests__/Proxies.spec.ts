@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { getExposed } from '../../test-utils/exposed'
+import { apiError } from '../../test-utils/apiError'
 import { defineComponent, h, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
@@ -116,6 +117,8 @@ interface TestingHandle {
   handleAdd: () => void
   handleEdit: (proxy: Proxy) => void
   handleDeleteRequest: (proxy: Proxy) => void
+  reloadProxies: () => void
+  proxiesStore: { proxies: Proxy[]; loading: boolean; error: string | null }
 }
 
 function getTesting(wrapper: ReturnType<typeof mountPage>): TestingHandle {
@@ -298,5 +301,66 @@ describe('Proxies.vue — columns 拓扑（行数 / 顺序）', () => {
     expect(enabledIdx).toBeGreaterThan(-1)
     expect(runtimeIdx).toBeGreaterThan(-1)
     expect(enabledIdx).not.toBe(runtimeIdx)
+  })
+})
+
+// T-047 A3：区分"加载失败"与"暂无规则"
+describe('Proxies.vue — 加载失败 vs 暂无规则（A3）', () => {
+  it('fetchProxies reject（apiError）→ store.error 透传 + 显示错误态（非"暂无规则"）', async () => {
+    listMock.mockReset()
+    listMock.mockRejectedValue(apiError('后端 500：读取代理规则失败'))
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.proxiesStore.error).toBe('后端 500：读取代理规则失败')
+    expect(w.text()).toContain('加载代理规则失败')
+    expect(w.text()).toContain('重试')
+    // 反向：失败时绝不渲染成"暂无代理规则"empty 文案
+    expect(w.text()).not.toContain('暂无代理规则')
+  })
+
+  it('成功但列表为空 → empty 态"暂无代理规则"（store.error=null）', async () => {
+    listMock.mockReset()
+    listMock.mockResolvedValue([])
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.proxiesStore.error).toBeNull()
+    expect(w.text()).toContain('暂无代理规则')
+    // 反向：empty 态不得出现错误态文案
+    expect(w.text()).not.toContain('加载代理规则失败')
+  })
+
+  it('错误态点重试成功 → store.error 清空，回到正常列表', async () => {
+    listMock.mockReset()
+    listMock.mockRejectedValueOnce(apiError('临时失败'))
+    listMock.mockResolvedValue([
+      makeProxy('ssh', 'tcp', { localPort: 22, remotePort: 6022 }),
+    ])
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.proxiesStore.error).toBe('临时失败')
+    t.reloadProxies()
+    await settle()
+    expect(t.proxiesStore.error).toBeNull()
+    expect(w.text()).toContain('ssh')
+  })
+})
+
+// ## Adversarial tests
+describe('Proxies.vue — Adversarial（A3：失败绝不渲染成空列表）', () => {
+  it('fetchProxies 失败时 proxies 列表为空，但页面绝不显示 empty 态误导用户去新建', async () => {
+    listMock.mockReset()
+    listMock.mockRejectedValue(apiError('网络中断'))
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    // 列表确实为空（fetch 失败未填充）
+    expect(t.proxiesStore.proxies.length).toBe(0)
+    // 但 error 非空 → 必须走错误态，绝不是 empty 态
+    expect(t.proxiesStore.error).not.toBeNull()
+    expect(w.text()).not.toContain('暂无代理规则')
+    expect(w.text()).toContain('加载代理规则失败')
   })
 })

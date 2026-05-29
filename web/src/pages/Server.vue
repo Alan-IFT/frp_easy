@@ -1,7 +1,27 @@
 <template>
   <div>
     <n-page-header title="服务端配置（frps）" subtitle="配置 FRP 服务端参数" />
-    <n-card style="margin-top: 16px">
+
+    <!-- T-047 A1：加载失败态（与 loading / loaded 三态互斥）。
+         失败时显示 n-result + 重试，绝不留默认值让用户误当真实配置而误操作覆盖。 -->
+    <n-card v-if="loadError" style="margin-top: 16px">
+      <n-result
+        status="error"
+        title="加载服务端配置失败"
+        :description="loadError"
+      >
+        <template #footer>
+          <n-button @click="() => void loadConfig()">重试</n-button>
+        </template>
+      </n-result>
+    </n-card>
+
+    <!-- T-047 A1：加载中骨架（避免渲染默认值假装是真实配置） -->
+    <n-card v-else-if="loading" style="margin-top: 16px">
+      <n-skeleton text :repeat="6" />
+    </n-card>
+
+    <n-card v-else style="margin-top: 16px">
       <n-form
         ref="formRef"
         :model="form"
@@ -88,7 +108,7 @@
 import { ref, onMounted } from 'vue'
 import {
   NPageHeader, NCard, NForm, NFormItem, NInputNumber, NInput, NSwitch,
-  NSpace, NButton, useMessage,
+  NSpace, NButton, NSkeleton, NResult, useMessage,
 } from 'naive-ui'
 import type { FormInst, FormRules } from 'naive-ui'
 import { apiGetServer, apiPutServer } from '../api/server'
@@ -102,6 +122,10 @@ const message = useMessage()
 const formRef = ref<FormInst | null>(null)
 const saving = ref(false)
 const savedPorts = ref<number[]>([])
+// T-047 A1：三态。loading 初始 true（onMounted 立即拉取）；loadError 非 null = 失败态。
+// loaded = !loading && !loadError。三态互斥由模板 v-if / v-else-if / v-else 保证。
+const loading = ref(true)
+const loadError = ref<string | null>(null)
 
 // T-040 单向数据流（insight L13）：
 // initialAllowPorts 是父侧 ref，loadConfig 时写一次种子，AllowPortsEditor setup 读一次。
@@ -129,9 +153,46 @@ const rules: FormRules = {
       trigger: ['input', 'blur'],
     },
   ],
+  // T-047 B1：Dashboard 三字段补校验（启用 Dashboard 后才生效；与 bindPort 严谨度对齐）
+  dashboardPort: [
+    {
+      type: 'number',
+      validator: (_rule, value: number) => {
+        if (!form.value.dashboardEnabled) return true
+        if (value == null || !Number.isInteger(value) || value < 1 || value > 65535) {
+          return new Error('Dashboard 端口需为 1-65535 的整数')
+        }
+        return true
+      },
+      trigger: ['input', 'blur'],
+    },
+  ],
+  dashboardUser: [
+    {
+      validator: (_rule, value: string) => {
+        if (!form.value.dashboardEnabled) return true
+        if (!value || !value.trim()) return new Error('启用 Dashboard 时用户名必填')
+        return true
+      },
+      trigger: ['input', 'blur'],
+    },
+  ],
+  dashboardPass: [
+    {
+      validator: (_rule, value: string) => {
+        if (!form.value.dashboardEnabled) return true
+        if (!value) return new Error('启用 Dashboard 时密码必填')
+        return true
+      },
+      trigger: ['input', 'blur'],
+    },
+  ],
 }
 
 async function loadConfig(reveal = false) {
+  // T-047 A1：进入加载态。失败时不再仅弹 toast 后留默认值，而是切到 loadError 错误态。
+  loading.value = true
+  loadError.value = null
   try {
     const cfg = await apiGetServer(reveal)
     form.value.bindPort = cfg.bindPort || 7000
@@ -143,7 +204,9 @@ async function loadConfig(reveal = false) {
     // T-040 种子：AllowPortsEditor 在 setup 时读一次此 ref（不 watch）
     initialAllowPorts.value = cfg.allowPorts ?? []
   } catch (e) {
-    message.error(extractErrorMessage(e, '加载配置失败'))
+    loadError.value = extractErrorMessage(e, '加载配置失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -195,5 +258,19 @@ async function handleSave() {
 
 onMounted(() => {
   void loadConfig()
+})
+
+// 暴露给测试的 handle（getExposed 范式；禁用 wrapper.vm.__testing）
+defineExpose({
+  __testing: {
+    form,
+    rules,
+    loading,
+    loadError,
+    saving,
+    loadConfig,
+    handleSave,
+    formRef,
+  },
 })
 </script>

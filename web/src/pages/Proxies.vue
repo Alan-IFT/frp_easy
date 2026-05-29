@@ -6,7 +6,22 @@
       </template>
     </n-page-header>
 
+    <!-- T-047 A3：加载失败态（与"暂无规则"empty 态互斥）。失败时绝不渲染成空列表，
+         避免误导用户去新建已存在的规则。 -->
+    <n-result
+      v-if="proxiesStore.error"
+      status="error"
+      title="加载代理规则失败"
+      :description="proxiesStore.error"
+      style="margin-top: 32px"
+    >
+      <template #footer>
+        <n-button @click="reloadProxies">重试</n-button>
+      </template>
+    </n-result>
+
     <n-data-table
+      v-else
       :columns="columns"
       :data="proxiesStore.proxies"
       :loading="proxiesStore.loading"
@@ -64,7 +79,7 @@
 
 import { ref, h, computed, onMounted } from 'vue'
 import {
-  NPageHeader, NButton, NDataTable, NModal, NSpace, NTag, NEmpty, NTooltip,
+  NPageHeader, NButton, NDataTable, NModal, NSpace, NTag, NEmpty, NTooltip, NResult,
   useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
@@ -127,6 +142,11 @@ const defaultFormData = (): ProxyInput => ({
  * 用户编辑期间它**不更新**——最终值用 proxyFormRef.value?.getProxyInput() 取（单向数据流）。
  */
 const formData = ref<ProxyInput>(defaultFormData())
+
+// T-047 A3：错误态重试入口（store.fetchProxies 已自捕获并维护 error ref）
+function reloadProxies(): void {
+  void proxiesStore.fetchProxies()
+}
 
 function handleAdd() {
   editingProxy.value = null
@@ -326,6 +346,8 @@ defineExpose({
     handleAdd,
     handleEdit,
     handleDeleteRequest,
+    reloadProxies,
+    proxiesStore,
   },
 })
 </script>

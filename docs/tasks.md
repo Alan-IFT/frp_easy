@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-047 | frontend-honest-states | DELIVERED | 2026-05-30 | `docs/features/frontend-honest-states/`（pending archive；batch project-optimization-2026-05；Server/Client 加载+错误三态 + Proxies 失败/空区分 + Dashboard 开关不静默 + Server dashboard 校验；frontend_tests 297→327；verify_all PASS 32/0/0） |
 | T-046 | session-purge-and-requestid | DELIVERED | 2026-05-30 | `docs/features/session-purge-and-requestid/`（pending archive；batch project-optimization-2026-05；过期 session 定时清理 loop + RequestID crypto/rand + 3 新测试；go_tests 284→287；verify_all PASS 32/0/0） |
 | T-045 | backend-deadcode-cleanup | DELIVERED | 2026-05-30 | `docs/features/backend-deadcode-cleanup/`（pending archive；batch project-optimization-2026-05；删 procmgr 无人订阅发布订阅+死函数+var _ hack 净~90 行；go_tests 285→284；verify_all PASS 32/0/0） |
 | T-052 | e2e-decouple-port | DELIVERED | 2026-05-30 | `docs/features/e2e-decouple-port/`（pending archive；batch project-optimization-2026-05；e2e 改独立端口 17800 + webServer.env 注入，根治 C.1 假性失败；全量 verify_all 首次本机全绿 PASS 32/0/0） |

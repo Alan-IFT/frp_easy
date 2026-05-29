@@ -1,7 +1,27 @@
 <template>
   <div>
     <n-page-header title="客户端配置（frpc）" subtitle="配置 frpc 连接到服务端的参数" />
-    <n-card style="margin-top: 16px">
+
+    <!-- T-047 A1：加载失败态（与 loading / loaded 三态互斥）。
+         失败时显示 n-result + 重试，绝不留默认值让用户误当真实配置而误操作覆盖。 -->
+    <n-card v-if="loadError" style="margin-top: 16px">
+      <n-result
+        status="error"
+        title="加载客户端配置失败"
+        :description="loadError"
+      >
+        <template #footer>
+          <n-button @click="() => void loadConfig()">重试</n-button>
+        </template>
+      </n-result>
+    </n-card>
+
+    <!-- T-047 A1：加载中骨架（避免渲染默认值假装是真实配置） -->
+    <n-card v-else-if="loading" style="margin-top: 16px">
+      <n-skeleton text :repeat="4" />
+    </n-card>
+
+    <n-card v-else style="margin-top: 16px">
       <n-form
         ref="formRef"
         :model="form"
@@ -57,7 +77,7 @@
 import { ref, onMounted } from 'vue'
 import {
   NPageHeader, NCard, NForm, NFormItem, NInputNumber, NInput,
-  NSpace, NButton, useMessage,
+  NSpace, NButton, NSkeleton, NResult, useMessage,
 } from 'naive-ui'
 import type { FormInst, FormRules } from 'naive-ui'
 import { apiGetClient, apiPutClient } from '../api/frpclient'
@@ -66,6 +86,9 @@ import { extractErrorMessage } from '../api/client'
 const message = useMessage()
 const formRef = ref<FormInst | null>(null)
 const saving = ref(false)
+// T-047 A1：三态。loading 初始 true；loadError 非 null = 失败态；loaded = !loading && !loadError。
+const loading = ref(true)
+const loadError = ref<string | null>(null)
 
 const form = ref({
   serverAddr: '',
@@ -90,13 +113,18 @@ const rules: FormRules = {
 }
 
 async function loadConfig(reveal = false) {
+  // T-047 A1：进入加载态。失败切到 loadError 错误态，不再仅弹 toast 后留默认值。
+  loading.value = true
+  loadError.value = null
   try {
     const cfg = await apiGetClient(reveal)
     form.value.serverAddr = cfg.serverAddr ?? ''
     form.value.serverPort = cfg.serverPort || 7000
     form.value.authToken = cfg.authToken ?? ''
   } catch (e) {
-    message.error(extractErrorMessage(e, '加载配置失败'))
+    loadError.value = extractErrorMessage(e, '加载配置失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -129,5 +157,18 @@ async function handleSave() {
 
 onMounted(() => {
   void loadConfig()
+})
+
+// 暴露给测试的 handle（getExposed 范式；禁用 wrapper.vm.__testing）
+defineExpose({
+  __testing: {
+    form,
+    loading,
+    loadError,
+    saving,
+    loadConfig,
+    handleSave,
+    formRef,
+  },
 })
 </script>
