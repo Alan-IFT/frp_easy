@@ -204,17 +204,14 @@ func TestAutoRestore_FirstFailThenExhausted(t *testing.T) {
 	}
 }
 
-// TestAutoRestore_CanceledMidway：retry goroutine 在 ctx 取消时短路退出，不再继续
-// backoff 直到 exhausted。
+// TestAutoRestore_CanceledMidway：retry goroutine 在 ctx 取消时短路退出，且把
+// outcome=="canceled" 持久化（T-053 修复 canceled 分支用 detached ctx 后）。
 //
-// 注意（重要）：retryRestoreLoop 的 canceled 分支调 persistAutoRestoreLast(ctx,...)，
-// 而此处 ctx 正是已被取消的 rootCtx —— persistAutoRestoreLast 内部 derive 的 ctx 立即
-// 失效，KVSet 必失败。因此 canceled outcome **不会**落 KV（见返回报告中的"疑似 bug"）。
-// 故本测试不去断言 KV 里出现 canceled（那是 flaky 且依赖 buggy 路径），而是断言取消
-// 短路生效：用一个很短的 backoff（25ms），取消后给足窗口（1s），确认 **绝不出现**
-// exhausted/ok —— 若取消被忽略，循环会在 25ms 后写 exhausted，断言即被证伪。
+// 用很长的 backoff（10s）确保 select 里 ctx.Done() 先于 time.After 命中 → 进 canceled 分支；
+// 取消后断言：(1) 最终 KV 出现 outcome=="canceled"（T-053 修复前因用已取消 ctx 持久化而
+// 永远落不进，是 F-canceled bug）；(2) 绝不出现 exhausted/ok（取消真的短路了循环）。
 func TestAutoRestore_CanceledMidway(t *testing.T) {
-	arSetBackoff(t, []time.Duration{25 * time.Millisecond})
+	arSetBackoff(t, []time.Duration{10 * time.Second}) // 长 backoff：取消必先于 time.After 命中
 	store := arOpenStore(t, "frpc")
 	bin := arNonExecBinary(t)
 	loc := &arFakeLocator{frpcPath: bin}
@@ -229,21 +226,27 @@ func TestAutoRestore_CanceledMidway(t *testing.T) {
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	// first attempt 同步失败后启 retry goroutine（会进 25ms backoff sleep）。
+	// first attempt 同步失败后启 retry goroutine（进 10s backoff 的 select）。
 	autoRestoreProcs(ctx, store, pm, loc, discardLogger(), cfgPaths)
-	cancel() // 取消应让 retry goroutine 从 select 短路退出，不再进入第二轮。
+	cancel() // 取消让 retry goroutine 从 select 的 <-ctx.Done() 短路退出 + 持久化 canceled。
 
-	// 给足 1s 窗口（远大于 25ms backoff）：若取消被忽略，会写 exhausted。
-	deadline := time.Now().Add(1 * time.Second)
+	// 正向断言：canceled outcome 必须落 KV（T-053 反向证伪 —— 修复前此处会超时）。
+	run := arPollLastRun(t, store, "frpc", 2*time.Second, "canceled")
+	if run.Outcome != "canceled" {
+		t.Fatalf("outcome=%q want canceled", run.Outcome)
+	}
+
+	// 再守门：给足窗口确认绝不被升级成 exhausted/ok（取消真的短路了循环，没继续 retry）。
+	deadline := time.Now().Add(300 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		gctx, gcancel := context.WithTimeout(context.Background(), time.Second)
 		v, ok, err := store.KVGet(gctx, "system.autorestore.frpc")
 		gcancel()
 		if err == nil && ok && v != "" {
-			var run AutoRestoreLastRun
-			if json.Unmarshal([]byte(v), &run) == nil {
-				if run.Outcome == "exhausted" || run.Outcome == "ok" {
-					t.Fatalf("取消应短路 retry 循环，却写出了 outcome=%q（取消被忽略）", run.Outcome)
+			var r AutoRestoreLastRun
+			if json.Unmarshal([]byte(v), &r) == nil {
+				if r.Outcome == "exhausted" || r.Outcome == "ok" {
+					t.Fatalf("取消应短路 retry 循环，却写出了 outcome=%q", r.Outcome)
 				}
 			}
 		}

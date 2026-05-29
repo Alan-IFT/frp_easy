@@ -41,6 +41,9 @@
 | T-048 | frontend-consistency-cleanup | 删 UploadBinButton 重复 formatBytes（复用 utils）；formatTime 统一本地化（含改快照测试）；ServiceStatusCard 加载/失败文案改可读语义色；Dashboard 日志链接改 router.push；Dashboard n-grid 加 responsive；PublicIpDetector 用 extractErrorMessage；进程操作文案统一客户端/服务端。 | full | T-047 | pending |
 | T-051 | frontend-test-coverage | proxies/wizard store 测试；useProxyForm type 切换副作用测试；useServiceStatus/statusUtils/useLogLevelFilter 测试；api/client.ts 测试。 | full | T-048 | pending |
 | T-049 | docs-contract-drift-fix | openapi.yaml 补 service-status 路由 + ServiceStatus schema；dev-map 树补 svcprobe / web/src/utils + 修路由条数；README openapi 措辞对齐；project-status/architecture.html 加时效声明。 | full | T-051 | pending |
+| T-053 | autorestore-canceled-persist-fix | （T-050 测试覆盖中发现的 bug）retryRestoreLoop 的 canceled 分支用已取消 ctx 持久化 → "canceled" outcome 永远落不进 kv、UI service-status 看不到。改用 detached context.Background() 做这条 best-effort 最终写。升级 TestAutoRestore_CanceledMidway 正向断言 canceled 必落 kv。 | full | T-050 | pending |
+
+> 注：T-053 是 batch 执行中 T-050 加测试时**发现并修复**的真实 bug（"为可测性细看代码"暴露缺陷），按 harness-batch"发现新工作即更新计划"原则补入。
 
 **Topo order**：T-043 → T-044 → T-052 → T-045 → T-046 → T-050 → T-047 → T-048 → T-051 → T-049（sequential；先恢复绿+加固闸门+解锁全量验证，再后端，再前端，文档收尾反映最终现实）
 

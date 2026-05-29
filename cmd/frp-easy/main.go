@@ -637,7 +637,11 @@ func retryRestoreLoop(ctx context.Context, store *storage.Store, pm *procmgr.Man
 		select {
 		case <-ctx.Done():
 			logger.Info("auto-restore canceled", "kind", kind)
-			persistAutoRestoreLast(ctx, store, logger, AutoRestoreLastRun{
+			// 【T-053】用 detached context.Background()（而非已取消的 ctx）做这条最终
+			// best-effort 持久化：否则 persistAutoRestoreLast 内部 derive 的 5s 子 ctx 一出生
+			// 就因父 ctx 已取消而失效，KVSet 必报 context.Canceled，"canceled" outcome 永远
+			// 落不进 kv，UI 的 service-status 看不到。persistAutoRestoreLast 自带 5s 超时兜底。
+			persistAutoRestoreLast(context.Background(), store, logger, AutoRestoreLastRun{
 				Kind: kind, Timestamp: time.Now().UTC(), Outcome: "canceled", Attempts: attempts,
 			})
 			return

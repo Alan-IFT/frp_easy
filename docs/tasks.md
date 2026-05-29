@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-053 | autorestore-canceled-persist-fix | DELIVERED | 2026-05-30 | `docs/features/autorestore-canceled-persist-fix/`（pending archive；batch project-optimization-2026-05；修 retryRestoreLoop canceled 分支用已取消 ctx 持久化→canceled outcome 落不进 kv；改 detached ctx + 升级测试正向断言；verify_all PASS 32/0/0） |
 | T-050 | backend-test-coverage | DELIVERED | 2026-05-30 | `docs/features/backend-test-coverage/`（pending archive；batch project-optimization-2026-05；validate.go/procmgr 终态断言/autoRestore/svcprobe/procmgr 子进程生命周期 +21 测试；go_tests 287→308；发现 retryRestoreLoop canceled-persist bug→T-053；verify_all PASS 32/0/0） |
 | T-048 | frontend-consistency-cleanup | DELIVERED | 2026-05-30 | `docs/features/frontend-consistency-cleanup/`（pending archive；batch project-optimization-2026-05；删重复 formatBytes + formatTime 本地化统一 + 可读语义色 + router.push + 响应式 + extractErrorMessage + 进程文案统一；frontend_tests 327→342；verify_all PASS 32/0/0） |
 | T-047 | frontend-honest-states | DELIVERED | 2026-05-30 | `docs/features/frontend-honest-states/`（pending archive；batch project-optimization-2026-05；Server/Client 加载+错误三态 + Proxies 失败/空区分 + Dashboard 开关不静默 + Server dashboard 校验；frontend_tests 297→327；verify_all PASS 32/0/0） |
