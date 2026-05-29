@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -94,4 +95,24 @@ func TestSecurityHeaders_DirectMiddleware(t *testing.T) {
 	resp := rec.Result()
 	defer resp.Body.Close()
 	assertSecurityHeaders(t, resp, "direct middleware test")
+}
+
+// TestRandomID_UniqueAndHex 验证 reqID 唯一且为 hex（T-046）。10000 次紧循环：
+// 旧实现 time.Now().UnixNano() 在同一纳秒会碰撞，crypto/rand 不会。这是 F-11 的反向证伪。
+func TestRandomID_UniqueAndHex(t *testing.T) {
+	const n = 10000
+	seen := make(map[string]bool, n)
+	for i := 0; i < n; i++ {
+		id := randomID()
+		if len(id) != 16 {
+			t.Fatalf("randomID 长度 = %d，期望 16 hex 字符：%q", len(id), id)
+		}
+		if _, err := hex.DecodeString(id); err != nil {
+			t.Fatalf("randomID 非 hex：%q（%v）", id, err)
+		}
+		if seen[id] {
+			t.Fatalf("randomID 碰撞于 i=%d：%q（旧纳秒实现会在此失败）", i, id)
+		}
+		seen[id] = true
+	}
 }

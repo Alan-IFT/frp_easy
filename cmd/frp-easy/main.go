@@ -330,6 +330,9 @@ func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 	rootCtx, rootCancel := context.WithCancel(context.Background())
 	defer rootCancel()
 	autoRestoreProcs(rootCtx, store, pm, loc, logger, map[string]string{"frpc": frpcTOML, "frps": frpsTOML})
+	// 【T-046】后台定期清理过期 session，防 sessions 表无界增长（GetSession 刻意不删
+	// 过期行以避免每次读引入写；此循环承接清理职责）。随 rootCtx 取消。
+	go purgeSessionsLoop(rootCtx, store, logger)
 	ready.Store(true)
 	logger.Info("ready gate opened")
 
@@ -521,6 +524,39 @@ func ensureFrpcAdminCreds(store *storage.Store, logger *slog.Logger) frpcAdminCr
 //   - 任何分支都 persistAutoRestoreLast 写 kv `system.autorestore.last`，
 //     让 GET /api/v1/system/service-status 能展示给用户。
 //
+// sessionPurgeInterval 是过期 session 清理周期。包级 var 便于测试覆盖为短间隔。
+var sessionPurgeInterval = time.Hour
+
+// purgeExpiredSessionsOnce 清理一次过期 session 行（带 5s 超时，错误仅告警不致命）。
+func purgeExpiredSessionsOnce(ctx context.Context, store *storage.Store, logger *slog.Logger) {
+	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	n, err := store.PurgeExpiredSessions(pctx)
+	if err != nil {
+		logger.Warn("session purge failed", "err", err)
+		return
+	}
+	if n > 0 {
+		logger.Info("session purge", "removed", n)
+	}
+}
+
+// purgeSessionsLoop 周期性清理过期 session，防 sessions 表无界增长。
+// 启动时立即清一次，之后每 sessionPurgeInterval 一次；随 ctx 取消退出（无 goroutine 泄漏）。
+func purgeSessionsLoop(ctx context.Context, store *storage.Store, logger *slog.Logger) {
+	purgeExpiredSessionsOnce(ctx, store, logger)
+	ticker := time.NewTicker(sessionPurgeInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			purgeExpiredSessionsOnce(ctx, store, logger)
+		}
+	}
+}
+
 // rootCtx 用于让 retry goroutine 在主进程 SIGTERM / stopCh 时及时退出。
 func autoRestoreProcs(rootCtx context.Context, store *storage.Store, pm *procmgr.Manager, loc binloc.Locator, logger *slog.Logger, configPaths map[string]string) {
 	missing := map[string]bool{}

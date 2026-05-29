@@ -3,6 +3,8 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -84,9 +86,16 @@ func RequestID() func(http.Handler) http.Handler {
 	}
 }
 
-// randomID 用 time.Now().UnixNano() 简单生成，请求级别足够。
+// randomID 生成请求关联用的唯一 ID。用 crypto/rand 8 字节 hex（16 字符），
+// 避免旧实现 time.Now().UnixNano() 在高并发 / 低精度时钟下同一纳秒碰撞 ——
+// reqID 的全部价值就是唯一关联日志，碰撞会让排障失真。
+// crypto/rand 极少失败；万一失败退回纳秒时间戳（单机日志关联仍够用）。
 func randomID() string {
-	return time.Now().UTC().Format("20060102T150405.000000000")
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return time.Now().UTC().Format("20060102T150405.000000000")
+	}
+	return hex.EncodeToString(b[:])
 }
 
 // 【C-5】Logger 中间件 + 脱敏过滤器。

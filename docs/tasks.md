@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-046 | session-purge-and-requestid | DELIVERED | 2026-05-30 | `docs/features/session-purge-and-requestid/`（pending archive；batch project-optimization-2026-05；过期 session 定时清理 loop + RequestID crypto/rand + 3 新测试；go_tests 284→287；verify_all PASS 32/0/0） |
 | T-045 | backend-deadcode-cleanup | DELIVERED | 2026-05-30 | `docs/features/backend-deadcode-cleanup/`（pending archive；batch project-optimization-2026-05；删 procmgr 无人订阅发布订阅+死函数+var _ hack 净~90 行；go_tests 285→284；verify_all PASS 32/0/0） |
 | T-052 | e2e-decouple-port | DELIVERED | 2026-05-30 | `docs/features/e2e-decouple-port/`（pending archive；batch project-optimization-2026-05；e2e 改独立端口 17800 + webServer.env 注入，根治 C.1 假性失败；全量 verify_all 首次本机全绿 PASS 32/0/0） |
 | T-044 | verify-gate-hardening | DELIVERED | 2026-05-30 | `docs/features/verify-gate-hardening/`（pending archive；batch project-optimization-2026-05；.ps1 B.3 真查退出码 + B.4 双实现真计数 + baseline 刷新 285/297/582 + E.6 三报告标题归一化；基线回 PASS 31/0/0） |
