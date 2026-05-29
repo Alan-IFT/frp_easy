@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -148,6 +147,3 @@ func (c *Client) applyAuth(req *http.Request) {
 // ErrUnauthorized 给上层一个可类型断言的错误码。当前 Reload/Status 仅返回
 // 通用错误带 status 文本；如调用方需要精确判别，可后续扩展。
 var ErrUnauthorized = errors.New("frpcadmin: unauthorized")
-
-// helper: 给 PowerShell URL 形式调试用，保留以备扩展。
-var _ = strconv.Itoa

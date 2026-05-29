@@ -150,14 +150,6 @@ func (h *handlers) applyConfigBestEffort(ctx context.Context, kind string) {
 	}
 }
 
-// maybeApplyConfig 为向后兼容保留（当前使用 applyConfigBestEffort）。
-func (h *handlers) maybeApplyConfig(kind string) {
-	if h.deps.ProcMgr == nil {
-		return
-	}
-	_ = h.deps.ProcMgr.ApplyConfigChange(kind)
-}
-
 // buildProxyForInsert 把 ProxyInput 转 storage.Proxy（新建）。
 func buildProxyForInsert(in *ProxyInput) (*storage.Proxy, string, error) {
 	field, err := validateProxyInput(in)

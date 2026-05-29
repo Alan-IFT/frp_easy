@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/frp-easy/frp-easy/internal/frpconf"
-	"github.com/frp-easy/frp-easy/internal/storage"
 )
 
 // renderAndApply 从 DB 读取配置，生成 FRP TOML 写入文件，
@@ -160,16 +159,4 @@ func (h *handlers) renderAndApplyFrps(ctx context.Context) error {
 		_ = h.deps.ProcMgr.ApplyConfigChange("frps")
 	}
 	return nil
-}
-
-// proxyToFrpconf 将 storage.Proxy 转换为 frpconf.ProxyInput 的工具函数。
-func proxyToFrpconf(p storage.Proxy) frpconf.ProxyInput {
-	return frpconf.ProxyInput{
-		Name:          p.Name,
-		Type:          p.Type,
-		LocalIP:       p.LocalIP,
-		LocalPort:     p.LocalPort,
-		RemotePort:    p.RemotePort,
-		CustomDomains: p.CustomDomains,
-	}
 }

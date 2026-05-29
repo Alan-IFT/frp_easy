@@ -5,7 +5,6 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // fakeLocator 不返回任何 binary。
@@ -97,22 +96,6 @@ func TestApplyConfigChange_NotRunning(t *testing.T) {
 	m := New(Config{Locator: &fakeLocator{}})
 	if err := m.ApplyConfigChange("frpc"); err != nil {
 		t.Errorf("expected no-op nil, got %v", err)
-	}
-}
-
-func TestSubscribe_NonBlockingDrop(t *testing.T) {
-	m := New(Config{Locator: &fakeLocator{}})
-	ch := m.Subscribe()
-	// 不消费；emit 多次不应阻塞。
-	for i := 0; i < 100; i++ {
-		m.emit(StatusEvent{Kind: "frpc", Info: ProcessInfo{State: StateStarting, ChangedAt: time.Now()}})
-	}
-	// 通道里至少有 1 个事件（cap=16 满后丢老的）。
-	select {
-	case <-ch:
-		// ok
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("expected at least one event in subscriber channel")
 	}
 }
 

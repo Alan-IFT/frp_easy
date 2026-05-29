@@ -2,7 +2,7 @@
 //
 // 设计契约见 02 §3.5、§6.4：
 //   - 每个 kind（frpc / frps）一个 supervisor goroutine：fork → tee
-//     stdout/stderr 到日志文件 → 监听退出 → 广播状态事件。
+//     stdout/stderr 到日志文件 → 监听退出 → 更新状态。
 //   - 启动 = 写 TOML（调用方负责）→ fork → 等 3s 确认未退出 → state=running。
 //   - 配置变更 frpc = frpcadmin.Reload(5s) → 失败 → Restart。
 //   - 配置变更 frps = 始终 Restart。
@@ -16,13 +16,11 @@ package procmgr
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -48,12 +46,6 @@ type ProcessInfo struct {
 	ChangedAt time.Time `json:"changedAt"`
 }
 
-// StatusEvent 是状态广播事件。
-type StatusEvent struct {
-	Kind string
-	Info ProcessInfo
-}
-
 // Locator 抽象出二进制定位（避免对 binloc 包硬依赖）。
 // binloc.Locator 实现了同名方法。
 type Locator interface {
@@ -76,9 +68,6 @@ type Manager struct {
 
 	mu        sync.Mutex
 	processes map[string]*processState
-
-	subMu       sync.Mutex
-	subscribers []chan StatusEvent
 }
 
 type processState struct {
@@ -111,36 +100,6 @@ func New(c Config) *Manager {
 		}
 	}
 	return m
-}
-
-// Subscribe 返回一个事件通道（cap=16，慢消费者旧事件被丢弃）。
-func (m *Manager) Subscribe() <-chan StatusEvent {
-	ch := make(chan StatusEvent, 16)
-	m.subMu.Lock()
-	m.subscribers = append(m.subscribers, ch)
-	m.subMu.Unlock()
-	return ch
-}
-
-func (m *Manager) emit(ev StatusEvent) {
-	m.subMu.Lock()
-	subs := append([]chan StatusEvent(nil), m.subscribers...)
-	m.subMu.Unlock()
-	for _, ch := range subs {
-		select {
-		case ch <- ev:
-		default:
-			// 慢消费者：丢老事件腾一个槽再塞。
-			select {
-			case <-ch:
-			default:
-			}
-			select {
-			case ch <- ev:
-			default:
-			}
-		}
-	}
 }
 
 // Status 返回当前 kind 的 ProcessInfo 快照。
@@ -187,7 +146,6 @@ func (m *Manager) Start(kind string) (ProcessInfo, error) {
 	// 第一段（IIFE，持锁）输出到这些局部变量；第二段（解锁后）据此决策。
 	var (
 		infoSnapshot ProcessInfo
-		shouldEmit   bool // cmd.Start 成功 / cmd.Start 失败 均 emit；早返回（idempotent / 校验失败）不 emit
 		startErr     error
 		successPath  bool // 仅 cmd.Start 成功路径走 supervise + waitUntilStable
 		startCmd     *exec.Cmd
@@ -246,7 +204,6 @@ func (m *Manager) Start(kind string) (ProcessInfo, error) {
 			ps.info.LastErr = err.Error()
 			ps.info.ChangedAt = time.Now().UTC()
 			infoSnapshot = ps.info
-			shouldEmit = true
 			startErr = fmt.Errorf("procmgr.Start(%s): %w", kind, err)
 			return
 		}
@@ -261,17 +218,13 @@ func (m *Manager) Start(kind string) (ProcessInfo, error) {
 		ps.info.LastErr = ""
 		ps.info.ChangedAt = time.Now().UTC()
 		infoSnapshot = ps.info
-		shouldEmit = true
 		successPath = true
 		startCmd = cmd
 		startCtx = ctx
 		startDone = doneCh
 	}()
 
-	// 第二段（已解锁）：emit + supervise + waitUntilStable
-	if shouldEmit {
-		m.emit(StatusEvent{Kind: kind, Info: infoSnapshot})
-	}
+	// 第二段（已解锁）：supervise + waitUntilStable
 	if startErr != nil {
 		return infoSnapshot, startErr
 	}
@@ -309,7 +262,6 @@ func (m *Manager) Stop(kind string) (ProcessInfo, error) {
 	doneCh := ps.doneCh
 	cancel := ps.cancel
 	m.mu.Unlock()
-	m.emit(StatusEvent{Kind: kind, Info: info})
 
 	platformKill(cmd)
 
@@ -339,7 +291,6 @@ func (m *Manager) Stop(kind string) (ProcessInfo, error) {
 	ps.doneCh = nil
 	info = ps.info
 	m.mu.Unlock()
-	m.emit(StatusEvent{Kind: kind, Info: info})
 	return info, nil
 }
 
@@ -480,12 +431,10 @@ func (m *Manager) supervise(ctx context.Context, kind string, cmd *exec.Cmd,
 	ps.info.PID = 0
 	ps.info.LastErr = lastErr
 	ps.info.ChangedAt = time.Now().UTC()
-	info := ps.info
 	ps.cmd = nil
 	ps.cancel = nil
 	ps.doneCh = nil
 	m.mu.Unlock()
-	m.emit(StatusEvent{Kind: kind, Info: info})
 }
 
 // waitUntilStable 等 d 时间后看 state：仍 starting → 推到 running 并返回 nil；
@@ -508,9 +457,7 @@ func (m *Manager) waitUntilStable(kind string, d time.Duration) error {
 	if ps.info.State == StateStarting {
 		ps.info.State = StateRunning
 		ps.info.ChangedAt = time.Now().UTC()
-		info := ps.info
 		m.mu.Unlock()
-		m.emit(StatusEvent{Kind: kind, Info: info})
 		return nil
 	}
 	st := ps.info.State
@@ -569,8 +516,3 @@ func (r *ringBuffer) JoinTail() string {
 // applyPlatformAttrs 由 OS 特化文件实现。
 // platformKill 同上。
 
-// 让导入 runtime 在两个平台文件之外也保留，便于未来扩展。
-var _ = runtime.GOOS
-
-// 兜底导出：让 errors 不被误删（reserve for future error wrapping）。
-var _ = errors.New
