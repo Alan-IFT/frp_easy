@@ -44,6 +44,7 @@ import { ref } from 'vue'
 import { NButton, NProgress, NSpace, NTooltip, useMessage } from 'naive-ui'
 import { apiUploadBin } from '../api/system'
 import { extractErrorMessage } from '../api/client'
+import { formatBytes } from '../utils/format'
 
 const props = withDefaults(defineProps<{
   kind: 'frpc' | 'frps'
@@ -108,11 +109,5 @@ async function handleFileChange(evt: Event) {
     uploading.value = false
     progress.value = 0
   }
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`
-  return `${(n / 1024 / 1024).toFixed(1)} MiB`
 }
 </script>

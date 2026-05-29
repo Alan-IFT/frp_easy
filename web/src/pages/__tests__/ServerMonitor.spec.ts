@@ -389,11 +389,22 @@ describe('ServerMonitor — formatTime（BC-3）', () => {
     expect(t.formatTime('0001-01-01 00:00:00')).toBe('—')
   })
 
-  it('正常字符串 → 原样返回', async () => {
+  // T-048 C5：formatTime 现在统一本地化（消除 ServerMonitor 裸 ISO 与 Dashboard 本地化的跨页不一致）。
+  it('正常字符串 → 本地化（含年份，不再原样裸返回）', async () => {
     const w = mountPage()
     await settle(8)
     const t = getTesting(w)
-    expect(t.formatTime('2025-01-15 10:23:45')).toBe('2025-01-15 10:23:45')
+    const out = t.formatTime('2025-01-15 10:23:45')
+    expect(out).toContain('2025')
+    expect(out).not.toBe('—')
+  })
+
+  it('ISO 字符串 → 本地化（不外泄裸 "T...Z" ISO）', async () => {
+    const w = mountPage()
+    await settle(8)
+    const t = getTesting(w)
+    const out = t.formatTime('2026-05-28T01:00:00Z')
+    expect(out).not.toMatch(/T\d{2}:\d{2}:\d{2}Z/)
   })
 })
 

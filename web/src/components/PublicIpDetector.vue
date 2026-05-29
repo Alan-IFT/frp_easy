@@ -42,6 +42,7 @@
 import { ref } from 'vue'
 import { NButton, NAlert } from 'naive-ui'
 import { apiGetPublicIP } from '../api/system'
+import { extractErrorMessage } from '../api/client'
 import type { PublicIPResponse } from '../types'
 
 const loading = ref(false)
@@ -53,8 +54,9 @@ async function detect() {
   result.value = null
   try {
     result.value = await apiGetPublicIP()
-  } catch {
-    result.value = { error: '请求失败，请稍后重试' }
+  } catch (e) {
+    // A4：透传后端精确原因（与全站 extractErrorMessage 一致），无结构化消息时回落友好文案。
+    result.value = { error: extractErrorMessage(e, '请求失败，请稍后重试') }
   } finally {
     loading.value = false
   }

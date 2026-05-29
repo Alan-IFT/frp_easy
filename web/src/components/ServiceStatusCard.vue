@@ -31,12 +31,12 @@
       </n-button>
     </template>
 
-    <div v-if="loading && !status" style="color: rgba(255,255,255,0.6); font-size: 13px">
+    <n-text v-if="loading && !status" depth="3" style="font-size: 13px">
       加载中…
-    </div>
-    <div v-else-if="error" style="color: #f00; font-size: 13px">
+    </n-text>
+    <n-text v-else-if="error" type="error" style="font-size: 13px">
       加载失败：{{ error }}
-    </div>
+    </n-text>
     <div v-else-if="status">
       <n-descriptions :column="2" size="small" label-placement="left" bordered>
         <n-descriptions-item label="监管方式">
@@ -80,13 +80,14 @@
               <n-tag :type="outcomeTagType(run.outcome)" size="tiny" style="margin-left: 6px">
                 {{ outcomeLabel(run.outcome) }}
               </n-tag>
-              <span style="margin-left: 6px; color: rgba(255,255,255,0.5)">
+              <n-text depth="3" style="margin-left: 6px">
                 {{ formatTime(run.timestamp) }}
-              </span>
+              </n-text>
             </div>
-            <div v-if="run.attempts.length > 0" style="margin-top: 4px; padding-left: 16px; font-family: monospace; font-size: 11px; color: rgba(255,255,255,0.7)">
+            <div v-if="run.attempts.length > 0" style="margin-top: 4px; padding-left: 16px; font-family: monospace; font-size: 11px">
               <div v-for="a in run.attempts" :key="a.index">
-                #{{ a.index }} {{ a.ok ? '✓' : '✗' }} {{ a.reason || '' }} <span style="color: rgba(255,255,255,0.4)">{{ formatTime(a.at) }}</span>
+                <n-text depth="2">#{{ a.index }} {{ a.ok ? '✓' : '✗' }} {{ a.reason || '' }}</n-text>
+                <n-text depth="3" style="margin-left: 4px">{{ formatTime(a.at) }}</n-text>
               </div>
             </div>
           </div>
@@ -103,18 +104,18 @@
               关机/重启后远程连接将不会自动恢复，需手动启动；
               注册为系统服务后，<strong>设备开机即可远程使用，不依赖任何用户登录</strong>。
             </p>
-            <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 4px; margin: 6px 0">
-              <div style="color: rgba(255,255,255,0.7); margin-bottom: 4px; font-size: 12px">Linux：</div>
+            <div :style="cmdBlockStyle">
+              <n-text depth="2" tag="div" style="margin-bottom: 4px; font-size: 12px">Linux：</n-text>
               <code style="font-size: 12px">sudo /opt/frp-easy/scripts/install-service.sh</code>
             </div>
-            <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 4px; margin: 6px 0">
-              <div style="color: rgba(255,255,255,0.7); margin-bottom: 4px; font-size: 12px">Windows（管理员 PowerShell）：</div>
+            <div :style="cmdBlockStyle">
+              <n-text depth="2" tag="div" style="margin-bottom: 4px; font-size: 12px">Windows（管理员 PowerShell）：</n-text>
               <code style="font-size: 12px">&amp; "C:\Program Files\frp-easy\scripts\install-service.ps1"</code>
             </div>
-            <p style="margin: 6px 0 0; font-size: 12px; color: rgba(255,255,255,0.6)">
+            <n-text depth="3" tag="p" style="margin: 6px 0 0; font-size: 12px">
               注册成功后脚本会自动跑自检（systemctl is-active+is-enabled / sc.exe qc+query），
               失败 exit 4 立即可见。本卡片"刷新"按钮可重新探测。
-            </p>
+            </n-text>
           </div>
         </n-collapse-item>
       </n-collapse>
@@ -126,12 +127,22 @@
 import { computed } from 'vue'
 import {
   NCard, NDescriptions, NDescriptionsItem, NTag, NText,
-  NCollapse, NCollapseItem, NButton,
+  NCollapse, NCollapseItem, NButton, useThemeVars,
 } from 'naive-ui'
 import { useServiceStatus } from '../composables/useServiceStatus'
+import { formatTime } from '../utils/format'
 import type { AutoRestoreLastRun } from '../types'
 
 const { status, loading, error, refresh, needsFix } = useServiceStatus()
+
+// C2：命令块背景用主题色 code 背景，避免在浅色主题上 rgba(0,0,0,0.3) 偏暗/对比失衡。
+const themeVars = useThemeVars()
+const cmdBlockStyle = computed(() => ({
+  background: themeVars.value.codeColor,
+  padding: '8px 12px',
+  borderRadius: '4px',
+  margin: '6px 0',
+}))
 
 const supervisorLabel = computed(() => {
   switch (status.value?.supervisor) {
@@ -166,15 +177,6 @@ function outcomeTagType(outcome: string): 'success' | 'warning' | 'error' | 'def
   if (outcome === 'ok') return 'success'
   if (outcome === 'exhausted' || outcome === 'binary-missing' || outcome === 'config-missing') return 'error'
   return 'warning'
-}
-
-function formatTime(rfc3339: string): string {
-  try {
-    const d = new Date(rfc3339)
-    return d.toLocaleString('zh-CN', { hour12: false })
-  } catch {
-    return rfc3339
-  }
 }
 </script>
 

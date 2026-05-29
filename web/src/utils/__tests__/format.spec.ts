@@ -86,11 +86,30 @@ describe('formatTime', () => {
     expect(formatTime('0001-99')).toBe('—')
   })
 
-  it('正常字符串原样返回', () => {
-    expect(formatTime('2025-01-15 10:23:45')).toBe('2025-01-15 10:23:45')
+  // T-048 C5：formatTime 现在统一本地化（toLocaleString('zh-CN', { hour12:false })），
+  // 不再原样返回裸字符串。断言用稳定特征（含年份、不含裸 ISO 的 'T...Z'）避免时区脆弱。
+  it('本地字符串 → 本地化（含年份，不再原样返回）', () => {
+    const out = formatTime('2025-01-15 10:23:45')
+    expect(out).toContain('2025')
+    expect(out).not.toBe('—')
   })
 
-  it('正常 ISO 字符串原样返回', () => {
-    expect(formatTime('2026-05-28T01:00:00Z')).toBe('2026-05-28T01:00:00Z')
+  it('ISO 字符串 → 本地化（不再外泄裸 "T...Z" ISO）', () => {
+    const out = formatTime('2026-05-28T01:00:00Z')
+    expect(out).toContain('2026')
+    // 关键对齐：不得把裸 ISO（含 'T' 和 'Z'）直接展示给用户
+    expect(out).not.toMatch(/T\d{2}:\d{2}:\d{2}Z/)
+  })
+
+  it('无法解析的字符串（防御）→ "—"（不外泄 "Invalid Date"）', () => {
+    expect(formatTime('not-a-real-date')).toBe('—')
+    expect(formatTime('hello world')).toBe('—')
+  })
+
+  it('固定时间戳 → 稳定本地化（用 Date 构造规避时区脆弱）', () => {
+    // 用一个本地构造的字符串，断言输出 = JS 自身的 toLocaleString（同一引擎/时区）
+    const iso = '2026-05-28T01:00:00Z'
+    const expected = new Date(iso).toLocaleString('zh-CN', { hour12: false })
+    expect(formatTime(iso)).toBe(expected)
   })
 })

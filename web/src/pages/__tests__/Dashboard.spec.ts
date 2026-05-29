@@ -79,8 +79,15 @@ vi.mock('naive-ui', async (importOriginal) => {
   }
 })
 
+// T-048 D4：vue-router useRouter 桩 —— "查看完整日志"改 router.push（不再 href 整页刷新）。
+const pushSpy = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: pushSpy }),
+}))
+
 import Dashboard from '../Dashboard.vue'
 import * as modeApi from '../../api/mode'
+import * as procApi from '../../api/proc'
 
 const getModeMock = vi.mocked(modeApi.apiGetMode)
 
@@ -91,6 +98,13 @@ interface TestingHandle {
   fetchMode: () => Promise<void>
   retryFetchMode: () => void
   handleModeToggle: (kind: 'frpc' | 'frps', enabled: boolean) => Promise<void>
+  // T-048 E1 / D4
+  labelOf: (kind: string) => string
+  actionResultMsg: (kind: string, state: string, fallbackVerb: string) => string
+  handleStart: (kind: string) => Promise<void>
+  handleStop: (kind: string) => Promise<void>
+  handleRestart: (kind: string) => Promise<void>
+  router: { push: (p: string) => void }
 }
 
 function mountPage() {
@@ -119,8 +133,18 @@ async function settle(n = 6): Promise<void> {
 beforeEach(() => {
   setActivePinia(createPinia())
   getModeMock.mockReset()
+  pushSpy.mockReset()
   Object.values(messageSpies).forEach((s) => s.mockReset())
   getModeMock.mockResolvedValue({ frpc: true, frps: false })
+  // T-048：重置 proc 桩并恢复默认 stopped 状态，避免上一用例的 mockResolvedValue 跨用例泄漏
+  vi.mocked(procApi.apiGetProcStatus).mockReset()
+  vi.mocked(procApi.apiStartProc).mockReset()
+  vi.mocked(procApi.apiStopProc).mockReset()
+  vi.mocked(procApi.apiRestartProc).mockReset()
+  vi.mocked(procApi.apiGetProcStatus).mockResolvedValue({
+    frpc: { kind: 'frpc', state: 'stopped', pid: 0, lastErr: '', changedAt: '' },
+    frps: { kind: 'frps', state: 'stopped', pid: 0, lastErr: '', changedAt: '' },
+  })
 })
 
 afterEach(() => {
@@ -181,6 +205,83 @@ describe('Dashboard.vue — fetchMode 失败不静默（A2）', () => {
   })
 })
 
+// T-048 E1：进程操作文案统一命名（kindLabel）+ 依据真实新状态措辞。
+describe('Dashboard.vue — 进程操作文案统一（E1）', () => {
+  it('labelOf 把裸 kind 映射为"客户端 frpc / 服务端 frps"', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.labelOf('frpc')).toBe('客户端 frpc')
+    expect(t.labelOf('frps')).toBe('服务端 frps')
+    // 未知 kind 回落原值（不抛）
+    expect(t.labelOf('unknown')).toBe('unknown')
+  })
+
+  it('actionResultMsg 用真实 state 给出明确动词（running→已启动 / stopped→已停止）', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.actionResultMsg('frpc', 'running', '已启动')).toBe('客户端 frpc已启动')
+    expect(t.actionResultMsg('frps', 'stopped', '已停止')).toBe('服务端 frps已停止')
+    expect(t.actionResultMsg('frpc', 'error', '已启动')).toBe('客户端 frpc启动失败')
+  })
+
+  it('handleStart 成功 → success 文案含"客户端 frpc"且不含裸 "frpc 启动指令已发送"', async () => {
+    vi.mocked(procApi.apiStartProc).mockResolvedValueOnce({
+      kind: 'frpc', state: 'running', pid: 123, lastErr: '', changedAt: '2026-05-28T01:00:00Z',
+    })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleStart('frpc')
+    expect(messageSpies.success).toHaveBeenCalledWith('客户端 frpc已启动')
+    // 不能再出现旧的裸标识 + 含糊"指令已发送"
+    const allMsgs = messageSpies.success.mock.calls.flat().join('|')
+    expect(allMsgs).not.toContain('frpc 启动指令已发送')
+  })
+
+  it('handleStop 成功 → 文案"服务端 frps已停止"（按 store 返回 state）', async () => {
+    vi.mocked(procApi.apiStopProc).mockResolvedValueOnce({
+      kind: 'frps', state: 'stopped', pid: 0, lastErr: '', changedAt: '2026-05-28T01:00:00Z',
+    })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleStop('frps')
+    expect(messageSpies.success).toHaveBeenCalledWith('服务端 frps已停止')
+  })
+
+  it('handleStart 失败 → error 文案统一命名"客户端 frpc 启动失败"', async () => {
+    vi.mocked(procApi.apiStartProc).mockRejectedValueOnce(apiError('端口被占用'))
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleStart('frpc')
+    // 透传后端精确原因（extractErrorMessage 走结构化分支）
+    expect(messageSpies.error).toHaveBeenCalledWith('端口被占用')
+  })
+})
+
+// T-048 D4：查看完整日志改 router.push（SPA 内跳转，不丢 Pinia 状态）。
+describe('Dashboard.vue — 日志链接 router.push（D4）', () => {
+  it('frpc error 态点"查看完整日志"→ router.push("/logs/frpc")，模板不再含 href', async () => {
+    vi.mocked(procApi.apiGetProcStatus).mockResolvedValue({
+      frpc: { kind: 'frpc', state: 'error', pid: 0, lastErr: 'boom', changedAt: '2026-05-28T01:00:00Z' },
+      frps: { kind: 'frps', state: 'stopped', pid: 0, lastErr: '', changedAt: '' },
+    })
+    const w = mountPage()
+    await settle()
+    // 找到含"查看完整日志"文案的按钮并点击
+    const btns = w.findAll('button')
+    const logBtn = btns.find((b) => b.text().includes('查看完整日志'))
+    expect(logBtn).toBeTruthy()
+    await logBtn!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/logs/frpc')
+    // D4 关键对齐：不再用 <a href> 触发整页刷新
+    expect(w.find('a[href="/logs/frpc"]').exists()).toBe(false)
+  })
+})
+
 // ## Adversarial tests
 describe('Dashboard.vue — Adversarial', () => {
   it('获取失败时 UI 不撒谎：必有可见失败信号（modeFetchFailed=true 或 warning 被调用）', async () => {
@@ -204,5 +305,33 @@ describe('Dashboard.vue — Adversarial', () => {
     const t = getTesting(w)
     expect(t.modeFetchFailed.value).toBe(false)
     expect(w.text()).not.toContain('刷新状态')
+  })
+
+  // E1 反向：start 返回非预期 state（如 starting）也不能漏措辞 / 不能退回裸 kind
+  it('E1：start 返回 state="starting" → 文案"客户端 frpc正在启动"（不裸 kind、不含糊）', async () => {
+    vi.mocked(procApi.apiStartProc).mockResolvedValueOnce({
+      kind: 'frpc', state: 'starting', pid: 0, lastErr: '', changedAt: '2026-05-28T01:00:00Z',
+    })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleStart('frpc')
+    expect(messageSpies.success).toHaveBeenCalledWith('客户端 frpc正在启动')
+  })
+
+  // D4 反向：点击日志链接走 SPA push，绝不通过 <a href> 触发整页刷新（丢 Pinia 状态）
+  it('D4：error 态日志链接是 router.push 而非 href 跳转（DOM 无 a[href=/logs/*]）', async () => {
+    vi.mocked(procApi.apiGetProcStatus).mockResolvedValue({
+      frpc: { kind: 'frpc', state: 'error', pid: 0, lastErr: 'x', changedAt: '2026-05-28T01:00:00Z' },
+      frps: { kind: 'frps', state: 'error', pid: 0, lastErr: 'y', changedAt: '2026-05-28T01:00:00Z' },
+    })
+    const w = mountPage()
+    await settle()
+    expect(w.find('a[href="/logs/frpc"]').exists()).toBe(false)
+    expect(w.find('a[href="/logs/frps"]').exists()).toBe(false)
+    const logBtns = w.findAll('button').filter((b) => b.text().includes('查看完整日志'))
+    expect(logBtns.length).toBeGreaterThan(0)
+    await logBtns[1].trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/logs/frps')
   })
 })

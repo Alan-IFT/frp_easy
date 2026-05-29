@@ -16,7 +16,7 @@
       请将对应文件放置到 <n-text code>frp_win/</n-text> 或 <n-text code>frp_linux/</n-text> 目录下后重启。
     </n-alert>
 
-    <n-grid :cols="2" :x-gap="16" :y-gap="16" style="margin-top: 16px">
+    <n-grid cols="1 m:2" responsive="screen" :x-gap="16" :y-gap="16" style="margin-top: 16px">
       <!-- frpc 卡片 -->
       <n-gi>
         <n-card title="frpc（客户端）">
@@ -69,7 +69,7 @@
             <div style="font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word">
               {{ procStore.frpcInfo.lastErr }}
             </div>
-            <n-button text tag="a" href="/logs/frpc" style="margin-top: 4px">
+            <n-button text type="primary" style="margin-top: 4px" @click="router.push('/logs/frpc')">
               查看完整日志 →
             </n-button>
           </n-alert>
@@ -155,7 +155,7 @@
             <div style="font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word">
               {{ procStore.frpsInfo.lastErr }}
             </div>
-            <n-button text tag="a" href="/logs/frps" style="margin-top: 4px">
+            <n-button text type="primary" style="margin-top: 4px" @click="router.push('/logs/frps')">
               查看完整日志 →
             </n-button>
           </n-alert>
@@ -195,6 +195,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   NPageHeader, NCard, NGrid, NGi, NSpace, NButton, NAlert,
   NDescriptions, NDescriptionsItem, NText, NSwitch, NTooltip,
@@ -206,11 +207,22 @@ import { useProcStore } from '../stores/proc'
 import { useAppStore } from '../stores/app'
 import { extractErrorMessage } from '../api/client'
 import { apiGetMode, apiPutMode } from '../api/mode'
+import { formatTime } from '../utils/format'
 import type { ProcessState } from '../types'
 
 const procStore = useProcStore()
 const appStore = useAppStore()
 const message = useMessage()
+const router = useRouter()
+
+// E1：进程操作文案统一命名。裸 'frpc' / 'frps' 与全站"客户端 frpc / 服务端 frps"不一致。
+const kindLabel: Record<string, string> = {
+  frpc: '客户端 frpc',
+  frps: '服务端 frps',
+}
+function labelOf(kind: string): string {
+  return kindLabel[kind] ?? kind
+}
 
 const loadingMap = reactive<Record<string, boolean>>({})
 const modeState = reactive({ frpc: false, frps: false })
@@ -244,9 +256,9 @@ async function handleModeToggle(kind: 'frpc' | 'frps', enabled: boolean) {
     const result = await apiPutMode(next)
     modeState.frpc = result.frpc
     modeState.frps = result.frps
-    message.success(`${kind} 自动启动已${enabled ? '开启' : '关闭'}`)
+    message.success(`${labelOf(kind)} 自动启动已${enabled ? '开启' : '关闭'}`)
   } catch (e) {
-    message.error(extractErrorMessage(e, `${kind} 模式切换失败`))
+    message.error(extractErrorMessage(e, `${labelOf(kind)} 模式切换失败`))
   } finally {
     modeLoading[kind] = false
   }
@@ -262,14 +274,27 @@ function canStop(kind: string): boolean {
   return state === 'running' || state === 'starting'
 }
 
+// E1：依据 store 返回的真实新状态给出明确文案，避免含糊的"指令已发送"。
+const stateVerb: Record<ProcessState, string> = {
+  running: '已启动',
+  starting: '正在启动',
+  stopped: '已停止',
+  stopping: '正在停止',
+  error: '启动失败',
+}
+function actionResultMsg(kind: string, state: ProcessState, fallbackVerb: string): string {
+  const verb = stateVerb[state] ?? fallbackVerb
+  return `${labelOf(kind)}${verb}`
+}
+
 async function handleStart(kind: string) {
   const key = `${kind}-start`
   loadingMap[key] = true
   try {
-    await procStore.startProc(kind)
-    message.success(`${kind} 启动指令已发送`)
+    const info = await procStore.startProc(kind)
+    message.success(actionResultMsg(kind, info.state, '已启动'))
   } catch (e) {
-    message.error(extractErrorMessage(e, `${kind} 启动失败`))
+    message.error(extractErrorMessage(e, `${labelOf(kind)} 启动失败`))
   } finally {
     loadingMap[key] = false
   }
@@ -279,10 +304,10 @@ async function handleStop(kind: string) {
   const key = `${kind}-stop`
   loadingMap[key] = true
   try {
-    await procStore.stopProc(kind)
-    message.success(`${kind} 停止指令已发送`)
+    const info = await procStore.stopProc(kind)
+    message.success(actionResultMsg(kind, info.state, '已停止'))
   } catch (e) {
-    message.error(extractErrorMessage(e, `${kind} 停止失败`))
+    message.error(extractErrorMessage(e, `${labelOf(kind)} 停止失败`))
   } finally {
     loadingMap[key] = false
   }
@@ -292,21 +317,12 @@ async function handleRestart(kind: string) {
   const key = `${kind}-restart`
   loadingMap[key] = true
   try {
-    await procStore.restartProc(kind)
-    message.success(`${kind} 重启指令已发送`)
+    const info = await procStore.restartProc(kind)
+    message.success(actionResultMsg(kind, info.state, '已重启'))
   } catch (e) {
-    message.error(extractErrorMessage(e, `${kind} 重启失败`))
+    message.error(extractErrorMessage(e, `${labelOf(kind)} 重启失败`))
   } finally {
     loadingMap[key] = false
-  }
-}
-
-function formatTime(iso: string): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('zh-CN')
-  } catch {
-    return iso
   }
 }
 
@@ -328,6 +344,13 @@ defineExpose({
     fetchMode,
     retryFetchMode,
     handleModeToggle,
+    // T-048 E1：文案统一 / 动作处理器，供 kindLabel 与操作结果文案断言
+    labelOf,
+    actionResultMsg,
+    handleStart,
+    handleStop,
+    handleRestart,
+    router,
   },
 })
 </script>

@@ -8,3 +8,4 @@
 2026-05-30 · T-045 · DELIVERED · 删 procmgr 发布订阅(Subscribe/emit/StatusEvent+5调用点)+死函数(proxyToFrpconf/maybeApplyConfig)+3 var _ hack+孤立 import 净~90 行 · go_tests 285→284(删死测试,PM批准) · 完整 verify_all PASS 32/0/0
 2026-05-30 · T-046 · DELIVERED · 过期 session 定时清理 loop(随 rootCtx 取消) + RequestID 改 crypto/rand · +3 Go 测试(go_tests 284→287) · 完整 verify_all PASS 32/0/0
 2026-05-30 · T-047 · DELIVERED · Server/Client 加载+错误三态(失败态不渲染表单防误覆盖) + Proxies 失败/空区分 + Dashboard 开关不静默(disabled+tooltip+重试) + Server dashboard 三字段校验 · frontend_tests 297→327 · 完整 verify_all PASS 32/0/0 · dev-frontend 子 agent 实现
+2026-05-30 · T-048 · DELIVERED · 删重复 formatBytes + formatTime 本地化统一(三份归一) + ServiceStatusCard 可读语义色 + Dashboard router.push/响应式/进程文案统一 + PublicIpDetector extractErrorMessage · frontend_tests 327→342 · 完整 verify_all PASS 32/0/0 · dev-frontend 子 agent 实现

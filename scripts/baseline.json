@@ -1,11 +1,11 @@
 {
-  "version": 20,
+  "version": 21,
   "created": "2026-05-16",
   "updated": "2026-05-30",
-  "test_count": 614,
-  "passing_count": 614,
+  "test_count": 629,
+  "passing_count": 629,
   "go_tests": 287,
-  "frontend_tests": 327,
+  "frontend_tests": 342,
   "warnings_baseline": 0,
-  "notes": "T-047 frontend-honest-states 加 Server/Client 加载+错误三态、Proxies 区分加载失败 vs 空列表、Dashboard 开关获取失败不静默、Server dashboard 三字段校验 + 30 个新前端测试（frontend_tests 297→327）。 ‖ T-046 session-purge-and-requestid 加过期 session 定时清理 loop（防 sessions 表无界增长）+ RequestID 改 crypto/rand（消纳秒碰撞）+ 3 个新 Go 测试（go_tests 284→287）。 ‖ T-045 backend-deadcode-cleanup 删 procmgr 无人订阅的 Subscribe/emit/StatusEvent 发布订阅 + 其唯一测试 TestSubscribe_NonBlockingDrop（go_tests 285→284，PM 批准删除死代码的死测试，红线#3 例外）+ 死函数 proxyToFrpconf/maybeApplyConfig + 3 处 var _ 导入抑制 hack。 ‖ T-044 verify-gate-hardening (batch project-optimization-2026-05) 重置基线到真实计数。go_tests=285（`go test -list '.*' ./...` 顶层 Test* 计数），frontend_tests=297（vitest run），test_count=582。此前 baseline 自 T-036 起停在 451/265/186 且 B.4「测试数 >= 基线」是空操作（.ps1/.sh 均从不真比较），同时 .ps1 的 B.3 只 `& npm test | Out-Null` 不查退出码 —— 三洞叠加让 T-038~T-042 带 39 个前端测试失败（B.3 红）+ E.6 红的红树通过 `pwsh verify_all.ps1` 假报 PASS 交付（违反红线）。T-043 修复 39 个前端失败（getExposed/apiError test-utils，根因：findComponent().vm.__testing 依赖 VTU exposeProxy 不可靠 + new Error() 不被 extractErrorMessage 透传）。T-044 让 B.3（.ps1）真查退出码 + B.4（双实现）真计数 Go 顶层 + 前端 vitest 用例，任一低于基线 FAIL（已反向证伪：抬高基线 → B.4 FAIL）；补 T-038/T-039/T-040 三个归档报告的 `## Adversarial tests` 段（去掉数字前缀，insight L40）让 E.6 绿。基线回到 PASS。后续每个加测试的任务必须同步 bump 本文件的 go_tests/frontend_tests/test_count，否则 B.4 守不住。"
+  "notes": "T-048 frontend-consistency-cleanup 删重复 formatBytes、formatTime 统一本地化、ServiceStatusCard 可读语义色、Dashboard 日志链接改 router.push + n-grid 响应式 + 进程文案统一客户端/服务端、PublicIpDetector 用 extractErrorMessage + 15 个新前端测试（frontend_tests 327→342）。 ‖ T-047 frontend-honest-states 加 Server/Client 加载+错误三态、Proxies 区分加载失败 vs 空列表、Dashboard 开关获取失败不静默、Server dashboard 三字段校验 + 30 个新前端测试（frontend_tests 297→327）。 ‖ T-046 session-purge-and-requestid 加过期 session 定时清理 loop（防 sessions 表无界增长）+ RequestID 改 crypto/rand（消纳秒碰撞）+ 3 个新 Go 测试（go_tests 284→287）。 ‖ T-045 backend-deadcode-cleanup 删 procmgr 无人订阅的 Subscribe/emit/StatusEvent 发布订阅 + 其唯一测试 TestSubscribe_NonBlockingDrop（go_tests 285→284，PM 批准删除死代码的死测试，红线#3 例外）+ 死函数 proxyToFrpconf/maybeApplyConfig + 3 处 var _ 导入抑制 hack。 ‖ T-044 verify-gate-hardening (batch project-optimization-2026-05) 重置基线到真实计数。go_tests=285（`go test -list '.*' ./...` 顶层 Test* 计数），frontend_tests=297（vitest run），test_count=582。此前 baseline 自 T-036 起停在 451/265/186 且 B.4「测试数 >= 基线」是空操作（.ps1/.sh 均从不真比较），同时 .ps1 的 B.3 只 `& npm test | Out-Null` 不查退出码 —— 三洞叠加让 T-038~T-042 带 39 个前端测试失败（B.3 红）+ E.6 红的红树通过 `pwsh verify_all.ps1` 假报 PASS 交付（违反红线）。T-043 修复 39 个前端失败（getExposed/apiError test-utils，根因：findComponent().vm.__testing 依赖 VTU exposeProxy 不可靠 + new Error() 不被 extractErrorMessage 透传）。T-044 让 B.3（.ps1）真查退出码 + B.4（双实现）真计数 Go 顶层 + 前端 vitest 用例，任一低于基线 FAIL（已反向证伪：抬高基线 → B.4 FAIL）；补 T-038/T-039/T-040 三个归档报告的 `## Adversarial tests` 段（去掉数字前缀，insight L40）让 E.6 绿。基线回到 PASS。后续每个加测试的任务必须同步 bump 本文件的 go_tests/frontend_tests/test_count，否则 B.4 守不住。"
 }
