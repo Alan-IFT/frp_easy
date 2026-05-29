@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { getExposed } from '../../test-utils/exposed'
 import { nextTick, h, defineComponent } from 'vue'
 import { NConfigProvider, NMessageProvider, darkTheme } from 'naive-ui'
 
@@ -94,8 +95,7 @@ interface TestingHandle {
 }
 
 function getTesting(wrapper: ReturnType<typeof mountInside>): TestingHandle {
-  const lv = wrapper.findComponent(LogViewer)
-  return (lv.vm as unknown as { __testing: TestingHandle }).__testing
+  return getExposed<TestingHandle>(wrapper, LogViewer)
 }
 
 beforeEach(() => {

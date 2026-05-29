@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-043 | frontend-test-suite-repair | DELIVERED | 2026-05-30 | `docs/features/frontend-test-suite-repair/`（pending archive；batch project-optimization-2026-05；修 39 个前端测试失败恢复 B.3 绿，新增 getExposed/apiError test-utils） |
 | T-042 | proxy-runtime-status-merge | DELIVERED | 2026-05-28 | `docs/features/proxy-runtime-status-merge/`（pending archive） |
 | T-041 | server-monitor-page-ui | DELIVERED | 2026-05-28 | `docs/features/server-monitor-page-ui/`（pending archive） |
 | T-040 | frps-allow-ports-policy | DELIVERED | 2026-05-27 | `docs/features/frps-allow-ports-policy/`（pending archive） |

@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { getExposed } from '../../test-utils/exposed'
 import { nextTick, h, defineComponent } from 'vue'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
 
@@ -108,10 +109,7 @@ describe('QA-PERF：NFR-1 500 行 fixture 首渲染', () => {
 
     // 触发 parsedLines 重算（memoization 路径）
     const t0 = performance.now()
-    const lv = w.findComponent(LogViewer)
-    const t = (lv.vm as unknown as {
-      __testing: { buf: { parsedLines: { value: unknown[] } } }
-    }).__testing
+    const t = getExposed<{ buf: { parsedLines: { value: unknown[] } } }>(w, LogViewer)
     // 强制访问 computed value
     const n = t.buf.parsedLines.value.length
     const t1 = performance.now()
@@ -133,15 +131,9 @@ describe('QA-PERF：搜索 500 行无命中 / 全命中', () => {
     const w = mountInside('frpc')
     await settle(5)
 
-    const lv = w.findComponent(LogViewer)
-    const t = (lv.vm as unknown as {
-      __testing: {
-        search: {
-          setQuery: (q: string) => void
-          visibleLines: { value: unknown[] }
-        }
-      }
-    }).__testing
+    const t = getExposed<{
+      search: { setQuery: (q: string) => void; visibleLines: { value: unknown[] } }
+    }>(w, LogViewer)
 
     const t0 = performance.now()
     t.search.setQuery('NEVER_MATCH_ZZZZZ')

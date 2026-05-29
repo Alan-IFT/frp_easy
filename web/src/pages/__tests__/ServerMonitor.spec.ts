@@ -8,6 +8,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { getExposed } from '../../test-utils/exposed'
+import { apiError } from '../../test-utils/apiError'
 import { defineComponent, h, nextTick } from 'vue'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
 
@@ -110,8 +112,7 @@ function mountPage() {
 }
 
 function getTesting(wrapper: ReturnType<typeof mountPage>): TestingHandle {
-  const sm = wrapper.findComponent(ServerMonitor)
-  return (sm.vm as unknown as { __testing: TestingHandle }).__testing
+  return getExposed<TestingHandle>(wrapper, ServerMonitor)
 }
 
 async function settle(n = 5) {
@@ -182,7 +183,7 @@ describe('ServerMonitor — 首屏失败 NResult（AC-3 / AC-4 / AC-5）', () =>
   it('AC-4：API reject 含 "frps 进程不可达" → NResult + retry 按钮', async () => {
     infoMock.mockReset()
     proxiesMock.mockReset()
-    const err = new Error('frps 进程不可达。请确认 frps 已启动。')
+    const err = apiError('frps 进程不可达。请确认 frps 已启动。')
     infoMock.mockRejectedValue(err)
     proxiesMock.mockRejectedValue(err)
     const w = mountPage()
@@ -196,7 +197,7 @@ describe('ServerMonitor — 首屏失败 NResult（AC-3 / AC-4 / AC-5）', () =>
   it('AC-3 / AC-5：错误含 "dashboard 未启用" → goServerHint=true + "前往服务端配置" 按钮可见', async () => {
     infoMock.mockReset()
     proxiesMock.mockReset()
-    const err = new Error('frps dashboard 未启用。请到 Server 设置页打开 Dashboard 开关。')
+    const err = apiError('frps dashboard 未启用。请到 Server 设置页打开 Dashboard 开关。')
     infoMock.mockRejectedValue(err)
     proxiesMock.mockRejectedValue(err)
     const w = mountPage()
@@ -209,7 +210,7 @@ describe('ServerMonitor — 首屏失败 NResult（AC-3 / AC-4 / AC-5）', () =>
   it('AC-5：错误含 "凭据校验失败" → goServerHint=true', async () => {
     infoMock.mockReset()
     proxiesMock.mockReset()
-    const err = new Error('frps dashboard 凭据校验失败（401）。')
+    const err = apiError('frps dashboard 凭据校验失败（401）。')
     infoMock.mockRejectedValue(err)
     proxiesMock.mockRejectedValue(err)
     const w = mountPage()

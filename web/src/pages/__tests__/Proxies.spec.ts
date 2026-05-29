@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { getExposed } from '../../test-utils/exposed'
 import { defineComponent, h, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
@@ -118,8 +119,7 @@ interface TestingHandle {
 }
 
 function getTesting(wrapper: ReturnType<typeof mountPage>): TestingHandle {
-  const p = wrapper.findComponent(Proxies)
-  return (p.vm as unknown as { __testing: TestingHandle }).__testing
+  return getExposed<TestingHandle>(wrapper, Proxies)
 }
 
 async function settle(n = 8): Promise<void> {

@@ -121,12 +121,13 @@ describe('useServerRuntime — start / stop / refresh', () => {
     await handle.refresh()
     expect(handle.info.value?.clientCounts).toBe(3)
 
-    // 第二次失败
+    // 第二次失败：普通 Error（非结构化 API 错误）。extractErrorMessage 只透传
+    // 后端 error.message，对普通 Error 走友好 fallback —— 与全项目错误处理契约一致。
     infoMock.mockRejectedValueOnce(new Error('boom'))
     proxiesMock.mockRejectedValueOnce(new Error('boom'))
     await handle.refresh()
 
-    expect(handle.error.value).toBe('boom')
+    expect(handle.error.value).toBe('加载 frps 运行态失败')
     expect(handle.consecutiveFailCount.value).toBe(1)
     // F-5.6：保留上次数据
     expect(handle.info.value?.clientCounts).toBe(3)
