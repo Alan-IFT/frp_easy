@@ -176,7 +176,7 @@ ps auxf:
 
 > 由于 QA 环境无桌面浏览器自动化，UI 截图由用户在 ssh 隧道转发后手动验证。本任务作为后续 trivial 任务可考虑加 Playwright e2e 覆盖 Dashboard ServiceStatusCard render。
 
-## 4. Adversarial tests
+## Adversarial tests
 
 按 .harness/agents/qa-tester.md 要求，每条 AC 至少一条预测失败的反向实测。
 

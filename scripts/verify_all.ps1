@@ -137,6 +137,9 @@ Step "B.2" "Lint" {
     }
 }
 
+# 前端 vitest 用例数（B.3 采集供 B.4 比对）。-1 = 未知 / 跳过。
+$script:feTestCount = -1
+
 Step "B.3" "Unit tests pass" {
     if (-not (Test-Path "web/package.json")) { return "SKIP" }
     Push-Location (Join-Path $root "web")
@@ -144,17 +147,42 @@ Step "B.3" "Unit tests pass" {
         $pkgJson = Get-Content "package.json" -Raw | ConvertFrom-Json
         if (-not $pkgJson.scripts.test) { return "SKIP" }
         $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
-        & $pkgMgr test 2>&1 | Out-Null
+        # NO_COLOR 去 ANSI 让计数行可解析；必须检查退出码（旧版只 Out-Null 不查退出码，
+        # 让 vitest 失败也报 PASS —— 正是上批次带红测试树交付的根因，T-044 修复）。
+        $env:NO_COLOR = "1"
+        $out = & $pkgMgr test 2>&1 | Out-String
+        $code = $LASTEXITCODE
+        Remove-Item Env:\NO_COLOR -ErrorAction SilentlyContinue
+        $m = [regex]::Match($out, 'Tests\s+(\d+)\s+passed')
+        if ($m.Success) { $script:feTestCount = [int]$m.Groups[1].Value }
+        if ($code -ne 0) { throw "frontend unit tests failed (exit $code)" }
     } finally {
         Pop-Location
     }
 }
 
 Step "B.4" "Test count >= baseline" {
-    if (-not (Test-Path (Join-Path $root "scripts/baseline.json"))) { return "SKIP" }
-    $baseline = Get-Content (Join-Path $root "scripts/baseline.json") | ConvertFrom-Json
+    $blPath = Join-Path $root "scripts/baseline.json"
+    if (-not (Test-Path $blPath)) { return "SKIP" }
+    $baseline = Get-Content $blPath -Raw | ConvertFrom-Json
     if ($baseline.test_count -eq 0) { return "SKIP" }
-    # CUSTOMIZE: read your test runner output to get actual count vs baseline.
+    # 真计数：Go 顶层测试（go test -list 仅列举不执行）+ 前端 vitest 用例（B.3 采集）。
+    # 任一低于基线即 FAIL —— 杜绝静默删测试 / role-play QA 漏跑。insight L26 双实现对账。
+    $problems = @()
+    Push-Location $root
+    try {
+        $goList = & go test -list '.*' ./... 2>$null
+        $goHave = @($goList | Where-Object { $_ -match '^(Test|Example|Benchmark|Fuzz)' }).Count
+    } finally {
+        Pop-Location
+    }
+    if ($baseline.go_tests -and $goHave -lt $baseline.go_tests) {
+        $problems += "Go $goHave < baseline $($baseline.go_tests)"
+    }
+    if ($script:feTestCount -ge 0 -and $baseline.frontend_tests -and $script:feTestCount -lt $baseline.frontend_tests) {
+        $problems += "frontend $($script:feTestCount) < baseline $($baseline.frontend_tests)"
+    }
+    if ($problems.Count -gt 0) { throw ($problems -join "; ") }
 }
 
 # B.5 — anti-residue sentinel（T-010）：

@@ -33,7 +33,7 @@
 | NFR-6 留空 allowPorts → 输出不含段 | ✅ | TestRenderFrps_AllowPorts_Empty 显式断言 |
 | NFR-7 改 allowPorts 触发 frps restart | ✅ | 既有 `applyConfigBestEffort("frps")` 路径覆盖，无 regression |
 
-## 3. Adversarial tests
+## Adversarial tests
 
 > 反向构造：直接走 backend HTTP 路径绕过前端 UI，验证服务端独立守门（NFR-2）。
 

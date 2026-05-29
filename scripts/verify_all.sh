@@ -154,20 +154,40 @@ else
         step "B.2" "Lint" "FAIL"
     fi
 
-    # B.3 — only if test script exists
+    # B.3 — only if test script exists. 捕获输出供 B.4 计数（NO_COLOR 去 ANSI 便于解析）。
+    fe_have=-1
     if ! grep -q '"test"' package.json; then
         step "B.3" "Unit tests pass" "SKIP"
-    elif $PM test &>/dev/null; then
-        step "B.3" "Unit tests pass" "PASS"
     else
-        step "B.3" "Unit tests pass" "FAIL"
+        test_out=$(NO_COLOR=1 $PM test 2>&1); test_rc=$?
+        if [[ $test_rc -eq 0 ]]; then
+            step "B.3" "Unit tests pass" "PASS"
+        else
+            step "B.3" "Unit tests pass" "FAIL"
+        fi
+        fe_have=$(printf '%s\n' "$test_out" | grep -oE 'Tests[[:space:]]+[0-9]+ passed' | grep -oE '[0-9]+' | tail -1)
+        [[ -z "$fe_have" ]] && fe_have=-1
     fi
 
-    # B.4 — baseline check
-    if [[ -f "$ROOT/scripts/baseline.json" ]] && grep -q '"test_count":\s*0' "$ROOT/scripts/baseline.json"; then
+    # B.4 — Test count >= baseline（真计数：Go 顶层测试 + 前端 vitest 用例）。
+    # 任一低于 baseline.json 即 FAIL —— 杜绝"静默删测试 / role-play QA 漏跑"让红树溜过
+    # （T-043/T-044 修复的根因）。Go 用 `go test -list` 计数（不执行，仅列举顶层 Test*），
+    # 前端复用 B.3 捕获的 vitest "Tests N passed"。insight L26 双实现对账 + L30 反向证伪守门。
+    bl="$ROOT/scripts/baseline.json"
+    if [[ ! -f "$bl" ]] || grep -qE '"test_count":[[:space:]]*0' "$bl"; then
         step "B.4" "Test count >= baseline" "SKIP"
     else
-        step "B.4" "Test count >= baseline" "PASS"
+        go_want=$(grep -oE '"go_tests":[[:space:]]*[0-9]+' "$bl" | grep -oE '[0-9]+' | head -1)
+        fe_want=$(grep -oE '"frontend_tests":[[:space:]]*[0-9]+' "$bl" | grep -oE '[0-9]+' | head -1)
+        go_have=$( cd "$ROOT" && go test -list '.*' ./... 2>/dev/null | grep -cE '^(Test|Example|Benchmark|Fuzz)' )
+        b4fail=false; b4detail=""
+        if [[ -n "$go_want" && "$go_have" -lt "$go_want" ]]; then b4fail=true; b4detail="Go $go_have < baseline $go_want. "; fi
+        if [[ "$fe_have" -ge 0 && -n "$fe_want" && "$fe_have" -lt "$fe_want" ]]; then b4fail=true; b4detail="${b4detail}frontend $fe_have < baseline $fe_want."; fi
+        if $b4fail; then
+            step "B.4" "Test count >= baseline" "FAIL" "$b4detail"
+        else
+            step "B.4" "Test count >= baseline" "PASS"
+        fi
     fi
 
     # B.5 — anti-residue sentinel（T-010）：
