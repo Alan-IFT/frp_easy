@@ -14,7 +14,7 @@ frp_easy/
 ├── README.md       ← 用户入口文档（标准开源结构：简介/亮点/快速开始/配置/端口/许可证；T-011 重写；T-012 快速开始置顶一键安装、许可证改 MIT）
 ├── LICENSE         ← MIT 许可证全文（T-012 新增；Copyright (c) 2026 Alan_IFT）
 ├── NOTICE          ← 上游 frp 二进制 Apache-2.0 归属说明（T-012 新增；中文）
-├── openapi.yaml    ← REST API OpenAPI 3.0.3 规范（28 条路由，T-005 新增）
+├── openapi.yaml    ← REST API OpenAPI 3.0.3 规范（T-005 新增；覆盖全部 REST 路由，含 T-038 service-status / T-039 服务端运行态 / T-040 allowPorts；30 个 path，T-049 补齐 service-status 后与 router.go 对齐）
 ├── .claude/        ← AI 配置（不要把 secret 提交到这里）
 ├── .github/
 │   └── workflows/release.yml  ← T-010 新增 / T-013 改造：push main → 刷新固定 tag `rolling` 滚动发布；push v* tag → 版本化发布（两路径共存）
@@ -48,10 +48,11 @@ frp_easy/
 │   ├── frpcadmin/  ← frpc admin HTTP 客户端（/api/reload、/api/status）
 │   ├── frpsadmin/  ← frps admin HTTP 客户端（T-039：/api/serverinfo、/api/proxy/{type}、/api/proxy/{type}/{name}、/api/traffic/{name}）
 │   ├── frpconf/    ← DB → TOML 渲染器（AtomicWrite；camelCase 字段对齐 FRP 上游）
-│   ├── httpapi/    ← chi router + 全部 REST handler（T-001: 22 条；T-002: +5 条）+ 中间件链
+│   ├── httpapi/    ← chi router + 全部 REST handler + 中间件链（路由增删累计见下方"功能在哪里"表 router.go 行）
 │   ├── logrotate/  ← T-010 新增：基于 lumberjack 的 ui.log 三轴轮转（size/backups/age）+ FRP_EASY_LOG_MAX_* env 覆盖
 │   ├── logtail/    ← TailLines + ReadFrom 增量读取子进程日志文件
 │   ├── procmgr/    ← frpc/frps 子进程生命周期（supervisor goroutine；跨平台 kill）
+│   ├── svcprobe/   ← T-038：服务化状态探测（systemd / Windows Service 监管 / 开机自启 / 运行用户）；build tag 分平台
 │   └── storage/    ← SQLite 句柄 + 迁移引擎 + DAO（admin / sessions / kv / proxies）
 └── web/            ← 前端 Vue 3 + Vite（dev-frontend 分区）
     ├── index.html
@@ -99,6 +100,8 @@ frp_easy/
         │                          parseLogLine 双格式 OR regex；useLogBuffer slice(-500) + kindEpoch race；
         │                          useLogSearch indexOf + 大小写敏感；useLogLevelFilter 6 等级；
         │                          useFollowTail 32px 阈值状态机；useLogPrefs localStorage + BC-13 内存降级）
+        ├── utils/          ← T-042 抽取：format.ts（formatBytes + formatTime；T-048 formatTime 统一本地化）+ proxyStatus.ts（getProxyStatusTag）
+        ├── test-utils/     ← T-043 测试 helper：exposed.ts（getExposed 读 defineExpose，避开 VTU exposeProxy 脆弱性）+ apiError.ts（构造 axios 形状错误模拟后端响应）
         ├── components/
         │   ├── AppLayout.vue    ← 侧边导航 + 头部 + 内容公用布局（T-002: 新增下载按钮；T-018: banner 内追加 UploadBinButton）
         │   ├── StatusBadge.vue  ← ProcessState → 带颜色的 NTag

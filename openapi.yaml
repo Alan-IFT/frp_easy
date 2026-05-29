@@ -86,6 +86,41 @@ components:
           type: string
           example: "0.1.0"
 
+    ServiceStatus:
+      type: object
+      description: GET /api/v1/system/service-status 的响应（T-038）。服务化监管探测 + 自动恢复状态。
+      required: [supervised, supervisor, boot_autostart, run_as, auto_restore]
+      properties:
+        supervised:
+          type: boolean
+          description: 是否由服务管理器（systemd / Windows Service）监管运行
+        supervisor:
+          type: string
+          enum: [systemd, windows-service, none]
+          description: 监管方式；探测失败或裸跑为 none
+        boot_autostart:
+          type: boolean
+          description: 服务是否已设为开机自启（systemctl is-enabled / SCM AUTO_START）
+        run_as:
+          type: string
+          description: 当前进程运行用户（user-visible）
+        probe_error:
+          type: string
+          description: 探测失败时的原因（成功时省略）
+        auto_restore:
+          type: object
+          required: [enabled_kinds]
+          properties:
+            enabled_kinds:
+              type: array
+              items:
+                type: string
+              description: 已启用自动恢复的 kind 列表（frpc / frps）
+            last_runs:
+              type: object
+              additionalProperties: true
+              description: kind → 上次自动恢复结果（透传 kv 中存的 AutoRestoreLastRun JSON）
+
     SetupRequest:
       type: object
       required: [username, password]
@@ -567,6 +602,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorBody'
+
+  /api/v1/system/service-status:
+    get:
+      summary: 服务化状态探测（systemd / Windows Service 监管、开机自启、运行用户、上次自动恢复结果）
+      operationId: getSystemServiceStatus
+      tags: [system]
+      responses:
+        '200':
+          description: 服务化状态快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
 
   /api/v1/setup:
     post:

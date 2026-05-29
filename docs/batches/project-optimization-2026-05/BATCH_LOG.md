@@ -12,3 +12,4 @@
 2026-05-30 · T-050 · DELIVERED · +21 Go 测试(validate.go/procmgr 终态断言/autoRestore/svcprobe/procmgr 生命周期 helper) go_tests 287→308 · 发现 retryRestoreLoop canceled-persist bug(报告不修,→T-053) · 完整 verify_all PASS 32/0/0 · dev-backend 子 agent 实现
 2026-05-30 · T-053 · DELIVERED · (T-050 发现的 bug)retryRestoreLoop canceled 分支改 detached context.Background() 持久化 + 升级 CanceledMidway 测试正向断言 canceled 落 kv · 完整 verify_all PASS 32/0/0
 2026-05-30 · T-051 · DELIVERED · proxies/wizard store + useProxyForm(type 切换) + statusUtils/useLogLevelFilter/useServiceStatus + api/client.ts(401/CSRF/extractErrorMessage 契约) +84 测试 · frontend_tests 342→426 · 完整 verify_all PASS 32/0/0 · dev-frontend 子 agent 实现
+2026-05-30 · T-049 · DELIVERED · openapi 补 service-status 路由+ServiceStatus schema(30 path,js-yaml 校验过) + dev-map 树补 svcprobe/utils/test-utils + 修路由计数(28→准确) + project-status/architecture.html 加时效声明 · 纯文档 · 完整 verify_all PASS 32/0/0

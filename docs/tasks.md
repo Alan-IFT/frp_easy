@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-049 | docs-contract-drift-fix | DELIVERED | 2026-05-30 | `docs/features/docs-contract-drift-fix/`（pending archive；batch project-optimization-2026-05；openapi 补 service-status 路由+schema（30 path）+ dev-map 树补 svcprobe/utils/test-utils + 修路由计数 + 2 HTML 加时效声明；verify_all PASS 32/0/0） |
 | T-051 | frontend-test-coverage | DELIVERED | 2026-05-30 | `docs/features/frontend-test-coverage/`（pending archive；batch project-optimization-2026-05；proxies/wizard store + useProxyForm + statusUtils/useLogLevelFilter/useServiceStatus + api/client.ts +84 测试；frontend_tests 342→426；verify_all PASS 32/0/0） |
 | T-053 | autorestore-canceled-persist-fix | DELIVERED | 2026-05-30 | `docs/features/autorestore-canceled-persist-fix/`（pending archive；batch project-optimization-2026-05；修 retryRestoreLoop canceled 分支用已取消 ctx 持久化→canceled outcome 落不进 kv；改 detached ctx + 升级测试正向断言；verify_all PASS 32/0/0） |
 | T-050 | backend-test-coverage | DELIVERED | 2026-05-30 | `docs/features/backend-test-coverage/`（pending archive；batch project-optimization-2026-05；validate.go/procmgr 终态断言/autoRestore/svcprobe/procmgr 子进程生命周期 +21 测试；go_tests 287→308；发现 retryRestoreLoop canceled-persist bug→T-053；verify_all PASS 32/0/0） |
