@@ -89,7 +89,7 @@ frp_easy/
         │   ├── app.ts      ← initialized / binMissing / version
         │   ├── downloader.ts← frpc/frps DownloadState；1s 轮询；downloadBin/startPolling
         │   ├── wizard.ts   ← wizardHandled / shouldShow / checked；checkWizard / completeWizard
-        │   └── __tests__/  ← Vitest store 测试
+        │   └── __tests__/  ← Vitest store 测试（T-051 +2：proxies CRUD/error ref、wizard 状态流转）
         ├── composables/    ← 可复用逻辑
         │   ├── statusUtils.ts  ← getTagType / getStateLabel（ProcessState → Naive UI 颜色）
         │   ├── useProxyForm.ts ← ProxyForm 表单逻辑（isTcpUdp / isHttpHttps 等）
@@ -114,7 +114,7 @@ frp_easy/
         │   │   └── FullscreenLogModal.vue← n-modal 全屏包装 LogList；95vw/90vh 走 scoped :deep(.n-card) 无 inline style
         │   ├── FirewallHint.vue ← T-002: Linux ufw/iptables 命令提示（ports[] props）
         │   ├── PublicIpDetector.vue← T-002: 公网 IP 检测按钮 + 结果显示
-        │   └── __tests__/      ← Vitest 组件测试（T-036 +6 个：LogViewer / parseLogLine / useLogBuffer / useLogSearch / useFollowTail / useLogPrefs）
+        │   └── __tests__/      ← Vitest 组件测试（T-036 +6 个：LogViewer / parseLogLine / useLogBuffer / useLogSearch / useFollowTail / useLogPrefs；T-051 +1：useLogLevelFilter）
         └── pages/
             ├── Setup.vue     ← 首次安装（username + password）
             ├── Login.vue     ← 登录（429 倒计时支持）

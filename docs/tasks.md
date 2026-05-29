@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-051 | frontend-test-coverage | DELIVERED | 2026-05-30 | `docs/features/frontend-test-coverage/`（pending archive；batch project-optimization-2026-05；proxies/wizard store + useProxyForm + statusUtils/useLogLevelFilter/useServiceStatus + api/client.ts +84 测试；frontend_tests 342→426；verify_all PASS 32/0/0） |
 | T-053 | autorestore-canceled-persist-fix | DELIVERED | 2026-05-30 | `docs/features/autorestore-canceled-persist-fix/`（pending archive；batch project-optimization-2026-05；修 retryRestoreLoop canceled 分支用已取消 ctx 持久化→canceled outcome 落不进 kv；改 detached ctx + 升级测试正向断言；verify_all PASS 32/0/0） |
 | T-050 | backend-test-coverage | DELIVERED | 2026-05-30 | `docs/features/backend-test-coverage/`（pending archive；batch project-optimization-2026-05；validate.go/procmgr 终态断言/autoRestore/svcprobe/procmgr 子进程生命周期 +21 测试；go_tests 287→308；发现 retryRestoreLoop canceled-persist bug→T-053；verify_all PASS 32/0/0） |
 | T-048 | frontend-consistency-cleanup | DELIVERED | 2026-05-30 | `docs/features/frontend-consistency-cleanup/`（pending archive；batch project-optimization-2026-05；删重复 formatBytes + formatTime 本地化统一 + 可读语义色 + router.push + 响应式 + extractErrorMessage + 进程文案统一；frontend_tests 327→342；verify_all PASS 32/0/0） |

@@ -11,3 +11,4 @@
 2026-05-30 · T-048 · DELIVERED · 删重复 formatBytes + formatTime 本地化统一(三份归一) + ServiceStatusCard 可读语义色 + Dashboard router.push/响应式/进程文案统一 + PublicIpDetector extractErrorMessage · frontend_tests 327→342 · 完整 verify_all PASS 32/0/0 · dev-frontend 子 agent 实现
 2026-05-30 · T-050 · DELIVERED · +21 Go 测试(validate.go/procmgr 终态断言/autoRestore/svcprobe/procmgr 生命周期 helper) go_tests 287→308 · 发现 retryRestoreLoop canceled-persist bug(报告不修,→T-053) · 完整 verify_all PASS 32/0/0 · dev-backend 子 agent 实现
 2026-05-30 · T-053 · DELIVERED · (T-050 发现的 bug)retryRestoreLoop canceled 分支改 detached context.Background() 持久化 + 升级 CanceledMidway 测试正向断言 canceled 落 kv · 完整 verify_all PASS 32/0/0
+2026-05-30 · T-051 · DELIVERED · proxies/wizard store + useProxyForm(type 切换) + statusUtils/useLogLevelFilter/useServiceStatus + api/client.ts(401/CSRF/extractErrorMessage 契约) +84 测试 · frontend_tests 342→426 · 完整 verify_all PASS 32/0/0 · dev-frontend 子 agent 实现
