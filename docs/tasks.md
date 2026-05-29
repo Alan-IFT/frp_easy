@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-052 | e2e-decouple-port | DELIVERED | 2026-05-30 | `docs/features/e2e-decouple-port/`（pending archive；batch project-optimization-2026-05；e2e 改独立端口 17800 + webServer.env 注入，根治 C.1 假性失败；全量 verify_all 首次本机全绿 PASS 32/0/0） |
 | T-044 | verify-gate-hardening | DELIVERED | 2026-05-30 | `docs/features/verify-gate-hardening/`（pending archive；batch project-optimization-2026-05；.ps1 B.3 真查退出码 + B.4 双实现真计数 + baseline 刷新 285/297/582 + E.6 三报告标题归一化；基线回 PASS 31/0/0） |
 | T-043 | frontend-test-suite-repair | DELIVERED | 2026-05-30 | `docs/features/frontend-test-suite-repair/`（pending archive；batch project-optimization-2026-05；修 39 个前端测试失败恢复 B.3 绿，新增 getExposed/apiError test-utils） |
 | T-042 | proxy-runtime-status-merge | DELIVERED | 2026-05-28 | `docs/features/proxy-runtime-status-merge/`（pending archive） |

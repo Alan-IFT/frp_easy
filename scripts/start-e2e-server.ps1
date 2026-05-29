@@ -44,11 +44,15 @@ if (Need-Rebuild -Binary $BIN) {
     [Console]::Error.WriteLine("[e2e-server] binary up-to-date, skipping build")
 }
 
+# E2E_PORT 默认 17800（playwright.config.ts 通过 webServer.env 注入同值）：刻意避开
+# 产品默认 7800，与用户本机运行的 frp-easy 实例隔离，根治 C.1 假性失败（insight L25）。
+$e2ePort = if ($env:E2E_PORT) { $env:E2E_PORT } else { "17800" }
+
 # 临时数据目录与配置（每次 PID 唯一；Playwright 终止后留在 $env:TEMP，下次清理）
 $tmpName = "frp-easy-e2e-" + ([Guid]::NewGuid().ToString("N"))
 $E2E_TMP = Join-Path $env:TEMP $tmpName
 New-Item -ItemType Directory -Force -Path $E2E_TMP | Out-Null
-[Console]::Error.WriteLine("[e2e-server] using E2E_TMP: $E2E_TMP")
+[Console]::Error.WriteLine("[e2e-server] using E2E_TMP: $E2E_TMP (port $e2ePort)")
 
 # DataDir / LogDir 路径里有 Windows 反斜杠，TOML 字符串需转义（写双反斜杠或正斜杠）
 $dataDir = ($E2E_TMP + "\data") -replace '\\', '/'
@@ -56,7 +60,7 @@ $logDir  = ($E2E_TMP + "\logs") -replace '\\', '/'
 $tomlPath = Join-Path $E2E_TMP "frp_easy.toml"
 $tomlContent = @"
 UIBindAddr = "127.0.0.1"
-UIPort     = 7800
+UIPort     = $e2ePort
 DataDir    = "$dataDir"
 LogDir     = "$logDir"
 "@

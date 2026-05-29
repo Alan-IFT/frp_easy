@@ -6,10 +6,14 @@ const E2E_PASSWORD = 'E2eTestPass1!'
 /**
  * 前置条件守门：验证后端处于"未初始化"状态，可让 TC-01 的"自动跳 /setup"语义成立。
  *
- * 背景（T-033）：playwright.config.ts 的 `reuseExistingServer: !process.env.CI` 让本地
- * 非 CI 跑测试时复用已有 7800 端口的 frp-easy 进程。若上一轮 TC-02 已经把那个进程的
- * DataDir 写入了 admin，则本轮 TC-01 的"未初始化跳 /setup"前提被悄悄破坏，spec 报
- * "URL 不在 /setup" 但根因无从读出。本函数让根因显式化。
+ * 背景（T-033 / T-052）：playwright.config.ts 的 `reuseExistingServer: !process.env.CI`
+ * 让本地非 CI 跑测试时可能复用残留的 e2e server 进程。若上一轮已把那个进程的 DataDir
+ * 写入了 admin，则本轮 TC-01 的"未初始化跳 /setup"前提被悄悄破坏，spec 报"URL 不在
+ * /setup" 但根因无从读出。本函数让根因显式化。
+ *
+ * T-052 已把 e2e 端口从产品默认 7800 改到独立的 E2E_PORT（默认 17800），与用户本机
+ * 运行的 frp-easy 实例结构性隔离，所以最常见的"复用了产品实例"已不再发生；本守门现在
+ * 主要兜底"上一轮 e2e server 未被 Playwright 正常 teardown 而残留"的少见情形。
  *
  * 调用位置：01-setup.spec.ts 的 TC-01 / TC-02 第一行。
  * 调用代价：1 个 GET /api/v1/system/ready 请求 + JSON 解析，<50ms。
@@ -30,17 +34,16 @@ export async function assertFreshBackend(page: Page): Promise<void> {
   if (body.initialized) {
     throw new Error(
       '前置条件违反：后端已初始化（initialized=true），无法验证"未初始化时自动跳转 /setup"语义。\n' +
-      '根因：Playwright reuseExistingServer 复用了一个 DataDir 含 admin 的 frp-easy 进程（典型于本地非 CI 多轮跑测试，且上一轮残留进程仍占着 127.0.0.1:7800）。\n' +
+      '根因：Playwright reuseExistingServer 复用了一个 DataDir 含 admin 的残留 e2e server 进程（典型于本地非 CI 多轮跑测试、上一轮未被正常 teardown 仍占着 E2E_PORT）。\n' +
+      'T-052 起 e2e 用独立端口（默认 17800，非产品 7800），用户本机的 frp-easy 实例不再是诱因。\n' +
       '修复指引：\n' +
-      '  1. 关闭所有占用 127.0.0.1:7800 的本地 frp-easy 实例：\n' +
-      '     - Windows (普通进程): Get-Process | Where-Object { $_.Path -like "*frp-easy*" } | Stop-Process -Force\n' +
-      '     - Windows (服务模式 / Session 0 进程拒绝访问时): **以管理员身份打开 PowerShell**（Win+X → Terminal (Admin)），然后 Stop-Service frp-easy；测完 Start-Service frp-easy 恢复。普通用户 / 非 elevated session 会报 "Cannot open frp-easy service on computer" 拒绝访问\n' +
-      '     - Linux/Mac: lsof -ti :7800 | xargs kill  # systemd 装为服务时改用：sudo systemctl stop frp-easy\n' +
+      '  1. 关闭残留的 e2e server（占着 127.0.0.1:17800，或你用 E2E_PORT 指定的端口）：\n' +
+      '     - Windows: Get-Process | Where-Object { $_.Path -like "*frp-easy*" } | Stop-Process -Force\n' +
+      '     - Linux/Mac: lsof -ti :17800 | xargs kill\n' +
       '  2. 重跑 `cd web && npx playwright test --project=chromium`\n' +
-      '  3. 或显式设置 CI=true 强制 Playwright 启全新 webServer + 全新 tmpdir：\n' +
+      '  3. 或显式设置 CI=true 强制 Playwright 不复用既有 server，每轮启全新 webServer + 全新 tmpdir：\n' +
       '     - PowerShell: $env:CI = "true"; cd web; npx playwright test --project=chromium\n' +
-      '     - bash:       CI=true npx playwright test --project=chromium\n' +
-      '     注：CI=true 让 Playwright 不复用既有 server，但端口仍是 7800 —— 必须先做步骤 1 才能让 webServer 起来',
+      '     - bash:       CI=true npx playwright test --project=chromium',
     )
   }
 }

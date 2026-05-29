@@ -45,12 +45,15 @@ fi
 
 # 2. 创建临时数据目录和配置文件
 # 使用 E2E_TMP 而非 TMPDIR，避免覆盖系统环境变量
+# E2E_PORT 默认 17800（playwright.config.ts 通过 webServer.env 注入同值）：刻意避开
+# 产品默认 7800，与用户本机运行的 frp-easy 实例隔离，根治 C.1 假性失败（insight L25）。
+E2E_PORT="${E2E_PORT:-17800}"
 E2E_TMP=$(mktemp -d)
-echo "[e2e-server] using E2E_TMP: $E2E_TMP" >&2
+echo "[e2e-server] using E2E_TMP: $E2E_TMP (port $E2E_PORT)" >&2
 
 cat > "$E2E_TMP/frp_easy.toml" <<EOF
 UIBindAddr = "127.0.0.1"
-UIPort     = 7800
+UIPort     = ${E2E_PORT}
 DataDir    = "$E2E_TMP/data"
 LogDir     = "$E2E_TMP/logs"
 EOF
