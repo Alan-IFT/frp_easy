@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -152,7 +153,9 @@ func (c *Client) ServerInfo(ctx context.Context) (ServerInfo, error) {
 // proxyType ∈ {tcp,udp,http,https,stcp,sudp,xtcp}；无效 type 由上游返 404 → ErrNotFound。
 func (c *Client) Proxies(ctx context.Context, proxyType string) ([]ProxyStatus, error) {
 	var env proxiesEnvelope
-	if err := c.doGet(ctx, "/api/proxy/"+proxyType, &env); err != nil {
+	// T-055 A-2：proxyType 作为单 path segment 经 url.PathEscape 编码后再拼接，
+	// 防止含 `/` `?` `#` 等字符的输入改变上游请求的 path/query 语义边界（纵深防御根位置）。
+	if err := c.doGet(ctx, "/api/proxy/"+url.PathEscape(proxyType), &env); err != nil {
 		return nil, err
 	}
 	// 上游可能返回 nil 数组（无 proxy）；统一成空 slice 让 JSON 序列化稳定。
@@ -165,7 +168,8 @@ func (c *Client) Proxies(ctx context.Context, proxyType string) ([]ProxyStatus, 
 // ProxyDetail 调 GET /api/proxy/{type}/{name}。
 func (c *Client) ProxyDetail(ctx context.Context, proxyType, name string) (ProxyDetail, error) {
 	var out ProxyDetail
-	if err := c.doGet(ctx, "/api/proxy/"+proxyType+"/"+name, &out); err != nil {
+	// T-055 A-2：proxyType / name 各自作为单 path segment 经 url.PathEscape 编码后拼接。
+	if err := c.doGet(ctx, "/api/proxy/"+url.PathEscape(proxyType)+"/"+url.PathEscape(name), &out); err != nil {
 		return ProxyDetail{}, err
 	}
 	return out, nil
@@ -174,7 +178,8 @@ func (c *Client) ProxyDetail(ctx context.Context, proxyType, name string) (Proxy
 // Traffic 调 GET /api/traffic/{name}。
 func (c *Client) Traffic(ctx context.Context, name string) (Traffic, error) {
 	var out Traffic
-	if err := c.doGet(ctx, "/api/traffic/"+name, &out); err != nil {
+	// T-055 A-2：name 作为单 path segment 经 url.PathEscape 编码后拼接。
+	if err := c.doGet(ctx, "/api/traffic/"+url.PathEscape(name), &out); err != nil {
 		return Traffic{}, err
 	}
 	return out, nil

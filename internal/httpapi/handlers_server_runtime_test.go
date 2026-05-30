@@ -362,6 +362,62 @@ func TestServerRuntime_Unauthenticated(t *testing.T) {
 	}
 }
 
+// TestServerRuntimeProxyDetail_BadType_422 验证 T-055 A-1：
+// 非白名单 type → 422 VALIDATION_FAILED + field=type，且上游 frps 未被调用。
+func TestServerRuntimeProxyDetail_BadType_422(t *testing.T) {
+	srv, store := newTestServerFull(t, nil, nil)
+	cookies, _ := setupAndLogin(t, srv)
+
+	var upstreamHit bool
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHit = true
+		_, _ = w.Write([]byte(`{"name":"x"}`))
+	}))
+	defer mock.Close()
+	withFrpsAdminFactory(t, mock.URL)
+	writeFrpsConfig(t, store, FrpsConfig{
+		BindPort: 7000, DashboardEnabled: true,
+		DashboardUser: "u", DashboardPass: "p",
+	})
+
+	resp, body := doJSON(t, srv, "GET", "/api/v1/server/runtime/proxy/evil/ssh", nil, cookies, "")
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status %d body=%s (want 422)", resp.StatusCode, body)
+	}
+	var e ErrorBody
+	_ = json.Unmarshal(body, &e)
+	if e.Error.Code != CodeValidationFailed {
+		t.Errorf("code = %q, want %q", e.Error.Code, CodeValidationFailed)
+	}
+	if e.Error.Field != "type" {
+		t.Errorf("field = %q, want type", e.Error.Field)
+	}
+	if upstreamHit {
+		t.Error("非法 type 不应触达上游 frps")
+	}
+}
+
+// TestServerRuntimeProxyDetail_AllValidTypes 验证白名单内全部 type 均放行（不被 422 误拦）。
+func TestServerRuntimeProxyDetail_AllValidTypes(t *testing.T) {
+	srv, store := newTestServerFull(t, nil, nil)
+	cookies, _ := setupAndLogin(t, srv)
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"x","type":"tcp","status":"online"}`))
+	}))
+	defer mock.Close()
+	withFrpsAdminFactory(t, mock.URL)
+	writeFrpsConfig(t, store, FrpsConfig{
+		BindPort: 7000, DashboardEnabled: true,
+		DashboardUser: "u", DashboardPass: "p",
+	})
+	for _, pt := range []string{"tcp", "udp", "http", "https", "stcp", "sudp", "xtcp"} {
+		resp, body := doJSON(t, srv, "GET", "/api/v1/server/runtime/proxy/"+pt+"/ssh", nil, cookies, "")
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("type %q status %d body=%s (want 200)", pt, resp.StatusCode, body)
+		}
+	}
+}
+
 // --- renderAndApplyFrps autogen fallback 集成测试（AC-6） ---
 
 // TestRenderAndApplyFrps_AutogenFallback 验证 FR-3.3：

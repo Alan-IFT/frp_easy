@@ -260,6 +260,82 @@ func TestNewWithTimeout_DefaultsOnZero(t *testing.T) {
 	}
 }
 
+// --- T-055 A-2/A-3：path segment escape 防注入 ---
+
+// TestProxyDetail_PathEscape 验证 type/name 含特殊字符时上游收到的 path 被正确编码，
+// 不改变 path/query 语义边界（A-2）。同时验证普通无特殊字符的 path 无回归（A-3）。
+func TestProxyDetail_PathEscape(t *testing.T) {
+	cases := []struct {
+		name       string
+		proxyType  string
+		proxyName  string
+		wantEscape string // 期望上游收到的 r.URL.EscapedPath()
+	}{
+		{"normal_no_regression", "tcp", "ssh", "/api/proxy/tcp/ssh"},
+		{"name_with_slash", "tcp", "a/b", "/api/proxy/tcp/a%2Fb"},
+		{"name_with_query", "tcp", "x?y", "/api/proxy/tcp/x%3Fy"},
+		{"name_with_fragment", "tcp", "x#y", "/api/proxy/tcp/x%23y"},
+		{"name_with_space", "tcp", "x y", "/api/proxy/tcp/x%20y"},
+		{"name_with_percent", "tcp", "a%2f", "/api/proxy/tcp/a%252f"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var seenURI string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// 用 r.RequestURI（请求行原文，逐字节保留）断言编码后的 path，
+				// 比 r.URL.EscapedPath()（可能因 RawPath/Path 规范化而重算）更可靠。
+				seenURI = r.RequestURI
+				_, _ = w.Write([]byte(`{"name":"x"}`))
+			}))
+			defer srv.Close()
+			client := NewWithBaseURL(srv.URL, "u", "p", time.Second)
+			_, err := client.ProxyDetail(context.Background(), c.proxyType, c.proxyName)
+			if err != nil {
+				t.Fatalf("ProxyDetail: %v", err)
+			}
+			if seenURI != c.wantEscape {
+				t.Errorf("upstream RequestURI = %q, want %q", seenURI, c.wantEscape)
+			}
+		})
+	}
+}
+
+// TestTraffic_PathEscape 验证 Traffic 的 name segment 同样被 escape（A-2）。
+func TestTraffic_PathEscape(t *testing.T) {
+	var seenURI string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenURI = r.RequestURI
+		_, _ = w.Write([]byte(`{"name":"x","trafficIn":[],"trafficOut":[]}`))
+	}))
+	defer srv.Close()
+	client := NewWithBaseURL(srv.URL, "u", "p", time.Second)
+	if _, err := client.Traffic(context.Background(), "x/../etc?a=1"); err != nil {
+		t.Fatalf("Traffic: %v", err)
+	}
+	want := "/api/traffic/x%2F..%2Fetc%3Fa=1"
+	if seenURI != want {
+		t.Errorf("upstream RequestURI = %q, want %q", seenURI, want)
+	}
+}
+
+// TestProxies_PathEscape 验证 Proxies 的 type segment 同样被 escape（A-2）。
+func TestProxies_PathEscape(t *testing.T) {
+	var seenURI string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenURI = r.RequestURI
+		_, _ = w.Write([]byte(`{"proxies":[]}`))
+	}))
+	defer srv.Close()
+	client := NewWithBaseURL(srv.URL, "u", "p", time.Second)
+	if _, err := client.Proxies(context.Background(), "tcp/../admin"); err != nil {
+		t.Fatalf("Proxies: %v", err)
+	}
+	want := "/api/proxy/tcp%2F..%2Fadmin"
+	if seenURI != want {
+		t.Errorf("upstream RequestURI = %q, want %q", seenURI, want)
+	}
+}
+
 func TestDoGet_UnexpectedStatus_400(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)

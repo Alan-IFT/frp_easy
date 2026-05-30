@@ -33,7 +33,7 @@
 | ID | Slug | Goal | Mode | Depends on | Status |
 |---|---|---|---|---|---|
 | T-054 | archive-task-sh-regex-align | 修 `scripts/archive-task.sh` 的 awk Insight 标题正则不容错前缀缺陷（insight L23 长期债），对齐 `.ps1` 的 `^##\s+(?:[^\s\n]+\s+)?Insights?\s*$` 容错版；按 insight L26/L46 双实现对账 + 反向证伪（造 `## §N Insight` 前缀标题 → harvest 命中 → 裸标题仍命中）。 | full | — | done |
-| T-055 | backend-api-hygiene | 后端 API 卫生两项：(1) frps 运行态代理端点 `{type}` 用 `frpsProxyTypes` 白名单校验、`{name}` 经 `url.PathEscape` 编码（堵 `internal/frpsadmin/client.go` doGet 纯字符串拼 path 的注入缺口）；(2) handler 停止向前端透传内部错误细节（procStop / mapProxyWriteError 兜底 / downloadBin default 改固定中文文案，细节只进 logger；保留 uploadBin errno 透传——B-A.12 有意决策）。补对应测试。 | full | T-054 | pending |
+| T-055 | backend-api-hygiene | 后端 API 卫生两项：(1) frps 运行态代理端点 `{type}` 用 `frpsProxyTypes` 白名单校验、`{name}` 经 `url.PathEscape` 编码（堵 `internal/frpsadmin/client.go` doGet 纯字符串拼 path 的注入缺口）；(2) handler 停止向前端透传内部错误细节（procStop / mapProxyWriteError 兜底 / downloadBin default 改固定中文文案，细节只进 logger；保留 uploadBin errno 透传——B-A.12 有意决策）。补对应测试。 | full | T-054 | done |
 | T-056 | proc-stop-destructive-confirm | Dashboard 的 frps 停止/重启加二次确认（复用 `ConfirmDialog`，文案点明"将中断当前所有穿透连接"），与"删除代理规则"的破坏性确认标准对齐；frpc 停止可选同款。不给"启动"加确认（非破坏性）。补组件测试。 | full | T-055 | pending |
 | T-057 | binary-missing-onboarding-ux | 首次使用体验两项：(1) Dashboard 二进制缺失提示从"拷文件重启"硬核说明改为指向/复用 AppLayout 顶栏既有的一键下载 + 手动上传入口（信息架构一致）；(2) Wizard 完成前校验所选角色对应二进制是否存在，缺失则在向导内提示并给入口，避免"配好了却跑不起来"困惑。补测试。 | full | T-056 | pending |
 | T-058 | frontend-interaction-polish | 前端交互一致性小修打包：(1) Server/Client「重置」文案改"重新加载"并在表单 dirty 时二次确认（避免静默丢弃未保存编辑）；(2) FirewallHint / PublicIpDetector 剪贴板写入失败不再静默——抄 LogViewer 的 execCommand fallback + `message` 提示（内网 http 部署命中率高）；(3) 清理 Wizard.vue v-if/v-else 两分支文案相同的死分支。补测试。 | full | T-057 | pending |

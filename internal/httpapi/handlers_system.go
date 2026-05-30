@@ -137,7 +137,8 @@ func (h *handlers) downloadBin(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, downloader.ErrUnsupportedOS):
 			writeError(w, http.StatusServiceUnavailable, CodeInternal, "不支持的操作系统", "")
 		default:
-			writeError(w, http.StatusInternalServerError, CodeInternal, err.Error(), "")
+			// T-055 B-3：default 兜底不透传内部 error 细节；固定文案，原始 error 进日志。
+			h.writeInternalError(w, "启动下载失败", err)
 		}
 		return
 	}

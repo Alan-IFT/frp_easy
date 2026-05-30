@@ -38,7 +38,8 @@ func (h *handlers) procStop(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := h.deps.ProcMgr.Stop(kind)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, CodeInternal, err.Error(), "")
+		// T-055 B-1：不向前端透传内部 error 细节；固定文案，原始 error 进日志。
+		h.writeInternalError(w, "停止进程失败", err)
 		return
 	}
 	// AC-9: 停止成功后更新 mode kv
@@ -96,4 +97,16 @@ func mapProcErr(w http.ResponseWriter, err error) {
 		return
 	}
 	writeError(w, http.StatusInternalServerError, CodeInternal, msg, "")
+}
+
+// writeInternalError 统一 500 兜底：向前端返回固定的面向用户文案（不含任何内部
+// error 细节），同时把原始 error 记到 logger（保留可诊断性，配合 middleware
+// RequestID 可关联定位）。logger 为 nil 时跳过记录（与 handlers_proxies.go:147
+// 的 nil 守卫范式一致）。T-055 B：3 处兜底（procStop / mapProxyWriteError /
+// downloadBin）共用本 helper，确保 SQL 约束文本 / 驱动细节 / errno 等不外泄。
+func (h *handlers) writeInternalError(w http.ResponseWriter, userMsg string, cause error) {
+	if h.deps.Logger != nil && cause != nil {
+		h.deps.Logger.Error("internal error", "userMsg", userMsg, "cause", cause)
+	}
+	writeError(w, http.StatusInternalServerError, CodeInternal, userMsg, "")
 }

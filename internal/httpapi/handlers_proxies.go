@@ -89,7 +89,7 @@ func (h *handlers) createProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.deps.Store.UpsertProxy(r.Context(), p); err != nil {
-		mapProxyWriteError(w, err)
+		h.mapProxyWriteError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toResponse(*p))
@@ -117,7 +117,7 @@ func (h *handlers) updateProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.deps.Store.UpsertProxy(r.Context(), p); err != nil {
-		mapProxyWriteError(w, err)
+		h.mapProxyWriteError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toResponse(*p))
@@ -226,7 +226,8 @@ func validateProxyInput(in *ProxyInput) (string, error) {
 func errInline(s string) error { return errors.New(s) }
 
 // mapProxyWriteError 把 storage 层错误映射到 HTTP 响应。
-func mapProxyWriteError(w http.ResponseWriter, err error) {
+// T-055 B-2：改为 *handlers 方法以复用 writeInternalError（兜底 500 固定文案 + 日志）。
+func (h *handlers) mapProxyWriteError(w http.ResponseWriter, err error) {
 	if errors.Is(err, storage.ErrNotFound) {
 		writeError(w, http.StatusNotFound, CodeNotFound, "未找到该规则", "")
 		return
@@ -257,5 +258,6 @@ func mapProxyWriteError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed, msg, "")
 		return
 	}
-	writeError(w, http.StatusInternalServerError, CodeInternal, "保存失败: "+msg, "")
+	// T-055 B-2：兜底 500 不向前端透传裸 SQL/驱动细节；固定文案，原始 error 进日志。
+	h.writeInternalError(w, "保存失败", err)
 }

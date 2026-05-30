@@ -190,13 +190,28 @@ func (h *handlers) serverRuntimeProxies(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// isFrpsProxyType 判断 pt 是否命中 frpsProxyTypes 白名单（T-055 A-1）。
+func isFrpsProxyType(pt string) bool {
+	for _, t := range frpsProxyTypes {
+		if t == pt {
+			return true
+		}
+	}
+	return false
+}
+
 // GET /api/v1/server/runtime/proxy/{type}/{name}
 func (h *handlers) serverRuntimeProxyDetail(w http.ResponseWriter, r *http.Request) {
+	// T-055 A-1 / C-2：type 白名单校验前移到构造 client 之前——非法 type 不触上游、不构造 client。
+	pt := chi.URLParam(r, "type")
+	if !isFrpsProxyType(pt) {
+		writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed, "不支持的代理类型", "type")
+		return
+	}
 	c := h.buildFrpsAdminClient(w, r)
 	if c == nil {
 		return
 	}
-	pt := chi.URLParam(r, "type")
 	name := chi.URLParam(r, "name")
 	detail, err := c.ProxyDetail(r.Context(), pt, name)
 	if err != nil {

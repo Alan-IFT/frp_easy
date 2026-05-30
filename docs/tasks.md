@@ -13,6 +13,7 @@
 
 | ID | Slug | 结果 | 完成 | 文档目录 |
 |---|---|---|---|---|
+| T-055 | backend-api-hygiene | DELIVERED | 2026-05-30 | `docs/features/backend-api-hygiene/`（pending archive；batch project-optimization-2026-05；A: frpsadmin client Proxies/ProxyDetail/Traffic 三处 path 加 url.PathEscape 防注入根防御 + serverRuntimeProxyDetail type 白名单校验前移→422；B: 抽 writeInternalError helper 统一 3 处 500 兜底（procStop/mapProxyWriteError/downloadBin）固定文案 + 原始 error 进 logger，保留 ErrDuplicateName 409 / unique 422 / validation 透传 / uploadBin errno；+10 Go 测试 go_tests 308→318 / test_count 734→744；0 rollback；verify_all 由 orchestrator 真跑硬闸门） |
 | T-054 | archive-task-sh-regex-align | DELIVERED | 2026-05-30 | `docs/features/archive-task-sh-regex-align/`（pending archive；batch project-optimization-2026-05；修 archive-task.sh:50 awk Insight 标题正则→容错单 token 前缀 `([^[:space:]]+[[:space:]]+)?`，对齐 .ps1:48，偿还 T-028 遗留双实现不对称债；改动面 1 文件；无新增测试；verify_all 由 orchestrator 真跑硬闸门） |
 | T-049 | docs-contract-drift-fix | DELIVERED | 2026-05-30 | `docs/features/docs-contract-drift-fix/`（pending archive；batch project-optimization-2026-05；openapi 补 service-status 路由+schema（30 path）+ dev-map 树补 svcprobe/utils/test-utils + 修路由计数 + 2 HTML 加时效声明；verify_all PASS 32/0/0） |
 | T-051 | frontend-test-coverage | DELIVERED | 2026-05-30 | `docs/features/frontend-test-coverage/`（pending archive；batch project-optimization-2026-05；proxies/wizard store + useProxyForm + statusUtils/useLogLevelFilter/useServiceStatus + api/client.ts +84 测试；frontend_tests 342→426；verify_all PASS 32/0/0） |
