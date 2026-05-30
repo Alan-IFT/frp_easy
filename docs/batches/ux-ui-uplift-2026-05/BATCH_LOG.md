@@ -16,3 +16,5 @@
 2026-05-31T03:20:00Z · T-066 · DELIVERED · files=15 · frontend_tests 552→576 · rollback=0 · verify_all=PASS 32/0/0（首验 B.1 tsc FAIL→orchestrator 修 2 处未用声明→复验 PASS） · commit=8b1fccf
 2026-05-31T03:21:00Z · T-067 · dispatching pm-orchestrator · slug=responsive-layout · mode=full
 2026-05-31T04:05:00Z · T-067 · 首验 B.1 FAIL（tsc TS6133：useViewport.spec 未用 beforeEach import）—— 同 T-066 同类（role-collapsed PM 无 Bash 跑不了 tsc，新测试文件未用声明高发漏检）。orchestrator 真跑硬闸门捕获 → 就地删未用 import → 复验。非停批信号。
+2026-05-31T04:20:00Z · T-067 · DELIVERED · files=11 · frontend_tests 576→600 · rollback=0 · verify_all=PASS 32/0/0（含 e2e C.1，复验） · commit=48613f4
+2026-05-31T04:21:00Z · batch-complete · 6/6 DELIVERED · 0 failed/blocked · 无停批信号触发 · 进入收尾（archive + REPORT + push）

@@ -42,7 +42,7 @@
 | T-064 | menu-icons-and-a11y | 修侧边栏菜单图标 + 补 a11y：(1) 消除 `⚙` 字形被"服务端配置"与"设置"重复使用（折叠态同形→误点），并给每个 menu item 无障碍名（aria-label/title）；(2) 全屏日志滚动容器加 `tabindex`/`role` 让键盘可滚（LogList.vue）；(3) 复制按钮瞬时态加 `aria-live`/`role=status` 供屏幕阅读器播报。**偏好零新依赖**（不引入 @vicons 等重型图标库，除非 7-stage 评审判定明显更优）。补组件测试。 | full | — | done |
 | T-065 | mapprocerr-sentinel-hygiene | 把 `handlers_proc.go:mapProcErr` 的脆弱 `strings.Contains`（stopping/starting/running 文本匹配 → 409 PROC_BUSY）收口为 procmgr sentinel（`ErrBusy`），与 T-059 `mapProxyWriteError` / `binloc.ErrBinMissing` 范式一致；500 路径改走 `writeInternalError`（不泄露内部 error 文本，与 T-055 一致）。保留 uploadBin errno 透传（B-A.12 有意决策不动）。开工前 grep 出所有断言旧文本的测试纳入同分区（insight L35），断言更新需 PM_LOG 显式批准（红线 3 例外、有意改变行为），用例数不降。 | full | — | done |
 | T-066 | dark-theme-support | 加生产暗色主题，激活已投入一半的主题感知基建（日志子系统 `useThemeVars` + 暗色测试已就绪，但全站只能浅色）：(1) App.vue `useOsTheme()` 跟随系统 + 顶栏手动切换按钮 + localStorage 持久化偏好；(2) 把散落硬编码 hex（Login/Setup/Wizard 背景、`#888` 文字、品牌绿 `#18a058`、ServiceStatusCard 橙）改成主题 token / `useThemeVars` / CSS 变量（insight L16 浅色禁硬编码同源）；(3) 暗色下逐页可读性核验。补测试（参考 LogViewer.spec 用 `darkTheme` 范式）。 | full | T-064 | done |
-| T-067 | responsive-layout | 让应用外壳在窄屏/移动端可用（手机查看进程状态/重启穿透是真实场景）：(1) 侧边栏按断点自动折叠（`useBreakpoint`）；(2) 顶栏横幅（品牌+版本+二进制缺失横幅+用户名+退出）窄屏不溢出、换行得当；(3) 表单固定像素宽（Server 360px / Client 300px 等）改 `max-width` 不横向溢出。内容栅格已响应式（`responsive="screen"`）不动。补测试/视觉核验。 | full | T-066 | in-progress |
+| T-067 | responsive-layout | 让应用外壳在窄屏/移动端可用（手机查看进程状态/重启穿透是真实场景）：(1) 侧边栏按断点自动折叠（`useBreakpoint`）；(2) 顶栏横幅（品牌+版本+二进制缺失横幅+用户名+退出）窄屏不溢出、换行得当；(3) 表单固定像素宽（Server 360px / Client 300px 等）改 `max-width` 不横向溢出。内容栅格已响应式（`responsive="screen"`）不动。补测试/视觉核验。 | full | T-066 | done |
 
 **Topo order**：T-062 → T-063 → T-064 → T-065 → T-066 → T-067（sequential）。
 

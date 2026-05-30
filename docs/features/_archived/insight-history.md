@@ -244,3 +244,37 @@ T-016 已用此真相替换主索引第 18 行。
 
 - "读时不删过期行、靠后台周期清理"是 session 存储的标准范式，但**周期清理任务必须真的被启动序列拉起**，否则 GetSession 的"不删"优化会让表无界增长。清理 loop 必须随根 ctx 取消（SIGTERM/stopCh）以免 goroutine 泄漏，并把间隔设为包级 var 便于测试注入短间隔 / 长间隔。
 - 请求关联 ID 必须用 crypto/rand 而非时间戳：reqID 的唯一价值是日志关联，时间戳在并发下碰撞。项目已有 `auth.GenerateCSRFToken`/`randToken` 的 crypto/rand 范式，middleware 直接用 `crypto/rand`+`hex` 即可，无需引入 auth 依赖。
+
+## Rotated 2026-05-31
+
+- 有副作用的代码（子进程 spawn、平台探测、boot 自恢复）也能测：(1) 平台分支抽纯函数 + `t.Setenv` 注入；(2) 真 spawn 用编译独立 helper 程序（当被测代码硬编码自定义 flag、标准 `TestHelperProcess` 不可用时）；(3) 慢 spawn 测试 `testing.Short()` 门控。
+- 同步点禁用固定 `time.Sleep`（脆弱），用 poll-until-condition + deadline。
+
+## Rotated 2026-05-31
+
+- 加测试常顺带暴露 bug：A-3 写 canceled 用例时发现 retryRestoreLoop 的 canceled-persist 用错 ctx —— "为可测性细看代码"本身就是发现缺陷的高效路径。
+- "默认值表单"在加载失败时是 UX 反模式：用户会把空表单/默认值当成"当前真实配置"进而误操作覆盖。正解是**失败态根本不渲染表单**（而非渲染表单+弹 toast）。三态 `v-if/else-if/else` 写成互斥分支 + 断言"error 时 loading 必 false"锁死，避免 loading+error 同显。
+
+## Rotated 2026-05-31
+
+- store 的 fetch 失败应**保留旧数据 + 暴露 error ref**，由页面据 error 区分"加载失败"与"空"，而非 `void fetchX()` 吞 promise 让失败静默退化成空态。
+- 有状态控件（开关）获取失败必须显式呈现失败态（disabled+tooltip+重试），静默停在默认值 = UI 撒谎。
+
+## Rotated 2026-05-31
+
+- 同一数据的展示格式必须跨页统一：`formatTime` 三份实现（裸返回 / 两种 toLocaleString）让用户在监控页见裸 ISO、仪表盘见本地化 —— 抽到单一 util 并全局复用。本地化时间的测试断言必须时区稳定（断言"含年份/非裸 ISO" + 同引擎对齐），不能 hardcode 期望字符串。
+- 浅色主题下严禁硬编码 `rgba(255,255,255,*)` 文字色（不可读）；用 `n-text` 的 `depth`/`type` 语义色或 `useThemeVars()` 变量，随主题自适应。
+
+## Rotated 2026-05-31
+
+- SPA 内导航必须 `router.push`，`href`/`tag=a` 触发整页刷新丢 Pinia 状态 + 重跑路由守卫。
+- `api/client.ts` 这类请求公共层用 `apiClient.defaults.adapter` 合成响应即可走完真实拦截器链（CSRF 注入 / 401 跳转 / 错误解包），afterEach 还原 adapter + CSRF getter 零泄漏 —— 不必 mock 整个 axios，测的是真实拦截器行为。
+- 同簇 composable 覆盖要对账（log/ 下 5 个 composable 此前漏了 useLogLevelFilter 一个）；"同簇漏一两个"是覆盖不均的典型信号，补齐时按目录清点。
+- "契约文件描述全部路由"的声明（README/openapi）必须有机制守门，否则新路由（service-status）漏登、声明变假却无人发现。理想是 verify_all 加一道"router.go 路由集 == openapi paths 集"的静态闸门（本任务未做，建议未来 T 候选）。
+
+## Rotated 2026-05-31
+
+- 文档自相矛盾（dev-map 树 vs prose）的根因是"树是手画快照、prose 增量更新"两条更新路径不同步。修法是树只放结构、增删数字一律指向单一权威（router.go 行），避免在两处各维护一份会漂移的计数。
+- 大型冻结文档（project-status/architecture.html）与其重生成，不如加显眼时效声明 + 指向持续更新的 dev-map/tasks —— 低成本止损"半年前快照被当现状"。
+- 错误/取消路径上的"最终状态持久化"必须用 **detached context**（`context.Background()` + 自带超时），不能复用触发该路径的已取消 ctx —— 否则这条"我被取消了"的记录本身会被取消连累，永远写不出去。这是 ctx 取消语义的常见陷阱：取消应停止"进行中的工作"，但不应阻止"记录我已停止"这一收尾动作。
+- 真机场景下该 canceled 写仍与进程 shutdown 的 store.Close 存在竞态（best-effort）；对"上次自恢复结果"这类观测字段可接受，若要强保证需在 run() 用 waitgroup 等 retry goroutine 收尾后再 Close（本任务未做，超出范围）。
