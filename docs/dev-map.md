@@ -128,7 +128,7 @@ frp_easy/
             ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken；T-047: 加载三态 skeleton/n-result+重试/loaded）
             ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）
             ├── Settings.vue  ← 修改密码表单
-            └── Wizard.vue    ← T-002: 部署向导（顶级路由 /wizard，3 步）
+            └── Wizard.vue    ← T-002: 部署向导（顶级路由 /wizard，3 步；不在 AppLayout 内→顶栏缺失横幅向导阶段不可见）；T-057: 完成保存配置+开启自动启动后、跳转前 await appStore.fetchReady() 刷新 binMissing，按所选角色（frpc/frps/both）算缺失交集 missingForRole——缺失则不自动跳走、不发「正在跳转」toast，step3 就地 warning alert + 「进入仪表盘」手动按钮（引导用户去仪表盘顶栏横幅下载/上传）；不缺失维持原自动跳转。binWarning 用 ref 定格快照
 ```
 
 ## 功能在哪里

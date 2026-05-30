@@ -6,6 +6,9 @@
     <ServiceStatusCard style="margin: 16px 0" />
 
     <!-- 二进制缺失警告 -->
+    <!-- T-057 binary-missing-onboarding-ux：文案与 AppLayout 顶栏横幅信息架构对齐。
+         首选引导用户用顶部横幅的「一键下载 / 手动上传」入口（已存在，不在此重复造按钮）；
+         手动放置到目录后重启退为兜底说明。 -->
     <n-alert
       v-if="appStore.binMissing.length > 0"
       type="warning"
@@ -13,7 +16,8 @@
       style="margin: 16px 0"
     >
       以下进程的二进制文件未找到：{{ appStore.binMissing.join(', ') }}。
-      请将对应文件放置到 <n-text code>frp_win/</n-text> 或 <n-text code>frp_linux/</n-text> 目录下后重启。
+      请使用<n-text strong>顶部横幅</n-text>的「一键下载」从 GitHub Releases 拉取，或「手动上传」本地已有的二进制；
+      网络与上传都不便时，也可手动放置到 <n-text code>frp_win/</n-text> 或 <n-text code>frp_linux/</n-text> 目录下后重启（兜底）。
     </n-alert>
 
     <n-grid cols="1 m:2" responsive="screen" :x-gap="16" :y-gap="16" style="margin-top: 16px">

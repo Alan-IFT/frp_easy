@@ -129,7 +129,7 @@
 
         <!-- Step 3: Complete -->
         <div v-if="currentStep === 3" style="text-align: center; padding: 24px 0">
-          <n-icon size="64" color="#18a058">
+          <n-icon size="64" :color="binWarning.length > 0 ? '#f0a020' : '#18a058'">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
@@ -137,10 +137,26 @@
           <div style="margin-top: 16px">
             <n-text strong style="font-size: 18px">配置完成！</n-text>
           </div>
-          <div style="margin-top: 8px">
-            <n-text depth="3">已保存配置并启用对应模式，现在跳转到仪表盘</n-text>
-          </div>
-          <n-spin v-if="completing" style="margin-top: 16px" />
+
+          <!-- T-057：所选角色二进制全就绪 → 维持原"正在跳转"文案 + spin。 -->
+          <template v-if="binWarning.length === 0">
+            <div style="margin-top: 8px">
+              <n-text depth="3">已保存配置并启用对应模式，现在跳转到仪表盘</n-text>
+            </div>
+            <n-spin v-if="completing" style="margin-top: 16px" />
+          </template>
+
+          <!-- T-057：所选角色二进制缺失 → 配置已保存但不自动跳走，就地警告 + 引导 + 手动进入按钮。 -->
+          <template v-else>
+            <n-alert type="warning" title="配置已保存，但二进制尚未就绪" style="margin-top: 16px; text-align: left">
+              所选角色的二进制（{{ binWarning.join('、') }}）尚未就绪。配置已保存并已开启自动启动，
+              但二进制就绪后才能真正启动。进入仪表盘后，请用顶部横幅的「一键下载」或「手动上传」补齐，
+              再启动对应进程。
+            </n-alert>
+            <n-button type="primary" style="margin-top: 16px" @click="goToDashboard">
+              进入仪表盘
+            </n-button>
+          </template>
         </div>
 
         <!-- Actions -->
@@ -178,11 +194,13 @@ import { apiPutClient } from '../api/frpclient'
 import { apiPutServer } from '../api/server'
 import { apiPutMode } from '../api/mode'
 import { useWizardStore } from '../stores/wizard'
+import { useAppStore } from '../stores/app'
 import { extractErrorMessage } from '../api/client'
 
 const router = useRouter()
 const message = useMessage()
 const wizardStore = useWizardStore()
+const appStore = useAppStore()
 
 const currentStep = ref(1)
 const selectedRole = ref<'frpc' | 'frps' | 'both' | ''>('')
@@ -190,6 +208,9 @@ const roleError = ref('')
 const configError = ref('')
 const submitting = ref(false)
 const completing = ref(false)
+// T-057：完成那一刻，所选角色对应但缺失的二进制 kind 列表（空 = 全就绪）。
+// 用 ref 定格快照，不用 computed —— step3 已展示的警告不应随后续 binMissing 响应式漂移。
+const binWarning = ref<string[]>([])
 
 const frpsForm = ref({
   bindPort: 7000,
@@ -287,7 +308,6 @@ async function handleNext() {
       await apiPutMode(modePayload)
 
       currentStep.value = 3
-      completing.value = true
 
       // Mark wizard as complete then redirect
       try {
@@ -295,14 +315,41 @@ async function handleNext() {
       } catch {
         // best effort
       }
-      message.success('配置已保存，正在跳转...')
-      void router.push('/dashboard')
+
+      // T-057：保存配置 + 开启自动启动后，校验所选角色对应二进制是否就绪。
+      // 进入向导前 router.beforeEach 已 fetch 过一次 binMissing；这里再刷新一次，
+      // 覆盖境内用户在向导停留期间状态变化，并保证逻辑用最新值（fetchReady 内部吞错不抛）。
+      await appStore.fetchReady()
+      binWarning.value = missingForRole(selectedRole.value)
+
+      if (binWarning.value.length > 0) {
+        // 缺失：不阻断（配置已生效），但不自动跳走 —— 在 step3 就地展示警告 +
+        // 让用户主动点「进入仪表盘」，避免错过提示后在仪表盘才通过红色错误态发现。
+        completing.value = false
+      } else {
+        // 全就绪：维持原行为（success toast + 自动跳转）。
+        completing.value = true
+        message.success('配置已保存，正在跳转...')
+        void router.push('/dashboard')
+      }
     } catch (e) {
       configError.value = extractErrorMessage(e, '保存配置失败，请重试')
     } finally {
       submitting.value = false
     }
   }
+}
+
+// T-057：所选角色对应、且当前缺失的二进制 kind 集合。镜像 modePayload 的 frpc/frps/both 分支。
+function missingForRole(role: 'frpc' | 'frps' | 'both' | ''): string[] {
+  const need: string[] =
+    role === 'both' ? ['frpc', 'frps'] : role === 'frpc' ? ['frpc'] : role === 'frps' ? ['frps'] : []
+  return need.filter((k) => appStore.binMissing.includes(k))
+}
+
+// T-057：缺失分支由用户主动点「进入仪表盘」触发跳转（而非自动跳走错过提示）。
+function goToDashboard(): void {
+  void router.push('/dashboard')
 }
 
 async function handleSkip() {
@@ -313,4 +360,19 @@ async function handleSkip() {
   }
   void router.push('/dashboard')
 }
+
+// 暴露给测试（getExposed 范式；禁用 wrapper.vm.__testing，详见 test-utils/exposed.ts / insight L45）。
+defineExpose({
+  __testing: {
+    currentStep,
+    selectedRole,
+    completing,
+    binWarning,
+    configError,
+    handleNext,
+    handleSkip,
+    missingForRole,
+    goToDashboard,
+  },
+})
 </script>

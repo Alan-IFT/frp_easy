@@ -13,6 +13,7 @@ import { apiError } from '../../test-utils/apiError'
 import { defineComponent, h, nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
+import { useAppStore } from '../../stores/app'
 
 vi.mock('../../api/mode', () => ({
   apiGetMode: vi.fn(),
@@ -403,6 +404,58 @@ describe('Dashboard.vue — 停止/重启二次确认（T-056）', () => {
     // 初始无 pending，不应出现任何确认文案
     expect(w.text()).not.toContain('将立即中断所有正在穿透的远程连接')
     expect(w.text()).not.toContain('将断开本机所有正在转发的连接')
+  })
+})
+
+// T-057 binary-missing-onboarding-ux：缺失提示文案与顶栏横幅信息架构对齐。
+describe('Dashboard.vue — 二进制缺失提示引导（T-057）', () => {
+  async function mountWithMissing(missing: string[]) {
+    const w = mountPage()
+    await settle()
+    const app = useAppStore()
+    app.binMissing = missing
+    await settle()
+    return w
+  }
+
+  it('IS-1：binMissing 非空 → alert 文案含「下载/上传/顶部」引导关键字', async () => {
+    const w = await mountWithMissing(['frpc'])
+    const txt = w.text()
+    expect(txt).toContain('二进制文件缺失')
+    expect(txt).toContain('frpc')
+    // 引导用户走顶栏横幅入口（一键下载 / 手动上传）
+    expect(txt).toContain('顶部横幅')
+    expect(txt).toContain('一键下载')
+    expect(txt).toContain('手动上传')
+  })
+
+  it('IS-2：手动放置目录仅作兜底（含「兜底」措辞，且仍提及目录），不再是唯一/首选路径', async () => {
+    const w = await mountWithMissing(['frps'])
+    const txt = w.text()
+    // 兜底说明保留
+    expect(txt).toContain('兜底')
+    expect(txt).toMatch(/frp_win|frp_linux/)
+    // 反向：不再使用旧的"请将对应文件放置到 …目录下后重启"这种把手动拷贝当首选的句式
+    expect(txt).not.toContain('请将对应文件放置到')
+  })
+
+  it('IS-3：缺失提示 alert 内不重复造下载/上传按钮（纯文字引导，避免与顶栏横幅重复）', async () => {
+    const w = await mountWithMissing(['frpc', 'frps'])
+    // 按 DOM 定位那条"二进制文件缺失"alert（naive-ui 渲染为 .n-alert），
+    // 而非按组件 name 查询——naive-ui 的 NAlert 注册名不可靠（与 IS-1/IS-2 一致走文本定位）。
+    const alertEls = w.findAll('.n-alert')
+    const missAlert = alertEls.find((a) => a.text().includes('二进制文件缺失'))
+    expect(missAlert).toBeTruthy()
+    // 纯文字引导：alert 作用域内不渲染任何按钮（下载/取消/上传）。
+    expect(missAlert!.findAll('button').length).toBe(0)
+    // 也不挂 UploadBinButton 组件（它只属于顶栏横幅，Dashboard 不应引入）。
+    expect(w.findAllComponents({ name: 'UploadBinButton' }).length).toBe(0)
+  })
+
+  it('binMissing 为空 → 缺失 alert 不渲染（BC-7，无回归）', async () => {
+    const w = mountPage()
+    await settle()
+    expect(w.text()).not.toContain('二进制文件缺失')
   })
 })
 
