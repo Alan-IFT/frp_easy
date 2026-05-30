@@ -67,7 +67,7 @@ frp_easy/
     │           └── auth.ts         ← programmaticLogin / bypassWizard / setupAccount / programmaticLogout
     └── src/
         ├── main.ts         ← app 入口；组合 Pinia / Router；注册 CSRF token getter
-        ├── App.vue         ← 根组件（NConfigProvider + NMessageProvider 包裹；T-006 修复）
+        ├── App.vue         ← 根组件（NConfigProvider + NMessageProvider 包裹；T-006 修复；T-066: <n-config-provider :theme=activeTheme> 绑 useTheme + 新增 <n-global-style/>（config-provider 内）让 body 背景随主题切换——全站暗色主题接线点）
         ├── router.ts       ← Vue Router 4（history mode）；导航守卫
         ├── types.ts        ← 与后端 API 契约一致的类型定义（Proxy / ProcessInfo 等）
         ├── api/            ← axios 客户端 + 按端点分组的封装
@@ -92,6 +92,7 @@ frp_easy/
         │   ├── wizard.ts   ← wizardHandled / shouldShow / checked；checkWizard / completeWizard
         │   └── __tests__/  ← Vitest store 测试（T-051 +2：proxies CRUD/error ref、wizard 状态流转）
         ├── composables/    ← 可复用逻辑
+        │   ├── useTheme.ts     ← T-066：全局暗色主题状态层（模块级单例）。pref('light'|'dark'|'auto') + activeTheme(computed null|darkTheme) + isDark + setPref；THEME_STORAGE_KEY='frpEasy.themePref'；DEFAULT_PREF='auto'；内置 createSafeStorage(BC-13 内存降级，复刻 useLogPrefs 范式)；auto 经 useOsTheme 跟随系统（osThemeRef 惰性首调在 App.vue setup）。App.vue + AppLayout 共享单例。
         │   ├── statusUtils.ts  ← getTagType / getStateLabel（ProcessState → Naive UI 颜色）
         │   ├── useProxyForm.ts ← ProxyForm 表单逻辑（isTcpUdp / isHttpHttps 等）
         │   ├── usePortPresets.ts ← T-018 §C.2：常用端口预设清单（SSH/RDP/HTTP/HTTPS/MySQL/PostgreSQL/Redis/MongoDB/SMB/VNC）；前端 hardcode
@@ -174,6 +175,7 @@ frp_easy/
 | 字节友好单位 / 时间空值格式化 | 是 | `web/src/utils/format.ts` | T-042 抽取。`formatBytes(n)`（B/KiB/MiB/GiB/TiB/PiB；undefined/null/NaN/负数 → "—"；0 → "0 B"）+ `formatTime(s)`（空/"0001-..." → "—"）。共享方：ServerMonitor.vue + Proxies.vue runtime 列。 |
 | proxy runtime status → 视觉/文案 | 是 | `web/src/utils/proxyStatus.ts` | T-042 抽取。`getProxyStatusTag(raw)` → `{type, text, dotColor, online}`。大小写防御 + 空字符串归 "离线"（与"无此 proxy"语义合并）。共享方：ServerMonitor.vue 状态列 + Proxies.vue runtime 列。 |
 | 复制文本到剪贴板（含 fallback） | 是 | `web/src/utils/clipboard.ts` | T-061 抽取（偿还 T-058 (A) backlog）。`copyToClipboard(text): Promise<boolean>`——首选 `navigator.clipboard.writeText`（安全上下文），失败回落临时离屏 `aria-hidden` textarea + `document.execCommand('copy')`；返回成功布尔，**不调 message**（message 留组件 setup 层，`useMessage` 是组合式 hook）。内网 http 非安全上下文必走 fallback（insight L37）。共享方：LogViewer.vue::onCopy + FirewallHint.vue::copyText + PublicIpDetector.vue::copyText。 |
+| 全局暗色主题状态（偏好/持久化/跟随系统） | 是 | `web/src/composables/useTheme.ts` | T-066 新增。`useTheme()` → `{ pref, activeTheme(null=浅/darkTheme=暗), isDark, setPref }`。模块级单例，App.vue 绑 NConfigProvider :theme + AppLayout 顶栏 n-select 三态切换共享。localStorage key `frpEasy.themePref`，缺失/非法降级 DEFAULT_PREF='auto'；localStorage 不可用内存降级（BC-13）；auto 经 `useOsTheme` 跟随系统。darkTheme/useOsTheme 均 naive-ui 内置（零依赖）。注意 useOsTheme 须在 setup 内首调（App.vue 保证）。 |
 | HTTP 中间件（全套） | 是 | `internal/httpapi/middleware.go` | ReadyGate(C-3) / Recover / RequestID / Logger(C-5) / CORS / SessionAuth / CSRF。 |
 | 日志尾读 | 是 | `internal/logtail/tail.go` | TailLines / ReadFrom 增量。 |
 | 子进程管理 | 是 | `internal/procmgr/manager.go` | Start/Stop/Restart/Status/Shutdown/ApplyConfigChange。 |

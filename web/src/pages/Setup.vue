@@ -1,5 +1,7 @@
 <template>
-  <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f5f5f5">
+  <!-- T-066：移除整页硬编码 background:#f5f5f5；body 背景由 App.vue 的
+       <n-global-style> 随主题给出（浅色 themeVars.bodyColor 等价原观感，暗色自适应）。 -->
+  <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center">
     <n-card title="初始化 FRP Easy" style="width: 400px">
       <n-form
         ref="formRef"

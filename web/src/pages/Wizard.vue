@@ -1,8 +1,10 @@
 <template>
-  <div style="min-height: 100vh; background: #f0f2f5; display: flex; justify-content: center; align-items: flex-start; padding: 40px 16px">
+  <!-- T-066：移除整页硬编码 background:#f0f2f5；body 背景由 App.vue 的
+       <n-global-style> 随主题给出。品牌色/文字色/图标色改 themeVars 语义 token。 -->
+  <div style="min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 40px 16px">
     <div style="width: 100%; max-width: 680px">
       <div style="text-align: center; margin-bottom: 32px">
-        <n-text strong style="font-size: 24px; color: #18a058">FRP Easy</n-text>
+        <n-text strong :style="{ fontSize: '24px', color: themeVars.primaryColor }">FRP Easy</n-text>
         <div style="margin-top: 8px">
           <n-text depth="3">快速部署向导 — 几步完成初始配置</n-text>
         </div>
@@ -23,19 +25,19 @@
               <n-radio value="frpc">
                 <div>
                   <div style="font-weight: 500">仅配置 frpc（客户端）</div>
-                  <div style="font-size: 13px; color: #888">我需要穿透到 frps 服务器，本机没有公网 IP</div>
+                  <div :style="{ fontSize: '13px', color: themeVars.textColor3 }">我需要穿透到 frps 服务器，本机没有公网 IP</div>
                 </div>
               </n-radio>
               <n-radio value="frps">
                 <div>
                   <div style="font-weight: 500">仅配置 frps（服务端）</div>
-                  <div style="font-size: 13px; color: #888">我的机器有公网 IP，作为穿透服务端</div>
+                  <div :style="{ fontSize: '13px', color: themeVars.textColor3 }">我的机器有公网 IP，作为穿透服务端</div>
                 </div>
               </n-radio>
               <n-radio value="both">
                 <div>
                   <div style="font-weight: 500">两者都配置</div>
-                  <div style="font-size: 13px; color: #888">同一台机器兼做服务端和客户端</div>
+                  <div :style="{ fontSize: '13px', color: themeVars.textColor3 }">同一台机器兼做服务端和客户端</div>
                 </div>
               </n-radio>
             </n-space>
@@ -134,7 +136,7 @@
 
         <!-- Step 3: Complete -->
         <div v-if="currentStep === 3" style="text-align: center; padding: 24px 0">
-          <n-icon size="64" :color="binWarning.length > 0 ? '#f0a020' : '#18a058'">
+          <n-icon size="64" :color="binWarning.length > 0 ? themeVars.warningColor : themeVars.primaryColor">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
@@ -202,7 +204,7 @@ import { useRouter } from 'vue-router'
 import {
   NCard, NSteps, NStep, NRadioGroup, NRadio, NSpace, NText,
   NForm, NFormItem, NInput, NInputNumber, NButton, NAlert, NIcon, NSpin,
-  useMessage,
+  useMessage, useThemeVars,
 } from 'naive-ui'
 import type { FormInst, FormRules } from 'naive-ui'
 import { apiPutClient } from '../api/frpclient'
@@ -216,6 +218,8 @@ const router = useRouter()
 const message = useMessage()
 const wizardStore = useWizardStore()
 const appStore = useAppStore()
+// T-066：品牌色/文字色/图标色走主题语义 token，暗色自适应。
+const themeVars = useThemeVars()
 
 const currentStep = ref(1)
 const selectedRole = ref<'frpc' | 'frps' | 'both' | ''>('')

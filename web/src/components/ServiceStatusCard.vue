@@ -17,7 +17,8 @@
     title="服务化状态"
     size="small"
     :bordered="true"
-    :class="['svc-status-card', needsFix ? 'svc-status-card--warn' : 'svc-status-card--ok']"
+    class="svc-status-card"
+    :style="warnCardStyle"
   >
     <template #header-extra>
       <n-button
@@ -144,6 +145,18 @@ const cmdBlockStyle = computed(() => ({
   margin: '6px 0',
 }))
 
+// T-066（C-3）：needsFix 高亮边框/inset 从 scoped css 硬编码 #f0a020 改 :style computed
+// 走 themeVars.warningColor（暗色自适应，复刻同文件 cmdBlockStyle 范式）。
+// 非 needsFix 时返回空对象 → n-card 用默认边框（等价原 --ok 分支）。
+const warnCardStyle = computed<Record<string, string>>(() => {
+  if (!needsFix.value) return {}
+  const warn = themeVars.value.warningColor
+  return {
+    borderColor: warn,
+    boxShadow: `0 0 0 1px ${warn} inset`,
+  }
+})
+
 const supervisorLabel = computed(() => {
   switch (status.value?.supervisor) {
     case 'systemd':         return 'systemd'
@@ -181,11 +194,6 @@ function outcomeTagType(outcome: string): 'success' | 'warning' | 'error' | 'def
 </script>
 
 <style scoped>
-.svc-status-card--warn {
-  border-color: #f0a020;
-  box-shadow: 0 0 0 1px #f0a020 inset;
-}
-.svc-status-card--ok {
-  /* 默认边框即可 */
-}
+/* T-066（C-3）：needsFix 高亮样式移到 :style computed warnCardStyle（走
+   themeVars.warningColor 暗色自适应），不再用 scoped css 硬编码 #f0a020。 */
 </style>

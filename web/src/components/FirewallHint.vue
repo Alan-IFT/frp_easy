@@ -9,7 +9,9 @@
     <div v-for="port in ports" :key="port" style="margin-bottom: 12px">
       <p style="margin: 0 0 6px; font-weight: 500">端口 {{ port }}</p>
 
-      <div style="background: #f5f5f5; padding: 8px 12px; border-radius: 4px; font-family: monospace; font-size: 13px">
+      <!-- T-066：命令块背景 #f5f5f5 → themeVars.codeColor（暗色自适应，与
+           ServiceStatusCard 命令块同款语义 token）。 -->
+      <div :style="{ background: themeVars.codeColor, padding: '8px 12px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '13px' }">
         <div v-for="cmd in getCommands(port)" :key="cmd" style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px">
           <span style="flex: 1; word-break: break-all">{{ cmd }}</span>
           <n-button
@@ -36,10 +38,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NAlert, NButton, useMessage } from 'naive-ui'
+import { NAlert, NButton, useMessage, useThemeVars } from 'naive-ui'
 import { copyToClipboard } from '../utils/clipboard'
 
 const message = useMessage()
+// T-066：命令块背景走主题语义 token。
+const themeVars = useThemeVars()
 
 const props = withDefaults(
   defineProps<{

@@ -24,7 +24,8 @@
             {{ copied ? '已复制 ✓' : '复制' }}
           </n-button>
         </div>
-        <div v-if="result.advisory" style="margin-top: 6px; font-size: 13px; color: #888">
+        <!-- T-066：advisory 文字 #888 → themeVars.textColor3（暗色可读，insight L16）。 -->
+        <div v-if="result.advisory" :style="{ marginTop: '6px', fontSize: '13px', color: themeVars.textColor3 }">
           {{ result.advisory }}
         </div>
       </n-alert>
@@ -43,13 +44,15 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NButton, NAlert, useMessage } from 'naive-ui'
+import { NButton, NAlert, useMessage, useThemeVars } from 'naive-ui'
 import { apiGetPublicIP } from '../api/system'
 import { extractErrorMessage } from '../api/client'
 import { copyToClipboard } from '../utils/clipboard'
 import type { PublicIPResponse } from '../types'
 
 const message = useMessage()
+// T-066：advisory 文字走主题语义 token。
+const themeVars = useThemeVars()
 const loading = ref(false)
 const result = ref<PublicIPResponse | null>(null)
 const copied = ref(false)

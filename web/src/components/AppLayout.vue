@@ -2,7 +2,7 @@
   <n-layout style="min-height: 100vh">
     <n-layout-header bordered style="padding: 0 16px; display: flex; align-items: center; height: 56px">
       <n-space align="center" style="width: 100%">
-        <n-text strong style="font-size: 18px; color: #18a058">FRP Easy</n-text>
+        <n-text strong :style="{ fontSize: '18px', color: themeVars.primaryColor }">FRP Easy</n-text>
         <n-text v-if="appStore.version" depth="3" style="font-size: 12px">
           v{{ appStore.version }}
         </n-text>
@@ -65,6 +65,17 @@
           </n-space>
         </n-alert>
         <n-text depth="3" style="font-size: 13px">{{ authStore.user }}</n-text>
+        <!-- T-066：主题切换三态下拉（跟随系统/浅色/深色）。放"退出登录"按钮之前，
+             不改其文本/位置（e2e 03-dashboard TC-05 按 name '退出登录' 点击，AC-13 保护）。
+             aria-label 给无障碍名（延续 T-064 a11y 风格）。 -->
+        <n-select
+          :value="themePref"
+          :options="themeOptions"
+          size="small"
+          style="width: 110px"
+          aria-label="主题切换"
+          @update:value="onThemeChange"
+        />
         <n-button size="small" @click="handleLogout">退出登录</n-button>
       </n-space>
     </n-layout-header>
@@ -102,13 +113,14 @@ import { ref, computed, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutSider, NLayoutContent,
-  NMenu, NSpace, NText, NButton, NAlert, NProgress, NTooltip,
-  useMessage,
+  NMenu, NSpace, NText, NButton, NAlert, NProgress, NTooltip, NSelect,
+  useMessage, useThemeVars,
 } from 'naive-ui'
-import type { MenuOption } from 'naive-ui'
+import type { MenuOption, SelectOption } from 'naive-ui'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { useDownloaderStore } from '../stores/downloader'
+import { useTheme } from '../composables/useTheme'
 import UploadBinButton from './UploadBinButton.vue'
 
 const authStore = useAuthStore()
@@ -118,6 +130,19 @@ const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const collapsed = ref(false)
+
+// T-066：主题状态层（与 App.vue 共享同一模块单例）+ themeVars 供品牌色 token 化。
+const themeVars = useThemeVars()
+const { pref: themePref, setPref: setThemePref } = useTheme()
+const themeOptions: SelectOption[] = [
+  { label: '跟随系统', value: 'auto' },
+  { label: '浅色', value: 'light' },
+  { label: '深色', value: 'dark' },
+]
+function onThemeChange(v: string | number | Array<string | number> | null) {
+  // NSelect @update:value 联合类型收口到 ThemePref；setPref 自带非法值守卫。
+  if (v === 'light' || v === 'dark' || v === 'auto') setThemePref(v)
+}
 
 const activeKey = computed(() => {
   const path = route.path
