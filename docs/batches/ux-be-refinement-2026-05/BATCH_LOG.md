@@ -15,3 +15,4 @@
 2026-05-30 · T-058 · dispatching pm-orchestrator · slug=frontend-interaction-polish · mode=full
 2026-05-30 · T-058 · DELIVERED · verify_all 全量 PASS 32/0/0 · +27 前端测试 (frontend_tests 454→481, test_count 772→799) · 11 files · e2e 无影响
 2026-05-30 · batch wrap · 归档 16 个已完成任务（prior 11 + 本轮 5）· 收割 40 insight · insight-index 47→30（≤30 cap）· 119 条旋至 insight-history · 归档后 verify_all 全量 PASS 32/0/0
+2026-05-30 · follow-up · 响应用户"修复你能解决的" · T-059/060/061 DELIVERED (test 799→822) · -race(无 C 编译器)/.ps1(deny 规则) 实测确认无法自解 · 3 任务归档 · 全程 PASS 32/0/0

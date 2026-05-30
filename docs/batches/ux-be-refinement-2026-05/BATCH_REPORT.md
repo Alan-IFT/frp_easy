@@ -58,3 +58,27 @@
 - `feat(T-058)` frontend-interaction-polish
 - `chore(batch)` 归档 16 任务 + 收割 insight + 旋转 index
 - `docs(batch)` 本 BATCH_REPORT（收尾）
+
+---
+
+## 追加修复轮（响应用户"修复你能解决的，不要让我来解决"指令）
+
+用户对收尾报告"需你关注"的 3 件事回复"修复发现的问题，你能解决的就别让我来"。逐项处置：
+
+### 两项我**确实无法**自行解决（已实测确认，非偷懒）
+- **`-race`**：实测 `CGO_ENABLED=1 go test -race ./internal/procmgr/...` → `cgo: C compiler "gcc" not found`。本机无任何 C 编译器（gcc/clang/cc/mingw 均无），`-race` 需 cgo。装 Windows C 工具链是大改动，不宜自主执行。**仍需你在有 gcc/clang 的环境补跑。**
+- **`.ps1` verify_all 真跑**：实测 `pwsh` 存在，但调用被你的**显式 PowerShell deny 规则**拦截（分类器明示"经 Bash 调 pwsh 是绕过用户显式 deny 规则"）——我不应绕过该边界。**替代方案（已做）**：静态对账确认 `verify_all.{ps1,sh}` 本轮未改动（逻辑维持上次审计的高度对称态）+ 唯一变化的共享输入 `baseline.json` 内部一致（go 322 + 前端 500 = 822）+ `.ps1` 的 B.4 计数闸门（L164-183）与 `.sh` 用同一 `go test -list` + 同一 vitest 计数、读同一 baseline，故 `.ps1` 路径会同样 PASS。需真跑请你本机执行或放开 deny 规则。
+
+### 三项我**能解决的**已修复并交付（continue 同一硬闸门模型：orchestrator 真跑 verify_all）
+| ID | Slug | 修了什么 | verify_all |
+|---|---|---|---|
+| T-059 | proxy-remoteport-conflict-sentinel | `(type,remote_port)` 冲突 storage 层 sentinel 化（`ErrDuplicateRemotePort`），handler 删除对 SQL 驱动文本的脆弱字符串匹配（+4 Go 测试） | PASS 32/0/0 |
+| T-060 | server-reload-dirty-allowports | Server.vue「重新加载」dirty 检测纳入 AllowPortsEditor，堵"只改端口策略→静默丢弃"数据丢失路径（T-058 已知局限补齐，+10 前端测试） | PASS 32/0/0 |
+| T-061 | clipboard-util-extract | 抽 `utils/clipboard.ts::copyToClipboard` 纯函数消除 3 处剪贴板重复（LogViewer/FirewallHint/PublicIpDetector），LogViewer 行为零回归（+9 前端测试） | PASS 32/0/0 |
+
+**仍故意不做（属预防/新功能，非"发现的问题"，避免过度工程）**：router↔openapi 静态闸门（当前 100% 一致，无实际漂移）、FirewallHint 补 Windows 防火墙命令（新功能 + 前端难可靠知运行平台）。
+
+### 追加轮统计
+- 测试：799 → **822**（+23：T-059 +4 Go，T-060 +10、T-061 +9 前端）。go_tests 318→322，frontend_tests 481→500，baseline version 24→27。
+- 归档：T-059/060/061 已归档到 `_archived/`，收割 5 insight，index 维持 ≤30。
+- 全程基线 PASS 32/0/0。追加提交：`refactor(T-059)` / `fix(T-060)` / `refactor(T-061)` + 归档 + 本 REPORT 更新。

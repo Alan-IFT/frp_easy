@@ -230,3 +230,17 @@ T-016 已用此真相替换主索引第 18 行。
 
 - Playwright `webServer.env` 是让 config 与启动脚本共享运行参数的正道：config 解析一次 `E2E_PORT` 后通过 env 显式下发，避免两处各自读环境变量 + 默认值漂移。
 - 即使 e2e webServer 在 win32 下经 `pwsh` 子进程启动后端，作为 `npx playwright test`（bash 发起）的嵌套子进程也能正常运行（本会话 PowerShell 直接调用被 deny，但嵌套 spawn 不受影响）。
+
+## Rotated 2026-05-30
+
+- 关键文件里的死代码比普通死代码危害更大：procmgr 的发布订阅让维护者误以为"状态推送已接通"，实则 5 处 emit 广播给空列表。删除型清理必须配 grep 全仓确认零生产消费 + go build/vet 兜底悬挂引用。
+- `var _ = pkg.Symbol` 形式的"导入保活 hack"是反模式：它假装某 import 有用，实际掩盖了"当前无用"，并让 goimports/linter 失效。需要时直接加回 import 即可，不该预先保活。
+
+## Rotated 2026-05-30
+
+- 删除死代码的死测试导致 go_tests 计数下降，与 B.4 的"测试数只升不降"张力：正解是 PM 显式批准 + baseline.json notes 记录例外（区别于"为过测删活测试"的红线违规）。B.4 仍守住"意外/静默下降"。
+
+## Rotated 2026-05-30
+
+- "读时不删过期行、靠后台周期清理"是 session 存储的标准范式，但**周期清理任务必须真的被启动序列拉起**，否则 GetSession 的"不删"优化会让表无界增长。清理 loop 必须随根 ctx 取消（SIGTERM/stopCh）以免 goroutine 泄漏，并把间隔设为包级 var 便于测试注入短间隔 / 长间隔。
+- 请求关联 ID 必须用 crypto/rand 而非时间戳：reqID 的唯一价值是日志关联，时间戳在并发下碰撞。项目已有 `auth.GenerateCSRFToken`/`randToken` 的 crypto/rand 范式，middleware 直接用 `crypto/rand`+`hex` 即可，无需引入 auth 依赖。
