@@ -39,7 +39,7 @@
             v-model:value="form.bindPort"
             :min="1"
             :max="65535"
-            style="width: 200px"
+            style="width: 100%; max-width: 200px"
           />
         </n-form-item>
 
@@ -49,7 +49,7 @@
             type="password"
             show-password-on="click"
             placeholder="留空表示不启用 token 鉴权"
-            style="width: 360px"
+            style="width: 100%; max-width: 360px"
           />
           <n-button
             size="small"
@@ -70,18 +70,18 @@
               v-model:value="form.dashboardPort"
               :min="1"
               :max="65535"
-              style="width: 200px"
+              style="width: 100%; max-width: 200px"
             />
           </n-form-item>
           <n-form-item label="Dashboard 用户名" path="dashboardUser">
-            <n-input v-model:value="form.dashboardUser" style="width: 240px" />
+            <n-input v-model:value="form.dashboardUser" style="width: 100%; max-width: 240px" />
           </n-form-item>
           <n-form-item label="Dashboard 密码" path="dashboardPass">
             <n-input
               v-model:value="form.dashboardPass"
               type="password"
               show-password-on="click"
-              style="width: 240px"
+              style="width: 100%; max-width: 240px"
             />
           </n-form-item>
         </template>

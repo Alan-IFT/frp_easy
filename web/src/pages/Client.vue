@@ -33,7 +33,7 @@
           <n-input
             v-model:value="form.serverAddr"
             placeholder="如 example.com 或 1.2.3.4"
-            style="width: 300px"
+            style="width: 100%; max-width: 300px"
           />
         </n-form-item>
 
@@ -42,7 +42,7 @@
             v-model:value="form.serverPort"
             :min="1"
             :max="65535"
-            style="width: 200px"
+            style="width: 100%; max-width: 200px"
           />
         </n-form-item>
 
@@ -52,7 +52,7 @@
             type="password"
             show-password-on="click"
             placeholder="与服务端保持一致，留空则不启用"
-            style="width: 360px"
+            style="width: 100%; max-width: 360px"
           />
           <n-button
             size="small"

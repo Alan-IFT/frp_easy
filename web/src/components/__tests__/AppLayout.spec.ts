@@ -182,3 +182,121 @@ describe('AppLayout.vue — 主题切换控件（T-066 AC-9）', () => {
     expect(w.find('[aria-label="主题切换"]').exists()).toBe(true)
   })
 })
+
+// ── T-067 responsive-layout · 侧栏窄屏自动折叠 + 顶栏窄屏不溢出 ──
+//
+// useViewport 是模块单例：isNarrow 初值在 AppLayout 首次 import→setup 时由 matchMedia 一次性
+// 确定（03 §3 C-1 / Q3）。既有 8 例（上方）不 stub matchMedia → happy-dom 默认 matchMedia
+// 对 (max-width:767.98px) 返回 false（innerWidth 默认 >768）→ isNarrow=false → collapsed 初值
+// false=展开，与既有"默认展开"行为字节一致，零回归（已由静态 import AppLayout 验证）。
+//
+// 本段窄屏用例须用 vi.resetModules() + vi.stubGlobal('matchMedia', 受控 MQL) + 动态重 import
+// AppLayout 拿到全新 useViewport 单例（file-level vi.mock vue-router/naive-ui 对动态 import 仍生效）。
+describe('AppLayout.vue — 侧栏窄屏自动折叠（T-067 FR-1/FR-2/FR-3 / AC-2/AC-3）', () => {
+  interface FakeMql {
+    matches: boolean
+    listeners: Array<(e: { matches: boolean }) => void>
+    addEventListener: (t: string, cb: (e: { matches: boolean }) => void) => void
+    removeEventListener: (t: string, cb: (e: { matches: boolean }) => void) => void
+    fire: (m: boolean) => void
+  }
+  function makeFakeMql(initial: boolean): FakeMql {
+    const m: FakeMql = {
+      matches: initial,
+      listeners: [],
+      addEventListener(t, cb) {
+        if (t === 'change') m.listeners.push(cb)
+      },
+      removeEventListener(t, cb) {
+        if (t === 'change') m.listeners = m.listeners.filter((l) => l !== cb)
+      },
+      fire(matches) {
+        m.matches = matches
+        for (const l of m.listeners) l({ matches })
+      },
+    }
+    return m
+  }
+
+  // 用受控 matchMedia 挂载一份全新的 AppLayout（含全新 useViewport 单例）。
+  async function mountFreshLayout(initialNarrow: boolean): Promise<{
+    w: ReturnType<typeof mountLayout>
+    mql: FakeMql
+  }> {
+    const mql = makeFakeMql(initialNarrow)
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => mql),
+    )
+    vi.resetModules()
+    const { default: FreshAppLayout } = await import('../AppLayout.vue')
+    const Holder = defineComponent({
+      setup() {
+        return () =>
+          h(NConfigProvider, null, {
+            default: () =>
+              h(NMessageProvider, null, {
+                default: () => h(FreshAppLayout),
+              }),
+          })
+      },
+    })
+    const w = mount(Holder, {
+      attachTo: document.body,
+      global: { stubs: { 'router-view': true, RouterView: true } },
+    })
+    return { w, mql }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  // 取 n-layout-sider 的 collapsed 可观察量：折叠态会带 n-layout-sider--collapsed class
+  // （DOM 属性查询，insight L45：不查 naive-ui 组件名，查渲染后的 class 标记）。
+  function siderCollapsed(w: ReturnType<typeof mountLayout>): boolean {
+    const sider = w.find('.n-layout-sider')
+    expect(sider.exists()).toBe(true)
+    return sider.classes().some((c) => c.includes('--collapsed'))
+  }
+
+  it('AC-2：窄屏（matchMedia matches=true）→ 侧栏初始折叠态', async () => {
+    const { w } = await mountFreshLayout(true)
+    await settle()
+    expect(siderCollapsed(w)).toBe(true)
+  })
+
+  it('AC-2：宽屏（matchMedia matches=false）→ 侧栏初始展开态（桌面不回归）', async () => {
+    const { w } = await mountFreshLayout(false)
+    await settle()
+    expect(siderCollapsed(w)).toBe(false)
+  })
+
+  it('AC-2/FR-3：宽→窄（matchMedia change matches=true）→ 侧栏自动折叠', async () => {
+    const { w, mql } = await mountFreshLayout(false)
+    await settle()
+    expect(siderCollapsed(w)).toBe(false)
+    mql.fire(true)
+    await settle()
+    expect(siderCollapsed(w)).toBe(true)
+  })
+
+  it('FR-3：窄→宽（matchMedia change matches=false）→ 侧栏自动展开（不回归）', async () => {
+    const { w, mql } = await mountFreshLayout(true)
+    await settle()
+    expect(siderCollapsed(w)).toBe(true)
+    mql.fire(false)
+    await settle()
+    expect(siderCollapsed(w)).toBe(false)
+  })
+})
+
+describe('AppLayout.vue — 顶栏窄屏不溢出（T-067 FR-4 / AC-5）', () => {
+  it('AC-5：宽屏顶栏显示版本号；关键入口（主题切换 / 退出登录）始终存在', async () => {
+    const w = mountLayout() // 默认 happy-dom 宽屏 → isNarrow=false
+    await settle()
+    // 关键入口始终可达（不溢出隐藏）
+    expect(w.find('[aria-label="主题切换"]').exists()).toBe(true)
+    expect(w.text()).toContain('退出登录')
+  })
+})

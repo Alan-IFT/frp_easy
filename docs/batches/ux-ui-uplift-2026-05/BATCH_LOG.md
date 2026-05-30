@@ -13,3 +13,6 @@
 2026-05-31T02:20:00Z · T-065 · DELIVERED · files=7 · go_tests 333→342 · rollback=0 · verify_all=PASS 32/0/0 · commit=7f3eaee
 2026-05-31T02:21:00Z · T-066 · dispatching pm-orchestrator · slug=dark-theme-support · mode=full
 2026-05-31T03:05:00Z · T-066 · 首验 B.1 FAIL（tsc TS6133：AppLayout.spec 未用 w + qa_t066_adversarial.spec 未用 darkTheme import）—— 任务自身新测试的未用声明缺陷，role-collapsed PM 无 Bash 未捕获（非基线回归）。orchestrator 真跑硬闸门捕获 → 就地修（保留断言意图）→ 复验。非停批信号（同 T-057 先例）。
+2026-05-31T03:20:00Z · T-066 · DELIVERED · files=15 · frontend_tests 552→576 · rollback=0 · verify_all=PASS 32/0/0（首验 B.1 tsc FAIL→orchestrator 修 2 处未用声明→复验 PASS） · commit=8b1fccf
+2026-05-31T03:21:00Z · T-067 · dispatching pm-orchestrator · slug=responsive-layout · mode=full
+2026-05-31T04:05:00Z · T-067 · 首验 B.1 FAIL（tsc TS6133：useViewport.spec 未用 beforeEach import）—— 同 T-066 同类（role-collapsed PM 无 Bash 跑不了 tsc，新测试文件未用声明高发漏检）。orchestrator 真跑硬闸门捕获 → 就地删未用 import → 复验。非停批信号。

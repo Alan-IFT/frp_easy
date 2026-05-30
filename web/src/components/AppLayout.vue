@@ -1,9 +1,12 @@
 <template>
   <n-layout style="min-height: 100vh">
-    <n-layout-header bordered style="padding: 0 16px; display: flex; align-items: center; height: 56px">
-      <n-space align="center" style="width: 100%">
+    <!-- T-067：顶栏窄屏不溢出——n-space wrap 允许优雅换行（FR-4），高度 auto + 最小 56px
+         让换行时不裁切（min-height 取代固定 height）。 -->
+    <n-layout-header bordered style="padding: 8px 16px; display: flex; align-items: center; min-height: 56px">
+      <n-space align="center" :wrap="true" style="width: 100%">
         <n-text strong :style="{ fontSize: '18px', color: themeVars.primaryColor }">FRP Easy</n-text>
-        <n-text v-if="appStore.version" depth="3" style="font-size: 12px">
+        <!-- T-067：版本号是非关键元素，窄屏（isNarrow）隐藏以省空间不溢出（FR-4）。 -->
+        <n-text v-if="appStore.version && !isNarrow" depth="3" style="font-size: 12px">
           v{{ appStore.version }}
         </n-text>
         <div style="flex: 1" />
@@ -101,7 +104,8 @@
         />
       </n-layout-sider>
 
-      <n-layout-content style="padding: 24px">
+      <!-- T-067：内容区 padding 窄屏减小（24→12px）增加可用宽度（FR-8 可选优化）。 -->
+      <n-layout-content :style="{ padding: isNarrow ? '12px' : '24px' }">
         <router-view />
       </n-layout-content>
     </n-layout>
@@ -109,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h } from 'vue'
+import { ref, computed, h, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NLayout, NLayoutHeader, NLayoutSider, NLayoutContent,
@@ -121,6 +125,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { useDownloaderStore } from '../stores/downloader'
 import { useTheme } from '../composables/useTheme'
+import { useViewport } from '../composables/useViewport'
 import UploadBinButton from './UploadBinButton.vue'
 
 const authStore = useAuthStore()
@@ -129,7 +134,17 @@ const downloaderStore = useDownloaderStore()
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
-const collapsed = ref(false)
+
+// T-067 responsive-layout · 02 §6
+// 侧栏窄屏自动折叠：collapsed 初值 = 当前断点默认态（窄→true 折叠 / 宽→false 展开，FR-1）。
+// watch(isNarrow)（非 immediate）仅在视口跨 768px 阈值时重置默认态（FR-3）。
+// 手动 show-trigger（@expand/@collapse 改 collapsed）与之共存：用户在同一断点区间内手动
+// 展开时 isNarrow 未变 → watch 不触发 → collapsed 保持用户设定值，不被强制收回（FR-2 不锁死）。
+const { isNarrow } = useViewport()
+const collapsed = ref(isNarrow.value)
+watch(isNarrow, (narrow) => {
+  collapsed.value = narrow
+})
 
 // T-066：主题状态层（与 App.vue 共享同一模块单例）+ themeVars 供品牌色 token 化。
 const themeVars = useThemeVars()

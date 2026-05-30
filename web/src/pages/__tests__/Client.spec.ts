@@ -155,6 +155,40 @@ describe('Client.vue — 三态：loaded 渲染真实值（A1）', () => {
   })
 })
 
+// ── T-067 responsive-layout · 表单 max-width 化（FR-7 / AC-4）──
+// serverAddr(300) / serverPort(200) / authToken(360) 固定 px → width:100% + max-width:Npx。
+describe('Client.vue — 表单 max-width 化（T-067 FR-7 / AC-4）', () => {
+  it('loaded 态：输入控件 inline style 含 max-width 且 width:100%（窄屏不溢出，宽屏维持上限）', async () => {
+    const w = mountPage()
+    await settle()
+    const styled = [
+      ...w.findAll('.n-input-number'),
+      ...w.findAll('.n-input'),
+    ]
+      .map((el) => el.attributes('style') ?? '')
+      .filter((s) => s.includes('max-width'))
+    expect(styled.length).toBeGreaterThan(0)
+    for (const s of styled) {
+      expect(s).toMatch(/width:\s*100%/)
+      expect(s).toMatch(/max-width:\s*\d+px/)
+    }
+  })
+
+  it('AC-4 反向证伪：不再存在裸固定像素宽（width:Npx 不配 max-width）的目标控件', async () => {
+    const w = mountPage()
+    await settle()
+    const styledControls = [
+      ...w.findAll('.n-input-number'),
+      ...w.findAll('.n-input'),
+    ].map((el) => el.attributes('style') ?? '')
+    for (const s of styledControls) {
+      if (/width:\s*\d+px/.test(s)) {
+        expect(s).toContain('max-width')
+      }
+    }
+  })
+})
+
 // T-062 IS-2：保存成功后正向下一步引导
 describe('Client.vue — 保存成功后加规则引导（T-062 IS-2）', () => {
   it('初始 loaded 态不显示引导（保存前 showNextStepHint=false）', async () => {

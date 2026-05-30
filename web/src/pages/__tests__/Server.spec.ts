@@ -177,6 +177,48 @@ describe('Server.vue — 三态：loaded 渲染真实值（A1）', () => {
   })
 })
 
+// ── T-067 responsive-layout · 表单 max-width 化（FR-6 / AC-4）──
+// 固定像素宽输入控件改 width:100% + max-width:Npx，窄屏自适应不溢出、宽屏维持上限观感。
+// 断言可观察量：渲染后控件元素的 inline style 含 max-width（不再裸 width:200px），
+// 且 width 为 100%（不查 naive-ui 组件名，查渲染后元素 attributes，insight L45）。
+describe('Server.vue — 表单 max-width 化（T-067 FR-6 / AC-4）', () => {
+  it('loaded 态：输入控件 inline style 含 max-width 且 width:100%（窄屏不溢出，宽屏维持上限）', async () => {
+    const w = mountPage()
+    await settle()
+    // n-input-number / n-input 把 style 透传到根元素；收集带 max-width 的控件
+    const styled = [
+      ...w.findAll('.n-input-number'),
+      ...w.findAll('.n-input'),
+    ]
+      .map((el) => el.attributes('style') ?? '')
+      .filter((s) => s.includes('max-width'))
+    // 至少 bindPort(200) / authToken(360) / dashboardPort(200) / dashboardUser(240) / dashboardPass(240)
+    // 中的若干在 loaded(dashboardEnabled=true) 态渲染并带 max-width
+    expect(styled.length).toBeGreaterThan(0)
+    for (const s of styled) {
+      // 反向证伪：每个带 max-width 的控件同时 width:100%（不再裸固定 px 宽）
+      expect(s).toMatch(/width:\s*100%/)
+      expect(s).toMatch(/max-width:\s*\d+px/)
+    }
+  })
+
+  it('AC-4 反向证伪：不再存在裸固定像素宽（width:Npx 不配 max-width）的目标控件', async () => {
+    const w = mountPage()
+    await settle()
+    const styledControls = [
+      ...w.findAll('.n-input-number'),
+      ...w.findAll('.n-input'),
+    ].map((el) => el.attributes('style') ?? '')
+    // 任何含像素 width 的目标控件都必须同时含 max-width（即不再有裸 width:200px 旧写法）
+    for (const s of styledControls) {
+      if (/width:\s*\d+px/.test(s)) {
+        // 出现裸像素 width 即回归（应为 width:100% + max-width:Npx）
+        expect(s).toContain('max-width')
+      }
+    }
+  })
+})
+
 // T-062 IS-5：查看运行态链接（loaded 态 + 双向连通）
 describe('Server.vue — 查看运行态链接（T-062 IS-5）', () => {
   it('AC-7：loaded 态 → 出现"查看运行态"链接', async () => {
