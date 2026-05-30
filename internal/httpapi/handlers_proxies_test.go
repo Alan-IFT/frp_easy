@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -86,9 +87,19 @@ func TestCreateProxy_DuplicateTypeRemotePort_Returns422(t *testing.T) {
 	if eb.Error.Code != CodeConflict {
 		t.Errorf("code = %q, want %q (422 仍用 CONFLICT)", eb.Error.Code, CodeConflict)
 	}
-	// field 应识别为 remotePort（mapProxyWriteError 内 strings.Contains low,"remote_port"）
+	// 【T-059】field 应识别为 remotePort（现经 storage.ErrDuplicateRemotePort sentinel
+	// 走 errors.Is 分类，不再依赖 handler 层 strings.Contains 匹配驱动文本）。
 	if eb.Error.Field != "remotePort" {
 		t.Errorf("field = %q, want \"remotePort\"", eb.Error.Field)
+	}
+	// 固定中文文案，且响应体不得泄露任何 SQL/驱动英文文本。
+	if !strings.Contains(eb.Error.Message, "远程端口") {
+		t.Errorf("message 应为固定中文（含'远程端口'）: %q", eb.Error.Message)
+	}
+	for _, leak := range []string{"UNIQUE", "constraint", "proxies.", "remote_port", "字段冲突"} {
+		if strings.Contains(string(raw), leak) {
+			t.Errorf("响应泄露 SQL/驱动文本或旧文案 %q: %s", leak, raw)
+		}
 	}
 }
 

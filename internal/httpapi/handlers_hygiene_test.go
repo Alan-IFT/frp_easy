@@ -9,6 +9,7 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http/httptest"
@@ -118,17 +119,65 @@ func TestMapProxyWriteError_DuplicateName_Preserved(t *testing.T) {
 	}
 }
 
-// TestMapProxyWriteError_Validation_Preserved 验证 B-2 保留：
-// validation 类错误（含 "invalid"）仍走 422 透传分支，不被兜底吞掉。
-func TestMapProxyWriteError_Validation_Preserved(t *testing.T) {
-	h, _ := newCapturingHandlers(t)
+// TestMapProxyWriteError_Validation_FixedMessage_NoLeak 验证 T-059：
+// storage 层校验类错误（含 "invalid"/"requires"/"must not"）走 422，但**不再透传**
+// storage 生成的英文原文——改为固定中文"代理配置校验失败"，响应体不含原始英文；
+// 原始 error 进 logger（Warn）便于排障。
+//
+// （此前为 TestMapProxyWriteError_Validation_Preserved，断言透传 "must be 1-65535"。
+// T-059 有意改变该行为：不向前端泄露内部英文文本，与 T-055 writeInternalError 原则一致。
+// PM 据红线 3 显式批准此断言更新，见 PM_LOG 强条件 C-1。）
+func TestMapProxyWriteError_Validation_FixedMessage_NoLeak(t *testing.T) {
+	h, logBuf := newCapturingHandlers(t)
 	rec := httptest.NewRecorder()
-	h.mapProxyWriteError(rec, errors.New("remotePort invalid: must be 1-65535"))
+	h.mapProxyWriteError(rec, errors.New("storage.UpsertProxy: udp proxy must not set customDomains"))
 	if rec.Code != 422 {
 		t.Errorf("validation status = %d, want 422", rec.Code)
 	}
-	// validation 分支是有意透传（语义化），文案应保留原文。
-	if !strings.Contains(rec.Body.String(), "must be 1-65535") {
-		t.Errorf("validation 透传被破坏: %s", rec.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, "代理配置校验失败") {
+		t.Errorf("validation 应返回固定中文文案: %s", body)
+	}
+	// 不得向前端泄露 storage 生成的英文文本。
+	for _, leak := range []string{"must not set", "customDomains", "UpsertProxy", "udp proxy"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("validation 响应泄露内部英文 %q: %s", leak, body)
+		}
+	}
+	// 原始 error 应进日志便于排障。
+	if !strings.Contains(logBuf.String(), "must not set customDomains") {
+		t.Errorf("原始 validation error 未进日志: %s", logBuf.String())
+	}
+}
+
+// TestMapProxyWriteError_DuplicateRemotePort 验证 T-059 AC-6：
+// (type, remote_port) 组合冲突 sentinel ErrDuplicateRemotePort → 422 + field=remotePort
+// + 固定中文，响应体不含任何 SQL/驱动英文文本。
+func TestMapProxyWriteError_DuplicateRemotePort(t *testing.T) {
+	h, _ := newCapturingHandlers(t)
+	rec := httptest.NewRecorder()
+	h.mapProxyWriteError(rec, storage.ErrDuplicateRemotePort)
+	if rec.Code != 422 {
+		t.Errorf("ErrDuplicateRemotePort status = %d, want 422", rec.Code)
+	}
+	body := rec.Body.String()
+	var eb ErrorBody
+	if err := json.Unmarshal([]byte(body), &eb); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, body)
+	}
+	if eb.Error.Code != CodeConflict {
+		t.Errorf("code = %q, want %q", eb.Error.Code, CodeConflict)
+	}
+	if eb.Error.Field != "remotePort" {
+		t.Errorf("field = %q, want remotePort", eb.Error.Field)
+	}
+	if !strings.Contains(eb.Error.Message, "远程端口") {
+		t.Errorf("message 应为固定中文（含'远程端口'）: %q", eb.Error.Message)
+	}
+	// 响应体不得含 SQL/驱动英文子串。
+	for _, leak := range []string{"UNIQUE", "constraint", "proxies.", "remote_port", "duplicate"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("响应泄露 SQL/驱动文本 %q: %s", leak, body)
+		}
 	}
 }

@@ -59,15 +59,43 @@ func TestAdversarial_AC6_RealDBDuplicateNameSentinel(t *testing.T) {
 		t.Errorf("ADVERSARIAL FAIL: same name should return ErrDuplicateName, got: %v", err)
 	}
 
-	// 同 (type, remotePort)，name 不同 → 不应返回 ErrDuplicateName
+	// 同 (type, remotePort)，name 不同 → T-059：应返回专用 sentinel ErrDuplicateRemotePort，
+	// 既非 ErrDuplicateName 也非裸 wrapped error（此前仅弱断言"非 nil + 非 ErrDuplicateName"）。
 	p3 := &Proxy{Name: "beta", Type: "tcp", LocalIP: "127.0.0.1", LocalPort: 81,
 		RemotePort: &rp, Enabled: true}
 	err = st.UpsertProxy(context.Background(), p3)
+	if err == nil {
+		t.Fatalf("ADVERSARIAL FAIL: (type,remotePort) conflict should still error, got nil")
+	}
+	if !errors.Is(err, ErrDuplicateRemotePort) {
+		t.Errorf("ADVERSARIAL FAIL: (type,remotePort) conflict should return ErrDuplicateRemotePort, got: %v", err)
+	}
 	if errors.Is(err, ErrDuplicateName) {
 		t.Errorf("ADVERSARIAL FAIL: (type,remotePort) conflict should NOT be ErrDuplicateName, got: %v", err)
 	}
-	// 但 err 应该是非 nil
-	if err == nil {
-		t.Errorf("ADVERSARIAL FAIL: (type,remotePort) conflict should still error, got nil")
+}
+
+// T-059 对抗：isDuplicateRemotePortError 的错误文本变体（与 name 版对称），
+// 含关键互斥项"name 冲突文本不应被误判为 remote_port 冲突"，以及记录与 name 版
+// 相同的已知局限（大小写敏感：未来驱动改小写会漏）。
+func TestAdversarial_T059_RemotePortErrorTextVariants(t *testing.T) {
+	cases := []struct {
+		name    string
+		errText string
+		want    bool
+		note    string
+	}{
+		{"normal", "UNIQUE constraint failed: proxies.type, proxies.remote_port", true, "驱动当前输出格式"},
+		{"with code", "storage.UpsertProxy insert: UNIQUE constraint failed: proxies.type, proxies.remote_port (2067)", true, "wrapped + errno"},
+		{"lowercase", "unique constraint failed: proxies.type, proxies.remote_port", false, "大小写敏感 → 未来驱动变小写会漏（与 name 版同款已知局限）"},
+		{"name-conflict-not-remote-port", "UNIQUE constraint failed: proxies.name", false, "name 列冲突不能误识别为 remote_port"},
+		{"only column", "constraint failed: proxies.remote_port", false, "无 UNIQUE 关键字 → 不识别"},
+	}
+	for _, c := range cases {
+		got := isDuplicateRemotePortError(errors.New(c.errText))
+		if got != c.want {
+			t.Errorf("ADVERSARIAL: case %q (%s): isDuplicateRemotePortError(%q) = %v, want %v",
+				c.name, c.note, c.errText, got, c.want)
+		}
 	}
 }

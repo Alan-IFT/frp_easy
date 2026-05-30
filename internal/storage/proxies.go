@@ -123,6 +123,9 @@ func (s *Store) UpsertProxy(ctx context.Context, p *Proxy) error {
 			if isDuplicateNameError(err) {
 				return ErrDuplicateName
 			}
+			if isDuplicateRemotePortError(err) {
+				return ErrDuplicateRemotePort
+			}
 			return fmt.Errorf("storage.UpsertProxy insert: %w", err)
 		}
 		id, err := res.LastInsertId()
@@ -171,6 +174,9 @@ func (s *Store) UpsertProxy(ctx context.Context, p *Proxy) error {
 		_ = tx.Rollback()
 		if isDuplicateNameError(err) {
 			return ErrDuplicateName
+		}
+		if isDuplicateRemotePortError(err) {
+			return ErrDuplicateRemotePort
 		}
 		return fmt.Errorf("storage.UpsertProxy update: %w", err)
 	}
@@ -333,5 +339,24 @@ func isDuplicateNameError(err error) bool {
 	s := err.Error()
 	return strings.Contains(s, "UNIQUE constraint failed") &&
 		strings.Contains(s, "proxies.name")
+}
+
+// isDuplicateRemotePortError 判断 sqlite 错误是否为 (type, remote_port) 组合
+// 部分唯一索引 idx_proxies_tcp_remote 的 UNIQUE 冲突。与 isDuplicateNameError 对称。
+//
+// 该索引违规时 sqlite 输出文本含 `UNIQUE constraint failed: proxies.type, proxies.remote_port`
+// —— 含子串 `proxies.remote_port`。name 列冲突文本为 `proxies.name`（不含 remote_port），
+// 二者互斥，不会误判。
+//
+// 驱动：modernc.org/sqlite（internal/storage/store.go blank import）。SQL 驱动错误文本
+// 的脆弱依赖被刻意收敛在 storage 层这唯一一处（T-059）；handler 仅用 errors.Is 判 sentinel。
+// 未来若驱动升级改了错误文本，本助手的直测会立即捕获回归。
+func isDuplicateRemotePortError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "UNIQUE constraint failed") &&
+		strings.Contains(s, "proxies.remote_port")
 }
 

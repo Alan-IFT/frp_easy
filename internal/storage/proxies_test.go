@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 )
 
@@ -45,10 +44,13 @@ func TestUpsertProxy_DuplicateNameReturnsSentinel(t *testing.T) {
 	}
 }
 
-// TestUpsertProxy_DuplicateTypeRemotePortNotSentinel 验证 AC-6.2：
-// (type, remote_port) 部分唯一索引冲突 **不** 返回 ErrDuplicateName，
-// 上层 handler 据此继续走 422 兜底分支。
-func TestUpsertProxy_DuplicateTypeRemotePortNotSentinel(t *testing.T) {
+// TestUpsertProxy_DuplicateTypeRemotePortReturnsSentinel 验证 T-059 AC-2：
+// (type, remote_port) 部分唯一索引冲突在 storage 层翻译成专用 sentinel
+// ErrDuplicateRemotePort（而不是裸包装错误，也不是 ErrDuplicateName），
+// handler 据此用 errors.Is 映射 422，不再脆弱地匹配 SQL 驱动文本。
+//
+// （此前为弱断言"NOT ErrDuplicateName + 含 unique"；T-059 升级为正向断言。）
+func TestUpsertProxy_DuplicateTypeRemotePortReturnsSentinel(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -78,12 +80,13 @@ func TestUpsertProxy_DuplicateTypeRemotePortNotSentinel(t *testing.T) {
 	if err == nil {
 		t.Fatal("duplicate (type,remotePort) insert should fail")
 	}
-	if errors.Is(err, ErrDuplicateName) {
-		t.Errorf("expected NOT ErrDuplicateName for (type,remotePort) conflict, got %v", err)
+	// 正向：必须是 ErrDuplicateRemotePort sentinel
+	if !errors.Is(err, ErrDuplicateRemotePort) {
+		t.Errorf("expected ErrDuplicateRemotePort, got %v (type %T)", err, err)
 	}
-	// 错误文本仍应是 UNIQUE 冲突（仅是不同列），用于 handler 422 路径识别
-	if !strings.Contains(strings.ToLower(err.Error()), "unique") {
-		t.Errorf("expected UNIQUE-related error text, got: %v", err)
+	// 负向：绝不能误判成 name 冲突
+	if errors.Is(err, ErrDuplicateName) {
+		t.Errorf("(type,remotePort) conflict must NOT be ErrDuplicateName, got %v", err)
 	}
 }
 
@@ -143,6 +146,76 @@ func TestIsDuplicateNameError_DirectChecks(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			if got := isDuplicateNameError(c.err); got != c.want {
 				t.Errorf("isDuplicateNameError(%v) = %v, want %v", c.err, got, c.want)
+			}
+		})
+	}
+}
+
+// TestUpsertProxy_UpdateToDuplicateRemotePortReturnsSentinel 验证 T-059 AC-5：
+// UPDATE 路径触发 (type, remote_port) 组合冲突同样返回 ErrDuplicateRemotePort。
+func TestUpsertProxy_UpdateToDuplicateRemotePortReturnsSentinel(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	rp1 := 9000
+	a := &Proxy{
+		Name: "alpha", Type: "tcp", LocalIP: "127.0.0.1",
+		LocalPort: 22, RemotePort: &rp1, Enabled: true,
+	}
+	if err := s.UpsertProxy(ctx, a); err != nil {
+		t.Fatalf("insert alpha: %v", err)
+	}
+	rp2 := 9001
+	b := &Proxy{
+		Name: "beta", Type: "tcp", LocalIP: "127.0.0.1",
+		LocalPort: 23, RemotePort: &rp2, Enabled: true,
+	}
+	if err := s.UpsertProxy(ctx, b); err != nil {
+		t.Fatalf("insert beta: %v", err)
+	}
+
+	// 把 beta 的 remotePort 改成 9000 → 与 alpha (tcp,9000) 组合冲突
+	rpDup := 9000
+	b.RemotePort = &rpDup
+	err := s.UpsertProxy(ctx, b)
+	if err == nil {
+		t.Fatal("update to duplicate (type,remotePort) should fail")
+	}
+	if !errors.Is(err, ErrDuplicateRemotePort) {
+		t.Errorf("expected ErrDuplicateRemotePort on UPDATE, got %v (type %T)", err, err)
+	}
+	if errors.Is(err, ErrDuplicateName) {
+		t.Errorf("UPDATE (type,remotePort) conflict must NOT be ErrDuplicateName, got %v", err)
+	}
+}
+
+// TestIsDuplicateRemotePortError_DirectChecks 单测 isDuplicateRemotePortError 的判断
+// 逻辑（与 TestIsDuplicateNameError_DirectChecks 对称）。这是 T-059 的回归护栏：
+// 若未来驱动错误文本变更悄无声息地破坏 sentinel 映射，本直测会立即捕获。
+func TestIsDuplicateRemotePortError_DirectChecks(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"remote-port-conflict",
+			errors.New("UNIQUE constraint failed: proxies.type, proxies.remote_port"),
+			true},
+		{"remote-port-conflict-wrapped",
+			errors.New("storage.UpsertProxy insert: UNIQUE constraint failed: proxies.type, proxies.remote_port (2067)"),
+			true},
+		// 关键互斥用例：name 列冲突绝不能被误判成 remote_port 冲突
+		{"name-conflict-not-remote-port",
+			errors.New("UNIQUE constraint failed: proxies.name"),
+			false},
+		{"unrelated", errors.New("some other error"), false},
+		{"missing-unique-prefix", errors.New("constraint failed proxies.remote_port"), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isDuplicateRemotePortError(c.err); got != c.want {
+				t.Errorf("isDuplicateRemotePortError(%v) = %v, want %v", c.err, got, c.want)
 			}
 		})
 	}

@@ -46,11 +46,21 @@ var (
 	ErrNotFound = errors.New("storage: not found")
 
 	// ErrDuplicateName 表示 UpsertProxy 时与已有 proxies.name 唯一约束冲突。
-	// 调用方（httpapi）应据此返回 409 Conflict 而非 422，与 (type,remote_port)
-	// 组合冲突区分开（后者继续走原 422 兜底分支）。
+	// 调用方（httpapi）应据此返回 409 Conflict，与 (type,remote_port) 组合冲突
+	// （ErrDuplicateRemotePort，422）区分开。
 	// 触发条件：proxies 表 name 列 column-level UNIQUE 约束（见
 	// internal/storage/sqlmigrations/0001_init.up.sql 第 32 行）。
 	ErrDuplicateName = errors.New("storage: duplicate proxy name")
+
+	// ErrDuplicateRemotePort 表示 UpsertProxy 时与已有 (type, remote_port) 组合
+	// 唯一索引冲突。调用方（httpapi）应据此返回 422 Unprocessable Entity（field=remotePort）。
+	// 触发条件：proxies 表部分唯一索引 idx_proxies_tcp_remote ON proxies(type, remote_port)
+	// （见 internal/storage/sqlmigrations/0001_init.up.sql 第 46 行）。
+	//
+	// T-059：把该冲突在 storage 层 sentinel 化，与 ErrDuplicateName 对称——使 handler
+	// 仅凭 errors.Is 分类，不再在 handler 层脆弱地 strings.Contains 匹配 SQL 驱动文本。
+	// 驱动错误文本细节由 storage 层的 isDuplicateRemotePortError 单点持有。
+	ErrDuplicateRemotePort = errors.New("storage: duplicate (type, remote_port)")
 )
 
 // Store 是 SQLite 持久化层句柄。所有写操作受内部 mu 守护（避免单连接 + 并发写时

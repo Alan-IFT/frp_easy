@@ -236,26 +236,28 @@ func (h *handlers) mapProxyWriteError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, CodeConflict, "规则已被其它会话修改，请刷新后重试", "version")
 		return
 	}
-	// 【T-007 AC-6】name 列 UNIQUE 冲突走 sentinel：409 + 友好中文 + field=name。
-	// 必须放在下面 strings.Contains(low, "unique") 之前，确保 name 冲突走
-	// 专用语义化 409 路径；(type,remotePort) 组合冲突仍走原 422 兜底分支。
+	// 【T-007】name 列 UNIQUE 冲突走 sentinel：409 + 友好中文 + field=name。
 	if errors.Is(err, storage.ErrDuplicateName) {
 		writeError(w, http.StatusConflict, CodeConflict, "代理名称已存在，请改用其它名称", "name")
 		return
 	}
-	// SQL UNIQUE / 部分索引等冲突（剩余只可能是 (type,remote_port) 组合冲突）
-	msg := err.Error()
-	low := strings.ToLower(msg)
-	if strings.Contains(low, "unique") || strings.Contains(low, "constraint") {
-		field := "name"
-		if strings.Contains(low, "remote_port") {
-			field = "remotePort"
-		}
-		writeError(w, http.StatusUnprocessableEntity, CodeConflict, "字段冲突：可能 name 重复或 (type,remotePort) 冲突", field)
+	// 【T-059】(type, remote_port) 组合 UNIQUE 冲突走 sentinel：422 + 友好中文 + field=remotePort。
+	// 此前在 handler 层用 strings.Contains 匹配 SQL 驱动错误文本（unique/constraint/remote_port）
+	// 给 422 —— 脆弱反模式（驱动升级改文本即静默漏判）。现改为 storage 层翻译成 sentinel，
+	// handler 仅凭 errors.Is 分类，SQL 文本匹配只留在 storage 层（DAO 拥有驱动细节）。
+	if errors.Is(err, storage.ErrDuplicateRemotePort) {
+		writeError(w, http.StatusUnprocessableEntity, CodeConflict, "该类型下远程端口已被占用，请改用其它端口", "remotePort")
 		return
 	}
+	// storage 层校验类错误（remotePort/customDomains 与 type 不匹配等，由 storage 生成英文文案）。
+	// 【T-059】不向前端透传 storage 生成的英文文本，统一固定中文（与 T-055 writeInternalError
+	// "不泄露内部文本"原则一致）；原始 error 进日志通道便于排障。
+	low := strings.ToLower(err.Error())
 	if strings.Contains(low, "requires") || strings.Contains(low, "must not") || strings.Contains(low, "invalid") {
-		writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed, msg, "")
+		if h.deps.Logger != nil {
+			h.deps.Logger.Warn("proxy write validation error", "cause", err)
+		}
+		writeError(w, http.StatusUnprocessableEntity, CodeValidationFailed, "代理配置校验失败", "")
 		return
 	}
 	// T-055 B-2：兜底 500 不向前端透传裸 SQL/驱动细节；固定文案，原始 error 进日志。
