@@ -88,14 +88,14 @@
                 type="error"
                 :disabled="!canStop('frpc')"
                 :loading="loadingMap['frpc-stop']"
-                @click="handleStop('frpc')"
+                @click="requestStop('frpc')"
               >
                 停止
               </n-button>
               <n-button
                 :disabled="procStore.frpcInfo.state === 'stopped' || appStore.frpcMissing"
                 :loading="loadingMap['frpc-restart']"
-                @click="handleRestart('frpc')"
+                @click="requestRestart('frpc')"
               >
                 重启
               </n-button>
@@ -174,14 +174,14 @@
                 type="error"
                 :disabled="!canStop('frps')"
                 :loading="loadingMap['frps-stop']"
-                @click="handleStop('frps')"
+                @click="requestStop('frps')"
               >
                 停止
               </n-button>
               <n-button
                 :disabled="procStore.frpsInfo.state === 'stopped' || appStore.frpsMissing"
                 :loading="loadingMap['frps-restart']"
-                @click="handleRestart('frps')"
+                @click="requestRestart('frps')"
               >
                 重启
               </n-button>
@@ -190,11 +190,21 @@
         </n-card>
       </n-gi>
     </n-grid>
+
+    <!-- T-056 proc-stop-destructive-confirm：停止/重启二次确认（与 Proxies.vue 删除确认同款范式）。
+         单实例 + pendingAction 驱动动态文案；确认后才调原 handleStop/handleRestart。 -->
+    <confirm-dialog
+      v-model:show="showConfirm"
+      :title="confirmTitle"
+      :content="confirmContent"
+      @confirm="confirmPending"
+      @cancel="cancelPending"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, onUnmounted } from 'vue'
+import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NPageHeader, NCard, NGrid, NGi, NSpace, NButton, NAlert,
@@ -203,6 +213,7 @@ import {
 } from 'naive-ui'
 import StatusBadge from '../components/StatusBadge.vue'
 import ServiceStatusCard from '../components/ServiceStatusCard.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useProcStore } from '../stores/proc'
 import { useAppStore } from '../stores/app'
 import { extractErrorMessage } from '../api/client'
@@ -326,6 +337,53 @@ async function handleRestart(kind: string) {
   }
 }
 
+// T-056：停止/重启是破坏性操作（会瞬间中断活动连接），加二次确认。
+// 单 ConfirmDialog 实例 + pendingAction 状态机驱动动态文案；启动不加确认。
+type ProcKind = 'frpc' | 'frps'
+const pendingAction = ref<{ kind: ProcKind; type: 'stop' | 'restart' } | null>(null)
+const showConfirm = ref(false)
+
+const confirmTitle = computed(() => {
+  const p = pendingAction.value
+  if (!p) return ''
+  return `${p.type === 'stop' ? '停止' : '重启'}${labelOf(p.kind)}？`
+})
+
+const confirmContent = computed(() => {
+  const p = pendingAction.value
+  if (!p) return ''
+  if (p.type === 'restart') return '将短暂中断当前所有连接后重新建立。'
+  // type === 'stop'：后果随进程类型不同。
+  return p.kind === 'frps'
+    ? '将立即中断所有正在穿透的远程连接。'
+    : '将断开本机所有正在转发的连接。'
+})
+
+function requestStop(kind: ProcKind): void {
+  pendingAction.value = { kind, type: 'stop' }
+  showConfirm.value = true
+}
+
+function requestRestart(kind: ProcKind): void {
+  pendingAction.value = { kind, type: 'restart' }
+  showConfirm.value = true
+}
+
+// 确认后才真正调原 handler。先快照 pendingAction 再复位，避免分派前被 computed 竞态清空。
+function confirmPending(): void {
+  const p = pendingAction.value
+  showConfirm.value = false
+  pendingAction.value = null
+  if (!p) return
+  if (p.type === 'stop') void handleStop(p.kind)
+  else void handleRestart(p.kind)
+}
+
+function cancelPending(): void {
+  showConfirm.value = false
+  pendingAction.value = null
+}
+
 onMounted(() => {
   procStore.startPolling()
   fetchMode()
@@ -351,6 +409,15 @@ defineExpose({
     handleStop,
     handleRestart,
     router,
+    // T-056：停止/重启二次确认状态机
+    pendingAction,
+    showConfirm,
+    confirmTitle,
+    confirmContent,
+    requestStop,
+    requestRestart,
+    confirmPending,
+    cancelPending,
   },
 })
 </script>

@@ -105,6 +105,15 @@ interface TestingHandle {
   handleStop: (kind: string) => Promise<void>
   handleRestart: (kind: string) => Promise<void>
   router: { push: (p: string) => void }
+  // T-056：停止/重启二次确认状态机
+  pendingAction: { value: { kind: 'frpc' | 'frps'; type: 'stop' | 'restart' } | null }
+  showConfirm: { value: boolean }
+  confirmTitle: { value: string }
+  confirmContent: { value: string }
+  requestStop: (kind: 'frpc' | 'frps') => void
+  requestRestart: (kind: 'frpc' | 'frps') => void
+  confirmPending: () => void
+  cancelPending: () => void
 }
 
 function mountPage() {
@@ -144,6 +153,16 @@ beforeEach(() => {
   vi.mocked(procApi.apiGetProcStatus).mockResolvedValue({
     frpc: { kind: 'frpc', state: 'stopped', pid: 0, lastErr: '', changedAt: '' },
     frps: { kind: 'frps', state: 'stopped', pid: 0, lastErr: '', changedAt: '' },
+  })
+  // T-056 C-2：给 stop/restart/start 桩默认 resolved，避免确认后调用走 reject 错误分支干扰断言
+  vi.mocked(procApi.apiStopProc).mockResolvedValue({
+    kind: 'frpc', state: 'stopped', pid: 0, lastErr: '', changedAt: '',
+  })
+  vi.mocked(procApi.apiRestartProc).mockResolvedValue({
+    kind: 'frpc', state: 'running', pid: 1, lastErr: '', changedAt: '',
+  })
+  vi.mocked(procApi.apiStartProc).mockResolvedValue({
+    kind: 'frpc', state: 'running', pid: 1, lastErr: '', changedAt: '',
   })
 })
 
@@ -282,6 +301,111 @@ describe('Dashboard.vue — 日志链接 router.push（D4）', () => {
   })
 })
 
+// T-056：停止/重启破坏性操作二次确认（happy path，AC-1~AC-6）。
+describe('Dashboard.vue — 停止/重启二次确认（T-056）', () => {
+  it('AC-1：点 frpc 停止 → 对话框打开（showConfirm=true）且未调用 stop API', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.requestStop('frpc')
+    await settle()
+    expect(t.showConfirm.value).toBe(true)
+    expect(t.pendingAction.value).toEqual({ kind: 'frpc', type: 'stop' })
+    expect(vi.mocked(procApi.apiStopProc)).not.toHaveBeenCalled()
+  })
+
+  it('AC-2：确认后 → stopProc(frpc) 恰好 1 次，未触碰 restart/start', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.requestStop('frpc')
+    await settle()
+    t.confirmPending()
+    await settle()
+    expect(vi.mocked(procApi.apiStopProc)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(procApi.apiStopProc)).toHaveBeenCalledWith('frpc')
+    expect(vi.mocked(procApi.apiRestartProc)).not.toHaveBeenCalled()
+    expect(vi.mocked(procApi.apiStartProc)).not.toHaveBeenCalled()
+    // 确认后对话框关闭 + pending 清空
+    expect(t.showConfirm.value).toBe(false)
+    expect(t.pendingAction.value).toBeNull()
+  })
+
+  it('AC-3：点 frps 重启后确认 → restartProc(frps) 恰好 1 次', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.requestRestart('frps')
+    await settle()
+    expect(vi.mocked(procApi.apiRestartProc)).not.toHaveBeenCalled()
+    t.confirmPending()
+    await settle()
+    expect(vi.mocked(procApi.apiRestartProc)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(procApi.apiRestartProc)).toHaveBeenCalledWith('frps')
+  })
+
+  it('AC-4：点取消 → 对应 API 零调用，对话框关闭', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.requestStop('frps')
+    await settle()
+    t.cancelPending()
+    await settle()
+    expect(vi.mocked(procApi.apiStopProc)).not.toHaveBeenCalled()
+    expect(vi.mocked(procApi.apiRestartProc)).not.toHaveBeenCalled()
+    expect(t.showConfirm.value).toBe(false)
+    expect(t.pendingAction.value).toBeNull()
+  })
+
+  it('AC-5：启动不弹确认 → handleStart 直接调 startProc 1 次，无 pendingAction', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleStart('frpc')
+    await settle()
+    expect(vi.mocked(procApi.apiStartProc)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(procApi.apiStartProc)).toHaveBeenCalledWith('frpc')
+    // 启动不经状态机
+    expect(t.pendingAction.value).toBeNull()
+    expect(t.showConfirm.value).toBe(false)
+  })
+
+  it('AC-6：动态文案随 pendingAction 切换（停止 frps/frpc 后果不同；重启文案固定）', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+
+    t.requestStop('frps')
+    await settle()
+    expect(t.confirmTitle.value).toBe('停止服务端 frps？')
+    expect(t.confirmContent.value).toBe('将立即中断所有正在穿透的远程连接。')
+
+    t.requestStop('frpc')
+    await settle()
+    expect(t.confirmTitle.value).toBe('停止客户端 frpc？')
+    expect(t.confirmContent.value).toBe('将断开本机所有正在转发的连接。')
+
+    t.requestRestart('frps')
+    await settle()
+    expect(t.confirmTitle.value).toBe('重启服务端 frps？')
+    expect(t.confirmContent.value).toBe('将短暂中断当前所有连接后重新建立。')
+
+    t.requestRestart('frpc')
+    await settle()
+    expect(t.confirmTitle.value).toBe('重启客户端 frpc？')
+    expect(t.confirmContent.value).toBe('将短暂中断当前所有连接后重新建立。')
+  })
+
+  it('确认对话框组件存在且初始不可见（DOM 不渲染确认文案）', async () => {
+    const w = mountPage()
+    await settle()
+    // 初始无 pending，不应出现任何确认文案
+    expect(w.text()).not.toContain('将立即中断所有正在穿透的远程连接')
+    expect(w.text()).not.toContain('将断开本机所有正在转发的连接')
+  })
+})
+
 // ## Adversarial tests
 describe('Dashboard.vue — Adversarial', () => {
   it('获取失败时 UI 不撒谎：必有可见失败信号（modeFetchFailed=true 或 warning 被调用）', async () => {
@@ -333,5 +457,78 @@ describe('Dashboard.vue — Adversarial', () => {
     expect(logBtns.length).toBeGreaterThan(0)
     await logBtns[1].trigger('click')
     expect(pushSpy).toHaveBeenCalledWith('/logs/frps')
+  })
+
+  // T-056 ADV-A（核心证伪）：点"停止"→点"取消" → stop API 必须零调用。
+  // 假设：若 requestStop 直接调了 stop（确认无效），此处 apiStopProc 会被调 → 断言失败。
+  it('T-056：点停止→点取消 → apiStopProc 零调用（确认门确实拦住了破坏性操作）', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.requestStop('frps')
+    await settle()
+    // 取消前已确认未调（确认门在前）
+    expect(vi.mocked(procApi.apiStopProc)).not.toHaveBeenCalled()
+    t.cancelPending()
+    await settle()
+    // 取消后仍零调用：误点被彻底拦截
+    expect(vi.mocked(procApi.apiStopProc)).toHaveBeenCalledTimes(0)
+    expect(vi.mocked(procApi.apiRestartProc)).toHaveBeenCalledTimes(0)
+  })
+
+  // T-056 ADV-B（并发待确认串扰证伪）：先 requestStop('frpc') 再 requestRestart('frps')，
+  // 确认 → 必须只执行最后记录的操作（restart frps），且 frpc 既不被 stop 也不被 restart。
+  // 假设：若状态机记多个 pending / 用错快照，会串到 frpc-stop → 断言失败。
+  it('T-056：并发待确认 last-wins → 只执行最后操作(restart frps)，不串到 frpc-stop', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.requestStop('frpc')
+    await settle()
+    t.requestRestart('frps')
+    await settle()
+    expect(t.pendingAction.value).toEqual({ kind: 'frps', type: 'restart' })
+    t.confirmPending()
+    await settle()
+    // 只 restart frps 一次
+    expect(vi.mocked(procApi.apiRestartProc)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(procApi.apiRestartProc)).toHaveBeenCalledWith('frps')
+    // frpc 既没被 stop 也没被 restart（前一个待确认被覆盖，未泄漏执行）
+    expect(vi.mocked(procApi.apiStopProc)).not.toHaveBeenCalled()
+    expect(vi.mocked(procApi.apiRestartProc)).not.toHaveBeenCalledWith('frpc')
+  })
+
+  // T-056 ADV-C（重复确认幂等证伪）：confirmPending 后 pendingAction 已清空，
+  // 再 confirmPending 一次不得二次触发 API（防双击连发两次中断指令）。
+  // 假设：若 confirmPending 未清 pendingAction / 未判 null，会二次调 stop → 断言失败。
+  it('T-056：确认后再点确认 → 不二次触发 API（幂等）', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.requestStop('frpc')
+    await settle()
+    t.confirmPending()
+    await settle()
+    expect(vi.mocked(procApi.apiStopProc)).toHaveBeenCalledTimes(1)
+    // 二次确认（pendingAction 已 null）
+    t.confirmPending()
+    await settle()
+    expect(vi.mocked(procApi.apiStopProc)).toHaveBeenCalledTimes(1)
+  })
+
+  // T-056 ADV-D（启动绝不被加确认证伪）：点"启动"按钮（DOM trigger）→ startProc 立即调，
+  // 且不出现确认文案。假设：若误把 handleStart 也改向 requestX，启动会卡在确认 → 断言失败。
+  it('T-056：DOM 点"启动"按钮 → startProc 立即调用、无确认文案（启动非破坏性）', async () => {
+    const w = mountPage()
+    await settle()
+    const startBtns = w.findAll('button').filter((b) => b.text().trim() === '启动')
+    expect(startBtns.length).toBeGreaterThanOrEqual(1)
+    // frpc 卡片"启动"（stopped 态可点）
+    await startBtns[0].trigger('click')
+    await settle()
+    expect(vi.mocked(procApi.apiStartProc)).toHaveBeenCalledTimes(1)
+    // 启动不弹确认：不出现停止/重启的后果文案
+    expect(w.text()).not.toContain('将立即中断所有正在穿透的远程连接')
+    expect(w.text()).not.toContain('将短暂中断当前所有连接后重新建立')
   })
 })
