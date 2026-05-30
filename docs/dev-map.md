@@ -123,7 +123,7 @@ frp_easy/
             ├── Login.vue     ← 登录（429 倒计时支持）
             ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮（T-047: 自动启动开关获取失败不再静默 → warning + 失败态开关 disabled + tooltip + 刷新入口；T-056: 停止/重启破坏性操作复用 ConfirmDialog 二次确认，pendingAction 状态机驱动动态文案，启动不确认）
             ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组；T-042: 叠加 runtime 列「运行状态 / 流量（入/出）」，消费 useServerRuntime；frps 不可达时降级灰点 + 配置 CRUD 通路零关联；T-047: 区分加载失败 n-result+重试 vs 暂无规则 empty 态）
-            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor；T-047: 加载三态 skeleton/n-result+重试/loaded + Dashboard 三字段补校验；T-058 (B): 「重置」→「重新加载」，加载存标量快照 loadedSnapshot，dirty 时弹 ConfirmDialog 防误丢未保存编辑，不 dirty 直接重载；dirty 不覆盖 AllowPortsEditor 子组件状态）
+            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor；T-047: 加载三态 skeleton/n-result+重试/loaded + Dashboard 三字段补校验；T-058 (B): 「重置」→「重新加载」，加载存标量快照 loadedSnapshot，dirty 时弹 ConfirmDialog 防误丢未保存编辑，不 dirty 直接重载；T-060: dirty 检测已纳入 AllowPortsEditor 端口策略（normalizeAllowPorts 规范化字符串快照 loadedAllowPortsSnapshot + isDirty 末尾比较编辑器 getAllowPortsInput()，消除"只改端口策略→静默丢弃"路径，保留单向数据流不引 v-model 桥））
             ├── ServerMonitor.vue ← T-041：frps 服务端运行态监控页（消费 T-039 API；5s 轮询 + visibilitychange 自动暂停；ServerInfo 卡片 + n-tabs 分 type proxy 表格 + 状态条 + 三态完备）
             ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken；T-047: 加载三态 skeleton/n-result+重试/loaded；T-058 (B): 「重置」→「重新加载」+ dirty 弹 ConfirmDialog 防误丢，同 Server.vue 范式）
             ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）

@@ -14,6 +14,7 @@ import { apiError } from '../../test-utils/apiError'
 import { defineComponent, h, nextTick } from 'vue'
 import { NConfigProvider, NMessageProvider } from 'naive-ui'
 import type { FormInst } from 'naive-ui'
+import type { AllowPortRange } from '../../types'
 
 vi.mock('../../api/server', () => ({
   apiGetServer: vi.fn(),
@@ -84,6 +85,15 @@ interface TestingHandle {
   isDirty: () => boolean
   handleReloadClick: () => void
   confirmReload: () => void
+  // T-060
+  loadedAllowPortsSnapshot: { value: string | null }
+  normalizeAllowPorts: (ranges: AllowPortRange[]) => string
+  allowPortsEditorRef: {
+    value: {
+      getAllowPortsInput: () => AllowPortRange[]
+      hasValidationError: () => boolean
+    } | null
+  }
 }
 
 function mountPage() {
@@ -352,6 +362,172 @@ describe('Server.vue — 重新加载防误丢未保存编辑（B）', () => {
   })
 })
 
+// T-060：dirty 检测纳入 AllowPortsEditor 端口策略
+// 消除"只改端口策略 → 点重新加载 → 无确认 → 静默丢弃端口编辑"的数据丢失路径。
+// 驱动方式：用真 AllowPortsEditor（本 spec 未 mock 它），通过 DOM 按钮文本（"添加单端口"/"删除"）
+// 改变编辑器 rows，或直接通过 allowPortsEditorRef 句柄读 getAllowPortsInput。
+// 断言不按 naive-ui 组件名查询（insight L45 / T-057 教训）。
+describe('Server.vue — normalizeAllowPorts 稳定性（T-060 AC-4）', () => {
+  it('空列表 → 空串；single/range 各产生确定且互不相同的字符串', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    const n = t.normalizeAllowPorts
+    expect(n([])).toBe('')
+    expect(n([{ single: 8080 }])).toBe('s:8080')
+    expect(n([{ start: 1000, end: 2000 }])).toBe('r:1000-2000')
+    // single vs range 同端口形态敏感（互不相同）
+    expect(n([{ single: 8080 }])).not.toBe(n([{ start: 8080, end: 8080 }]))
+    expect(n([{ start: 8080, end: 8080 }])).toBe('r:8080-8080')
+  })
+
+  it('顺序敏感：[s:1,s:2] 与 [s:2,s:1] 规范化不同', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    const n = t.normalizeAllowPorts
+    expect(n([{ single: 1 }, { single: 2 }])).toBe('s:1|s:2')
+    expect(n([{ single: 2 }, { single: 1 }])).toBe('s:2|s:1')
+    expect(n([{ single: 1 }, { single: 2 }])).not.toBe(n([{ single: 2 }, { single: 1 }]))
+  })
+
+  it('混合 single + range 按用户顺序 join，未填值退化为 0', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    const n = t.normalizeAllowPorts
+    expect(n([{ single: 80 }, { start: 1000, end: 2000 }])).toBe('s:80|r:1000-2000')
+    // 未填行（start/end 缺失）→ r:0-0（与"加了空行"语义对应）
+    expect(n([{ start: undefined, end: undefined }])).toBe('r:0-0')
+  })
+})
+
+describe('Server.vue — 端口策略纳入 dirty（T-060）', () => {
+  const CFG_WITH_PORTS = {
+    ...HAPPY_CFG,
+    allowPorts: [{ single: 8080 }, { start: 1000, end: 2000 }] as AllowPortRange[],
+  }
+
+  it('AC-5 round-trip：加载带端口策略后未改动 → isDirty()=false（不误判脏）', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...CFG_WITH_PORTS })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    // 快照 = 加载值规范化；编辑器 seed→output 对合法值是 identity
+    expect(t.loadedAllowPortsSnapshot.value).toBe('s:8080|r:1000-2000')
+    // 编辑器当前输出规范化应与快照相等 → 非脏（round-trip identity 锁死）
+    expect(t.normalizeAllowPorts(t.allowPortsEditorRef.value!.getAllowPortsInput())).toBe(
+      's:8080|r:1000-2000',
+    )
+    expect(t.isDirty()).toBe(false)
+    expect(t.reloadConfirmShow.value).toBe(false)
+  })
+
+  it('AC-1 只改端口策略（DOM 添加单端口行，标量不动）→ isDirty()=true 且 handleReloadClick 弹确认、不调 apiGetServer', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...CFG_WITH_PORTS })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.isDirty()).toBe(false)
+    // DOM 驱动：点编辑器"添加单端口"按钮（按文本，非组件名）→ 真实改 rows
+    const addBtn = w.findAll('button').find((b) => b.text().includes('添加单端口'))
+    expect(addBtn).toBeTruthy()
+    await addBtn!.trigger('click')
+    await settle()
+    // 标量未动；仅端口策略多了一行（未填 → s:0）→ 脏
+    expect(t.isDirty()).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await nextTick()
+    // 弹确认，且确认前绝不重载（防"点了就丢"）
+    expect(t.reloadConfirmShow.value).toBe(true)
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('AC-2 既不改标量也不改端口策略 → handleReloadClick 不弹确认、直接重载', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...CFG_WITH_PORTS })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.isDirty()).toBe(false)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await settle()
+    expect(t.reloadConfirmShow.value).toBe(false)
+    expect(getMock.mock.calls.length).toBe(callsBefore + 1)
+  })
+
+  // AC-6：改端口策略 + 确认 → 触发重载、快照刷新回真实值基准。
+  // 注意 D-1（QA 发现）：AllowPortsEditor 单向数据流不 watch props.initial（setup 只读一次），
+  // 故 confirmReload→loadConfig 重写 initialAllowPorts 后编辑器 rows 不复位——用户加的行仍在。
+  // 这是端口策略（独立组件、不复位）与标量字段（form 由 loadConfig 直接重赋、复位）的本质差异。
+  // 因此本用例断言可观测的真实行为：apiGet 再调一次 + loadedAllowPortsSnapshot 刷新回真实值，
+  // 而非 isDirty 归零（编辑器不复位 → 端口策略侧仍判脏，是已知且可接受的范式约束）。
+  it('AC-6 改端口策略 + 确认 → 触发重载（apiGet +1）且快照刷新回真实值基准', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...CFG_WITH_PORTS })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    // 加一行使脏
+    const addBtn = w.findAll('button').find((b) => b.text().includes('添加单端口'))
+    await addBtn!.trigger('click')
+    await settle()
+    expect(t.isDirty()).toBe(true)
+    t.handleReloadClick()
+    await nextTick()
+    expect(t.reloadConfirmShow.value).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.confirmReload()
+    await settle()
+    // 重载：apiGetServer 再调一次 + 端口策略快照刷新回真实值基准
+    expect(getMock.mock.calls.length).toBe(callsBefore + 1)
+    expect(t.loadedAllowPortsSnapshot.value).toBe('s:8080|r:1000-2000')
+  })
+
+  // AC-6 配套：标量侧的 dirty + 确认 → 重载后标量复位 → isDirty 归零（无回归，与 T-058 一致）。
+  // 标量字段经 loadConfig 直接重赋 form.value，故确认重载后标量侧确实复位、isDirty 归零；
+  // 此用例与上面端口策略侧形成对照，锁死"标量复位 vs 端口策略不复位"的差异语义。
+  it('AC-6 配套：改标量字段 + 确认 → 重载后标量复位、isDirty 归零（无回归）', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...CFG_WITH_PORTS })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.bindPort = 9999 // 仅改标量
+    await nextTick()
+    expect(t.isDirty()).toBe(true)
+    t.handleReloadClick()
+    await nextTick()
+    expect(t.reloadConfirmShow.value).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.confirmReload()
+    await settle()
+    expect(getMock.mock.calls.length).toBe(callsBefore + 1)
+    expect(t.form.value.bindPort).toBe(HAPPY_CFG.bindPort) // 标量复位回真实值
+    expect(t.isDirty()).toBe(false) // 标量复位 + 端口策略未动 → 归零
+  })
+
+  it('改标量字段仍弹确认（无回归）—— 与端口策略纳入互不干扰', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...CFG_WITH_PORTS })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.bindPort = 9999 // 仅改标量，端口策略不动
+    await nextTick()
+    expect(t.isDirty()).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await nextTick()
+    expect(t.reloadConfirmShow.value).toBe(true)
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+  })
+})
+
 // ## Adversarial tests
 describe('Server.vue — Adversarial', () => {
   it('加载失败时绝不渲染默认表单值（不能让用户把默认值误当真实配置）', async () => {
@@ -397,6 +573,36 @@ describe('Server.vue — Adversarial', () => {
     expect(getMock.mock.calls.length).toBe(callsBefore)
     expect(t.form.value.authToken).toBe('half-typed-secret')
     expect(t.reloadConfirmShow.value).toBe(true)
+  })
+
+  // T-060：反向证伪 —— 只删一行端口（标量原封不动）→ dirty 检测必须捕获 → 确认必须出现。
+  // 若 isDirty 漏掉 allowPorts 比较（退回 T-058 已知局限），此断言会 FAIL（弹不出确认、静默丢弃）。
+  it('只删一行端口策略（标量不动）→ isDirty 捕获 → handleReloadClick 弹确认、不静默重载丢弃', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({
+      ...HAPPY_CFG,
+      allowPorts: [{ single: 8080 }, { start: 1000, end: 2000 }] as AllowPortRange[],
+    })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    // 加载后未改动 → 非脏（前提）
+    expect(t.isDirty()).toBe(false)
+    expect(t.loadedAllowPortsSnapshot.value).toBe('s:8080|r:1000-2000')
+    // DOM 驱动：点第一个"删除"按钮删掉一行端口（按文本，非组件名查询）
+    const delBtn = w.findAll('button').find((b) => b.text().includes('删除'))
+    expect(delBtn).toBeTruthy()
+    await delBtn!.trigger('click')
+    await settle()
+    // 端口策略少了一行（标量原封不动）→ 必须判脏
+    expect(t.form.value.bindPort).toBe(HAPPY_CFG.bindPort) // 标量确实未动
+    expect(t.isDirty()).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await nextTick()
+    // 反向证伪：若漏掉 allowPorts 比较 → 会走"直接 loadConfig"静默丢弃 → 此两断言 FAIL
+    expect(t.reloadConfirmShow.value).toBe(true)
+    expect(getMock.mock.calls.length).toBe(callsBefore)
   })
 
   it('启用 dashboard 但空 pass 时 handleSave 不调用 apiPutServer', async () => {

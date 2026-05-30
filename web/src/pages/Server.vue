@@ -153,25 +153,41 @@ const form = ref({
   dashboardPass: '',
 })
 
-// T-058 (B)：dirty 检测用"加载时存一份标量字段快照 + 浅比较当前表单"。
-// 不覆盖 AllowPortsEditor 子组件内部行编辑状态（单向数据流 insight L13，纳入会扩散，
-// 且其增删行有显式操作用户感知强）—— 仅 allowPorts 改动时退化为直接重载，已知局限见 06。
+// T-058 (B)：dirty 检测 = 加载时存标量快照 + 浅比较当前表单。
+// T-060：dirty 已纳入 AllowPortsEditor 端口策略（消除"只改端口策略→点重新加载→静默丢弃"
+// 的数据丢失路径）。比较基于规范化字符串快照，保留单向数据流范式（不引入 v-model 桥，
+// insight L13）：加载时从 cfg.allowPorts 派生快照，比较时拉编辑器当前输出再规范化。
 type ServerScalarForm = typeof form.value
 const loadedSnapshot = ref<ServerScalarForm | null>(null)
+// T-060：端口策略规范化快照（与 loadedSnapshot 同步在 loadConfig 末尾刷新）
+const loadedAllowPortsSnapshot = ref<string | null>(null)
 const reloadConfirmShow = ref(false)
+
+// T-060：把端口策略列表映射成稳定字符串，消除 JSON key 顺序/格式歧义。
+// single 行 → 's:N'；range 行 → 'r:A-B'；按用户顺序 join('|')。顺序+形态敏感
+// （重排 / single↔range 切换均视为脏，保守判脏优于漏判丢数据）。
+// 双侧（加载值 cfg.allowPorts / 编辑器 getAllowPortsInput()）用同一函数 → round-trip identity。
+function normalizeAllowPorts(ranges: AllowPortRange[]): string {
+  return ranges
+    .map((r) => (typeof r.single === 'number' ? `s:${r.single}` : `r:${r.start ?? 0}-${r.end ?? 0}`))
+    .join('|')
+}
 
 function isDirty(): boolean {
   const snap = loadedSnapshot.value
   if (snap == null) return false
   const f = form.value
-  return (
+  const scalarDirty =
     f.bindPort !== snap.bindPort ||
     f.authToken !== snap.authToken ||
     f.dashboardEnabled !== snap.dashboardEnabled ||
     f.dashboardPort !== snap.dashboardPort ||
     f.dashboardUser !== snap.dashboardUser ||
     f.dashboardPass !== snap.dashboardPass
-  )
+  if (scalarDirty) return true
+  // T-060：端口策略比较。ref 未挂载（loading/error 态）时退化为空策略比较，不抛错。
+  const currentAllowPorts = normalizeAllowPorts(allowPortsEditorRef.value?.getAllowPortsInput() ?? [])
+  return currentAllowPorts !== loadedAllowPortsSnapshot.value
 }
 
 function handleReloadClick() {
@@ -251,6 +267,9 @@ async function loadConfig(reveal = false) {
     initialAllowPorts.value = cfg.allowPorts ?? []
     // T-058 (B)：在 6 个标量字段赋值之后存快照，作为后续 dirty 比较基准
     loadedSnapshot.value = { ...form.value }
+    // T-060：端口策略规范化快照（从 cfg.allowPorts 派生，与 initialAllowPorts 同源）。
+    // 因 round-trip identity，未改动时编辑器输出规范化值应与此相等 → isDirty 判非脏。
+    loadedAllowPortsSnapshot.value = normalizeAllowPorts(cfg.allowPorts ?? [])
   } catch (e) {
     loadError.value = extractErrorMessage(e, '加载配置失败')
   } finally {
@@ -325,6 +344,10 @@ defineExpose({
     isDirty,
     handleReloadClick,
     confirmReload,
+    // T-060
+    loadedAllowPortsSnapshot,
+    normalizeAllowPorts,
+    allowPortsEditorRef,
   },
 })
 </script>
