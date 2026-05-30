@@ -332,7 +332,9 @@ func run(stopCh <-chan struct{}, readyCh chan<- struct{}) error {
 	autoRestoreProcs(rootCtx, store, pm, loc, logger, map[string]string{"frpc": frpcTOML, "frps": frpsTOML})
 	// 【T-046】后台定期清理过期 session，防 sessions 表无界增长（GetSession 刻意不删
 	// 过期行以避免每次读引入写；此循环承接清理职责）。随 rootCtx 取消。
-	go purgeSessionsLoop(rootCtx, store, logger)
+	// 【T-063】同一 loop 也清理过期 loginfail.<ip> 限流计数行（对称补齐——惰性清理
+	// 只在同 IP 复访时触发，永不复访的轮换源 IP 会永久滞留）。不新增 goroutine。
+	go purgeLoop(rootCtx, store, rl, logger)
 	ready.Store(true)
 	logger.Info("ready gate opened")
 
@@ -524,7 +526,8 @@ func ensureFrpcAdminCreds(store *storage.Store, logger *slog.Logger) frpcAdminCr
 //   - 任何分支都 persistAutoRestoreLast 写 kv `system.autorestore.last`，
 //     让 GET /api/v1/system/service-status 能展示给用户。
 //
-// sessionPurgeInterval 是过期 session 清理周期。包级 var 便于测试覆盖为短间隔。
+// sessionPurgeInterval 是后台清理周期（session + loginfail 共用，T-063 起语义已不止
+// session）。包级 var 便于测试覆盖为短间隔。
 var sessionPurgeInterval = time.Hour
 
 // purgeExpiredSessionsOnce 清理一次过期 session 行（带 5s 超时，错误仅告警不致命）。
@@ -541,10 +544,28 @@ func purgeExpiredSessionsOnce(ctx context.Context, store *storage.Store, logger 
 	}
 }
 
-// purgeSessionsLoop 周期性清理过期 session，防 sessions 表无界增长。
-// 启动时立即清一次，之后每 sessionPurgeInterval 一次；随 ctx 取消退出（无 goroutine 泄漏）。
-func purgeSessionsLoop(ctx context.Context, store *storage.Store, logger *slog.Logger) {
+// purgeExpiredLoginFailsOnce 清理一次过期 loginfail.<ip> 限流计数行（带 5s 超时，
+// 错误仅告警不致命）。与 purgeExpiredSessionsOnce 对称（T-063）。
+func purgeExpiredLoginFailsOnce(ctx context.Context, rl *auth.RateLimiter, logger *slog.Logger) {
+	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	n, err := rl.PurgeExpired(pctx)
+	if err != nil {
+		logger.Warn("loginfail purge failed", "err", err)
+		return
+	}
+	if n > 0 {
+		logger.Info("loginfail purge", "removed", n)
+	}
+}
+
+// purgeLoop 周期性清理过期 session（防 sessions 表无界增长）与过期 loginfail 限流
+// 计数行（防 kv 表 loginfail.<ip> 无界增长，T-063）。启动时立即清一次，之后每
+// sessionPurgeInterval 一次；两清理共用同一 goroutine / ticker，不新增 goroutine。
+// 随 ctx 取消退出（无 goroutine 泄漏）。
+func purgeLoop(ctx context.Context, store *storage.Store, rl *auth.RateLimiter, logger *slog.Logger) {
 	purgeExpiredSessionsOnce(ctx, store, logger)
+	purgeExpiredLoginFailsOnce(ctx, rl, logger)
 	ticker := time.NewTicker(sessionPurgeInterval)
 	defer ticker.Stop()
 	for {
@@ -553,6 +574,7 @@ func purgeSessionsLoop(ctx context.Context, store *storage.Store, logger *slog.L
 			return
 		case <-ticker.C:
 			purgeExpiredSessionsOnce(ctx, store, logger)
+			purgeExpiredLoginFailsOnce(ctx, rl, logger)
 		}
 	}
 }

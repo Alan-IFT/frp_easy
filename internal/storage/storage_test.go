@@ -301,6 +301,113 @@ func TestKV_SetGet(t *testing.T) {
 	}
 }
 
+// TestKVListByPrefix_OnlyMatchingPrefix 验证 KVListByPrefix 只命中前缀匹配的行、
+// 升序返回、且不误删/不误返回其它命名空间的键（T-063 AC-2 / R-3 / BC-6）。
+func TestKVListByPrefix_OnlyMatchingPrefix(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seed := map[string]string{
+		"loginfail.1.2.3.4":   `{"count":5,"firstAt":"2026-05-31T00:00:00Z"}`,
+		"loginfail.10.0.0.1":  `{"count":1,"firstAt":"2026-05-31T01:00:00Z"}`,
+		"loginfail.8.8.8.8":   `{"count":3,"firstAt":"2026-05-31T02:00:00Z"}`,
+		"mode.frpc.enabled":   "true",
+		"mode.frps.enabled":   "false",
+		"system.autorestore.last": `{"kind":"frpc"}`,
+		// 近似键：不应被 "loginfail." 前缀命中。
+		"loginfailure.x":      "no-dot-suffix",   // 前缀 loginfail 但非 loginfail.
+		"loginfail":           "no-dot-at-all",   // 无点结尾
+		"xloginfail.y":        "prefixed-before", // 前面有别的字符
+	}
+	for k, v := range seed {
+		if err := s.KVSet(ctx, k, v); err != nil {
+			t.Fatalf("seed KVSet(%q): %v", k, err)
+		}
+	}
+
+	got, err := s.KVListByPrefix(ctx, "loginfail.")
+	if err != nil {
+		t.Fatalf("KVListByPrefix: %v", err)
+	}
+
+	wantKeys := []string{"loginfail.1.2.3.4", "loginfail.10.0.0.1", "loginfail.8.8.8.8"}
+	if len(got) != len(wantKeys) {
+		t.Fatalf("got %d entries %v, want %d %v", len(got), keysOf(got), len(wantKeys), wantKeys)
+	}
+	// 升序断言（ORDER BY key）。
+	for i, e := range got {
+		if e.Key != wantKeys[i] {
+			t.Fatalf("entry[%d] key got %q want %q (order or membership wrong)", i, e.Key, wantKeys[i])
+		}
+		if e.Value != seed[e.Key] {
+			t.Fatalf("entry %q value got %q want %q", e.Key, e.Value, seed[e.Key])
+		}
+	}
+
+	// 反向证伪：近似键与其它命名空间键不得出现在结果里（也证明它们安然无恙）。
+	for _, e := range got {
+		switch e.Key {
+		case "loginfailure.x", "loginfail", "xloginfail.y",
+			"mode.frpc.enabled", "mode.frps.enabled", "system.autorestore.last":
+			t.Fatalf("KVListByPrefix(%q) leaked non-matching key %q", "loginfail.", e.Key)
+		}
+	}
+}
+
+// TestKVListByPrefix_EmptyResult 验证无匹配时返回空 slice + nil，不报错不 panic（BC-1）。
+func TestKVListByPrefix_EmptyResult(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// 完全没有 loginfail 行。
+	if err := s.KVSet(ctx, "mode.frpc.enabled", "true"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := s.KVListByPrefix(ctx, "loginfail.")
+	if err != nil {
+		t.Fatalf("KVListByPrefix empty: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected 0 entries on no match, got %d: %v", len(got), keysOf(got))
+	}
+}
+
+// TestKVListByPrefix_LikeMetacharsAreLiteral 验证前缀里若含 LIKE 元字符（% _ \）被当
+// 字面字符处理，不当通配符（T-063 R-3 防御 / OBS-3）。造键 "loginfail._x" 与 "loginfailYx"：
+// 用前缀 "loginfail._" 时只应命中字面 "loginfail._x"，绝不因 `_` 通配命中 "loginfailYx"。
+func TestKVListByPrefix_LikeMetacharsAreLiteral(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	seed := map[string]string{
+		"loginfail._x": "literal-underscore",
+		"loginfailYx":  "would-match-if-underscore-were-wildcard",
+		"loginfail.Ax": "different-after-dot",
+	}
+	for k, v := range seed {
+		if err := s.KVSet(ctx, k, v); err != nil {
+			t.Fatalf("seed KVSet(%q): %v", k, err)
+		}
+	}
+
+	got, err := s.KVListByPrefix(ctx, "loginfail._")
+	if err != nil {
+		t.Fatalf("KVListByPrefix: %v", err)
+	}
+	if len(got) != 1 || got[0].Key != "loginfail._x" {
+		t.Fatalf("prefix with literal '_' should match only %q, got %v", "loginfail._x", keysOf(got))
+	}
+}
+
+// keysOf 抽 KVEntry slice 的 key 列表（测试诊断用）。
+func keysOf(es []KVEntry) []string {
+	ks := make([]string, len(es))
+	for i, e := range es {
+		ks[i] = e.Key
+	}
+	return ks
+}
+
 // ----- proxies -----
 
 func TestProxy_CRUD(t *testing.T) {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/frp-easy/frp-easy/internal/storage"
 )
 
 // 限流参数：5 次失败 / 60 秒滑窗（01 B-5 / AC-4 / NF-S 限流）。
@@ -15,12 +17,20 @@ const (
 	failMax    = 5
 )
 
-// kvStore 是 RateLimiter 持久化所需的最小接口（取自 storage.Store 的 KVGet/KVSet/KVDelete）。
-// 用接口而非具体类型，便于在测试里用 in-memory fake 注入。
+// LoginFailKeyPrefix 是 RateLimiter 持久化键的统一前缀（T-063 导出）。
+// key(ip) == LoginFailKeyPrefix + ip，即 "loginfail.<ip>"。
+// PurgeExpired 与单测引用此常量，避免 "loginfail." 字面量散落。
+const LoginFailKeyPrefix = "loginfail."
+
+// kvStore 是 RateLimiter 持久化所需的最小接口（取自 storage.Store 的
+// KVGet/KVSet/KVDelete/KVListByPrefix）。用接口而非具体类型，便于在测试里用
+// in-memory fake 注入。
 type kvStore interface {
 	KVGet(ctx context.Context, key string) (string, bool, error)
 	KVSet(ctx context.Context, key, value string) error
 	KVDelete(ctx context.Context, key string) error
+	// KVListByPrefix 机械地按前缀列举 KV 行（T-063：过期判定留本包，见 PurgeExpired）。
+	KVListByPrefix(ctx context.Context, prefix string) ([]storage.KVEntry, error)
 }
 
 // failRecord 是写入 KV 的 JSON 值。
@@ -116,6 +126,52 @@ func (r *RateLimiter) Reset(ip string) error {
 	return r.kv.KVDelete(context.Background(), key(ip))
 }
 
+// PurgeExpired 删除所有**已过期**的 loginfail.<ip> 计数行，返回删除条数（T-063）。
+//
+// 过期判定与 Allow 字节级同义：now.After(rec.FirstAt.Add(failWindow))。
+// 这保证清理删除的行集 ⊆ Allow 在同一 now 下会惰性删除的行集——绝不删任何
+// Allow 仍判 blocked 的活计数行（NF-S 限流不失效，02 §6 集合包含证明）。
+//
+// 损坏的 JSON 值（json.Unmarshal 失败）视为过期删除：Allow 的 read() 对损坏值
+// 同样返回 ok=false → 该 IP 本就被放行，故删除损坏行对限流行为零影响，纯垃圾回收
+// （02 §8 R-2）。
+//
+// best-effort：单条 KVDelete 失败不中止，继续清理其余，返回首个错误 + 已删数。
+// 与 RecordFailure/Allow/Reset 共享 r.mu，保证"列举 → 逐条判定 → 删除"的原子性；
+// 锁顺序与既有路径一致（先 r.mu，storage 内部各自取 s.mu）。
+func (r *RateLimiter) PurgeExpired(ctx context.Context) (purged int, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	entries, lerr := r.kv.KVListByPrefix(ctx, LoginFailKeyPrefix)
+	if lerr != nil {
+		return 0, fmt.Errorf("auth.RateLimiter.PurgeExpired list: %w", lerr)
+	}
+	now := r.now()
+	var firstErr error
+	for _, e := range entries {
+		var rec failRecord
+		expired := false
+		if uerr := json.Unmarshal([]byte(e.Value), &rec); uerr != nil {
+			// 损坏值：当作过期垃圾删除（对限流零影响，见上）。
+			expired = true
+		} else if now.After(rec.FirstAt.Add(failWindow)) {
+			expired = true
+		}
+		if !expired {
+			continue
+		}
+		if derr := r.kv.KVDelete(ctx, e.Key); derr != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("auth.RateLimiter.PurgeExpired delete(%q): %w", e.Key, derr)
+			}
+			continue
+		}
+		purged++
+	}
+	return purged, firstErr
+}
+
 func (r *RateLimiter) read(ip string) (failRecord, bool) {
 	v, ok, err := r.kv.KVGet(context.Background(), key(ip))
 	if err != nil || !ok {
@@ -137,5 +193,5 @@ func (r *RateLimiter) write(ip string, rec failRecord) error {
 }
 
 func key(ip string) string {
-	return fmt.Sprintf("loginfail.%s", ip)
+	return LoginFailKeyPrefix + ip
 }
