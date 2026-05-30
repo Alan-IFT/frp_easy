@@ -44,10 +44,13 @@ fi
 delivery_file="$task_dir/07_DELIVERY.md"
 harvested=()
 if [[ -f "$delivery_file" ]]; then
-    # Extract '## Insight' section bullets
+    # Extract '## Insight' section bullets.
+    # 标题正则容忍单 token 前缀（如 '## §8 Insight' / '## 8. Insight'），与 archive-task.ps1:48
+    # 的 ^##\s+(?:[^\s\n]+\s+)?Insights?\s*$ 对齐——偿还 insight-index 记录的"双实现不对称"债
+    # （T-035：T-028 仅修了 .ps1，.sh 仍踩 §N 前缀坑）。POSIX ERE 等价：([^[:space:]]+[[:space:]]+)? = 可选前缀 token。
     while IFS= read -r line; do
         harvested+=("$line")
-    done < <(awk '/^##[[:space:]]+Insights?[[:space:]]*$/{flag=1; next} /^##[[:space:]]/{flag=0} flag && /^[[:space:]]*-[[:space:]]/' "$delivery_file" || true)
+    done < <(awk '/^##[[:space:]]+([^[:space:]]+[[:space:]]+)?Insights?[[:space:]]*$/{flag=1; next} /^##[[:space:]]/{flag=0} flag && /^[[:space:]]*-[[:space:]]/' "$delivery_file" || true)
 fi
 
 if (( ${#harvested[@]} > 0 )); then
