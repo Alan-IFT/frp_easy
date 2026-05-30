@@ -172,6 +172,7 @@ frp_easy/
 | FRP TOML 渲染 | 是 | `internal/frpconf/render.go` | RenderFrpc / RenderFrps；AtomicWrite 原子写文件。 |
 | 字节友好单位 / 时间空值格式化 | 是 | `web/src/utils/format.ts` | T-042 抽取。`formatBytes(n)`（B/KiB/MiB/GiB/TiB/PiB；undefined/null/NaN/负数 → "—"；0 → "0 B"）+ `formatTime(s)`（空/"0001-..." → "—"）。共享方：ServerMonitor.vue + Proxies.vue runtime 列。 |
 | proxy runtime status → 视觉/文案 | 是 | `web/src/utils/proxyStatus.ts` | T-042 抽取。`getProxyStatusTag(raw)` → `{type, text, dotColor, online}`。大小写防御 + 空字符串归 "离线"（与"无此 proxy"语义合并）。共享方：ServerMonitor.vue 状态列 + Proxies.vue runtime 列。 |
+| 复制文本到剪贴板（含 fallback） | 是 | `web/src/utils/clipboard.ts` | T-061 抽取（偿还 T-058 (A) backlog）。`copyToClipboard(text): Promise<boolean>`——首选 `navigator.clipboard.writeText`（安全上下文），失败回落临时离屏 `aria-hidden` textarea + `document.execCommand('copy')`；返回成功布尔，**不调 message**（message 留组件 setup 层，`useMessage` 是组合式 hook）。内网 http 非安全上下文必走 fallback（insight L37）。共享方：LogViewer.vue::onCopy + FirewallHint.vue::copyText + PublicIpDetector.vue::copyText。 |
 | HTTP 中间件（全套） | 是 | `internal/httpapi/middleware.go` | ReadyGate(C-3) / Recover / RequestID / Logger(C-5) / CORS / SessionAuth / CSRF。 |
 | 日志尾读 | 是 | `internal/logtail/tail.go` | TailLines / ReadFrom 增量。 |
 | 子进程管理 | 是 | `internal/procmgr/manager.go` | Start/Stop/Restart/Status/Shutdown/ApplyConfigChange。 |

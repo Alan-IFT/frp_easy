@@ -85,6 +85,7 @@ import { useLogBuffer } from '../composables/log/useLogBuffer'
 import { useLogLevelFilter } from '../composables/log/useLogLevelFilter'
 import { useLogSearch } from '../composables/log/useLogSearch'
 import { useFollowTail } from '../composables/log/useFollowTail'
+import { copyToClipboard } from '../utils/clipboard'
 
 const MAX_LINES = 500
 
@@ -143,31 +144,14 @@ function onSetAutoRefresh(v: boolean) {
 }
 
 async function onCopy() {
+  // T-061：剪贴板 + execCommand fallback 逻辑抽到 utils/clipboard.ts（消除三处重复）。
+  // 可观察行为字节不变：成功 message.success / 失败 message.error（各一次）。
   const text = search.visibleLines.value.map((v) => v.parsed.raw).join('\n')
-  try {
-    await navigator.clipboard.writeText(text)
+  const ok = await copyToClipboard(text)
+  if (ok) {
     message.success('已复制到剪贴板')
-  } catch {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.setAttribute('aria-hidden', 'true')
-    ta.style.position = 'fixed'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.select()
-    let ok = false
-    try {
-      ok = document.execCommand('copy')
-    } catch {
-      ok = false
-    } finally {
-      document.body.removeChild(ta)
-    }
-    if (ok) {
-      message.success('已复制到剪贴板')
-    } else {
-      message.error('复制失败：请手动选择文本复制')
-    }
+  } else {
+    message.error('复制失败：请手动选择文本复制')
   }
 }
 
