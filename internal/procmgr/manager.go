@@ -16,6 +16,7 @@ package procmgr
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -25,6 +26,16 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrBusy 是哨兵错误：进程因处于过渡/活动态（如停止进行中）而拒绝当前操作。
+//
+// 【T-065】此前 handler 层（httpapi.mapProcErr）靠 strings.Contains 匹配本包返回的
+// 英文 error 文本（如 "currently stopping"）来分类 409 PROC_BUSY —— 脆弱反模式：
+// 本包改一个字（"currently stopping"→"is stopping"）即让 handler 静默漏判退化成 500。
+// 现把"忙/过渡态拒绝"语义在本包收敛为 sentinel：相关分支返回 fmt.Errorf("<可读 cause>: %w", ErrBusy)
+// （保留可读 cause 进日志，同时 errors.Is(err, ErrBusy) 可判），handler 仅凭 errors.Is 分类，
+// 不再依赖文本可变性。与 binloc.ErrBinMissing（binloc.go:44）、storage.ErrDuplicateRemotePort（T-059）同范式。
+var ErrBusy = errors.New("procmgr: process busy")
 
 // State 是 02 §3.5 的状态枚举。
 type State string
@@ -168,7 +179,9 @@ func (m *Manager) Start(kind string) (ProcessInfo, error) {
 			return
 		case StateStopping:
 			infoSnapshot = ps.info
-			startErr = fmt.Errorf("procmgr.Start(%s): currently stopping", kind)
+			// 【T-065】wrap ErrBusy：保留 "currently stopping" 可读 cause（进日志可诊断），
+			// 尾部 %w 让 handler 的 errors.Is(err, ErrBusy) 可判，不再依赖文本匹配。
+			startErr = fmt.Errorf("procmgr.Start(%s): currently stopping: %w", kind, ErrBusy)
 			return
 		}
 

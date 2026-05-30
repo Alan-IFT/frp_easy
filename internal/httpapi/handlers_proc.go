@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/frp-easy/frp-easy/internal/binloc"
 	"github.com/frp-easy/frp-easy/internal/procmgr"
@@ -22,7 +21,7 @@ func (h *handlers) procStart(w http.ResponseWriter, r *http.Request) {
 	h.applyConfigBestEffort(r.Context(), kind)
 	info, err := h.deps.ProcMgr.Start(kind)
 	if err != nil {
-		mapProcErr(w, err)
+		h.mapProcErr(w, err)
 		return
 	}
 	// AC-9: 启动成功后更新 mode kv
@@ -64,7 +63,7 @@ func (h *handlers) procRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := h.deps.ProcMgr.Restart(kind)
 	if err != nil {
-		mapProcErr(w, err)
+		h.mapProcErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
@@ -85,18 +84,29 @@ func validProcKind(k string) bool {
 	return k == "frpc" || k == "frps"
 }
 
-func mapProcErr(w http.ResponseWriter, err error) {
+// mapProcErr 把 ProcMgr.Start / Restart 的错误映射为 HTTP 响应。
+//
+// 【T-065】此前靠 strings.ToLower + strings.Contains 匹配 procmgr 返回的内部英文文本
+// （"stopping"/"starting"/"running"）分类 409 PROC_BUSY，并把原始 error 文本直接透传
+// 前端的 500 —— 脆弱反模式（procmgr 改文本即静默漏判）+ 信息泄露。现收口为：
+//   - binloc.ErrBinMissing → 422 BIN_MISSING（保持现状，binloc sentinel 已是好范式）
+//   - procmgr.ErrBusy（sentinel，errors.Is 沿 wrap 链判定）→ 409 PROC_BUSY，固定中文文案
+//     （不透传 procmgr 内部英文 cause）
+//   - 其余 → h.writeInternalError（500 INTERNAL 固定中文 + 原始 error 进 logger，不外泄）
+//
+// 与 mapProxyWriteError（handlers_proxies.go，T-059）/ writeInternalError（T-055）同方向收口。
+// 注意：procmgr 当前唯一的"忙"错误来自 Start 的 StateStopping 分支（StateStarting/StateRunning
+// 是 idempotent 不报错），故删除对 "starting"/"running" 文本的匹配同时消除了既有空匹配。
+func (h *handlers) mapProcErr(w http.ResponseWriter, err error) {
 	if errors.Is(err, binloc.ErrBinMissing) {
 		writeError(w, http.StatusUnprocessableEntity, CodeBinMissing, err.Error(), "")
 		return
 	}
-	msg := err.Error()
-	low := strings.ToLower(msg)
-	if strings.Contains(low, "stopping") || strings.Contains(low, "starting") || strings.Contains(low, "running") {
-		writeError(w, http.StatusConflict, CodeProcBusy, msg, "")
+	if errors.Is(err, procmgr.ErrBusy) {
+		writeError(w, http.StatusConflict, CodeProcBusy, "进程正忙（启动或停止进行中），请稍后重试", "")
 		return
 	}
-	writeError(w, http.StatusInternalServerError, CodeInternal, msg, "")
+	h.writeInternalError(w, "操作进程失败", err)
 }
 
 // writeInternalError 统一 500 兜底：向前端返回固定的面向用户文案（不含任何内部

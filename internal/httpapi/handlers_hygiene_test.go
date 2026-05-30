@@ -11,11 +11,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/frp-easy/frp-easy/internal/binloc"
+	"github.com/frp-easy/frp-easy/internal/procmgr"
 	"github.com/frp-easy/frp-easy/internal/storage"
 )
 
@@ -179,5 +182,91 @@ func TestMapProxyWriteError_DuplicateRemotePort(t *testing.T) {
 		if strings.Contains(body, leak) {
 			t.Errorf("响应泄露 SQL/驱动文本 %q: %s", leak, body)
 		}
+	}
+}
+
+// --- T-065：mapProcErr sentinel 收口直测 ---
+//
+// mapProcErr 此前靠 strings.Contains 匹配 procmgr 内部英文文本分类 409，并把原始 error
+// 文本透传 500 —— 脆弱反模式 + 信息泄露。现收口为 errors.Is(procmgr.ErrBusy)→409 固定中文 +
+// fallback writeInternalError(500 固定中文 + 原始 error 进日志，不外泄)。直测范式同
+// mapProxyWriteError（newCapturingHandlers + httptest.NewRecorder + 捕获型 slog，insight L28）。
+
+// procBusyErr 模拟 procmgr.Start 在 StateStopping 分支返回的错误：含内部英文 cause + wrap ErrBusy。
+var procBusyErr = fmt.Errorf("procmgr.Start(frpc): currently stopping: %w", procmgr.ErrBusy)
+
+// TestMapProcErr_Busy_409_FixedMessage_NoLeak 验证 T-065 AC-3：
+// 包了 procmgr.ErrBusy 的错误 → 409 PROC_BUSY + 固定中文，响应体不含 procmgr 内部英文 cause。
+func TestMapProcErr_Busy_409_FixedMessage_NoLeak(t *testing.T) {
+	h, _ := newCapturingHandlers(t)
+	rec := httptest.NewRecorder()
+	h.mapProcErr(rec, procBusyErr)
+
+	if rec.Code != 409 {
+		t.Errorf("ErrBusy status = %d, want 409", rec.Code)
+	}
+	body := rec.Body.String()
+	var eb ErrorBody
+	if err := json.Unmarshal([]byte(body), &eb); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, body)
+	}
+	if eb.Error.Code != CodeProcBusy {
+		t.Errorf("code = %q, want %q", eb.Error.Code, CodeProcBusy)
+	}
+	if !strings.Contains(eb.Error.Message, "进程正忙") {
+		t.Errorf("message 应为固定中文（含'进程正忙'）: %q", eb.Error.Message)
+	}
+	// 不得向前端泄露 procmgr 内部英文 cause。
+	for _, leak := range []string{"procmgr", "currently stopping", "Start(frpc)", "process busy"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("409 响应泄露 procmgr 内部文本 %q: %s", leak, body)
+		}
+	}
+}
+
+// TestMapProcErr_Internal_500_NoLeak 验证 T-065 AC-4：
+// 非 sentinel、非 binMissing 的错误 → 500 INTERNAL + 固定中文'操作进程失败'，
+// 响应体不含原始 error 子串；原始 error 进 logger。
+func TestMapProcErr_Internal_500_NoLeak(t *testing.T) {
+	h, logBuf := newCapturingHandlers(t)
+	rec := httptest.NewRecorder()
+	// 模拟 Start 的非"忙"错误分支（如 no config path / mkdir 失败）。
+	cause := errors.New("procmgr.Start(frps): no config path configured")
+	h.mapProcErr(rec, cause)
+
+	if rec.Code != 500 {
+		t.Errorf("非 sentinel 错误 status = %d, want 500", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "操作进程失败") {
+		t.Errorf("500 应返回固定中文'操作进程失败': %s", body)
+	}
+	if !strings.Contains(body, `"code":"INTERNAL"`) {
+		t.Errorf("code 应为 INTERNAL: %s", body)
+	}
+	// 不得向前端泄露 procmgr 内部 cause。
+	for _, leak := range []string{"procmgr", "no config path", "Start(frps)", "configured"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("500 响应泄露 procmgr 内部文本 %q: %s", leak, body)
+		}
+	}
+	// 原始 cause 必须进日志（保留可诊断性）。
+	if !strings.Contains(logBuf.String(), "no config path configured") {
+		t.Errorf("原始 cause 未进日志: %s", logBuf.String())
+	}
+}
+
+// TestMapProcErr_BinMissing_422_Preserved 验证 T-065 AC-5（回归护栏）：
+// binloc.ErrBinMissing 仍走 422 BIN_MISSING，行为不变（不被新分类破坏）。
+func TestMapProcErr_BinMissing_422_Preserved(t *testing.T) {
+	h, _ := newCapturingHandlers(t)
+	rec := httptest.NewRecorder()
+	h.mapProcErr(rec, fmt.Errorf("%w: frpc at /opt/frpc", binloc.ErrBinMissing))
+
+	if rec.Code != 422 {
+		t.Errorf("ErrBinMissing status = %d, want 422", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"code":"BIN_MISSING"`) {
+		t.Errorf("code 应为 BIN_MISSING: %s", rec.Body.String())
 	}
 }

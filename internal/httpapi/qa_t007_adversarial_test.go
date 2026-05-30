@@ -1,9 +1,16 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/frp-easy/frp-easy/internal/binloc"
+	"github.com/frp-easy/frp-easy/internal/procmgr"
 )
 
 // AC-3 对抗：构造一种"看似走不到中间件的路径"——MethodNotAllowed 是 chi 单独 handler，
@@ -122,5 +129,109 @@ func TestAdversarial_AC3_HeadersSingleValueOnly(t *testing.T) {
 	for k := range expectedSecurityHeaders {
 		joined := strings.Join(resp.Header.Values(k), ",")
 		_ = joined
+	}
+}
+
+// ============================================================================
+// T-065 mapProcErr sentinel 收口 —— QA 独立对抗（从 AC 写 reproducer，不复用 dev 测试）
+// ============================================================================
+
+// QA-ADV-1（AC-8 核心反向证伪 / insight L34）：
+// 旧脆弱行为是"文本含 stopping/starting/running → 409"。现已切断文本依赖。
+// 假设（预期失败点）："我预期，若一个错误的文本含 'stopping'/'running' 但**不包 ErrBusy**，
+// 旧代码会误给 409。" 反向证伪：sentinel 化后，此类错误必须走 **500**（不再被文本误判 409）。
+// 只要本用例通过（500 而非 409），即静态+运行时双重证明 strings.Contains 文本匹配已死。
+func TestAdversarial_T065_TextLooksBusyButNotSentinel_Goes500(t *testing.T) {
+	h, _ := newCapturingHandlers(t)
+	// 这些错误文本在旧实现下会命中 strings.Contains → 误给 409；它们**不包 ErrBusy**。
+	textTraps := []string{
+		"procmgr.Start(frpc): currently stopping",          // 旧 409 触发词，无 wrap
+		"some frps process is still running unexpectedly",  // 含 running
+		"the daemon is starting up but failed to bind port", // 含 starting
+	}
+	for _, msg := range textTraps {
+		rec := httptest.NewRecorder()
+		h.mapProcErr(rec, errors.New(msg)) // 裸 error，无 ErrBusy
+		if rec.Code != 500 {
+			t.Errorf("ADVERSARIAL FAIL: 含忙态文本但非 sentinel 的错误 %q 应走 500（文本匹配已死），got %d", msg, rec.Code)
+		}
+		// 且不得泄露原文。
+		if strings.Contains(rec.Body.String(), msg) {
+			t.Errorf("ADVERSARIAL FAIL: 500 响应泄露原始文本 %q: %s", msg, rec.Body.String())
+		}
+	}
+}
+
+// QA-ADV-2（AC-8）：反向——procmgr 内部 cause 文本任意变化（模拟 procmgr 改字），
+// 只要错误**包了 ErrBusy**，handler 分类必须恒为 409，不依赖任何特定文本子串。
+// 假设："我预期 handler 仍隐藏地依赖某个文本子串；若我把 cause 改成完全不含
+// stopping/starting/running 的字，它会漏判成 500。" 若仍 409 则证伪该假设。
+func TestAdversarial_T065_AnyCauseTextStillBusyIfSentinel(t *testing.T) {
+	h, _ := newCapturingHandlers(t)
+	// 故意用完全不含旧关键词（stopping/starting/running）的 cause 文本。
+	causeVariants := []string{
+		"procmgr.Start(frps): transitional state, refuse op", // 无任何旧关键词
+		"is busy elsewhere",
+		"机器正忙", // 甚至中文 cause
+	}
+	for _, c := range causeVariants {
+		wrapped := fmt.Errorf("%s: %w", c, procmgr.ErrBusy)
+		rec := httptest.NewRecorder()
+		h.mapProcErr(rec, wrapped)
+		if rec.Code != http.StatusConflict {
+			t.Errorf("ADVERSARIAL FAIL: 包 ErrBusy 的错误（cause=%q 无旧关键词）应恒 409，got %d", c, rec.Code)
+		}
+		var eb ErrorBody
+		_ = json.Unmarshal(rec.Body.Bytes(), &eb)
+		if eb.Error.Code != CodeProcBusy {
+			t.Errorf("ADVERSARIAL FAIL: code = %q, want PROC_BUSY（cause=%q）", eb.Error.Code, c)
+		}
+		// 固定中文文案不随 cause 变化。
+		if !strings.Contains(eb.Error.Message, "进程正忙") {
+			t.Errorf("ADVERSARIAL FAIL: 409 文案应恒为固定中文'进程正忙'，与 cause 无关，got %q（cause=%q）", eb.Error.Message, c)
+		}
+		// 且不泄露 cause 文本。
+		if c != "机器正忙" && strings.Contains(eb.Error.Message, c) {
+			t.Errorf("ADVERSARIAL FAIL: 409 文案泄露 cause %q: %q", c, eb.Error.Message)
+		}
+	}
+}
+
+// QA-ADV-3（AC-4 安全 / NF-1）：500 兜底路径下，原始 cause（含 procmgr 内部细节）
+// 必须既不泄露进响应体、又确实进 logger（可诊断性）；且 ErrBusy 错误不得误降 500。
+// 假设："我预期 500 路径要么泄露内部文本，要么忘记记日志（二者必有其一被忽视）。"
+func TestAdversarial_T065_500NoLeakButLogged_BusyNotDowngraded(t *testing.T) {
+	h, logBuf := newCapturingHandlers(t)
+	secret := "procmgr.Start(frpc) mkdir log: open /var/secret/path: permission denied (errno=13)"
+	rec := httptest.NewRecorder()
+	h.mapProcErr(rec, errors.New(secret))
+
+	if rec.Code != 500 {
+		t.Fatalf("ADVERSARIAL FAIL: 非 sentinel 错误应 500, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	// 逐子串证伪泄露。
+	for _, leak := range []string{"procmgr", "mkdir", "/var/secret/path", "permission denied", "errno", "Start(frpc)"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("ADVERSARIAL FAIL: 500 响应泄露内部子串 %q: %s", leak, body)
+		}
+	}
+	// 但完整 cause 必须进日志。
+	if !strings.Contains(logBuf.String(), "permission denied") || !strings.Contains(logBuf.String(), "errno=13") {
+		t.Errorf("ADVERSARIAL FAIL: 原始 cause 未完整进日志: %s", logBuf.String())
+	}
+
+	// 同一 helper 下，ErrBusy 错误不得被误降成 500（防分类塌缩）。
+	rec2 := httptest.NewRecorder()
+	h.mapProcErr(rec2, fmt.Errorf("x: %w", procmgr.ErrBusy))
+	if rec2.Code != http.StatusConflict {
+		t.Errorf("ADVERSARIAL FAIL: ErrBusy 在同路径被误降，status=%d want 409", rec2.Code)
+	}
+
+	// 边界：binMissing 也不得被误降/误升（与 ErrBusy/500 分类互斥）。
+	rec3 := httptest.NewRecorder()
+	h.mapProcErr(rec3, fmt.Errorf("%w: frpc", binloc.ErrBinMissing))
+	if rec3.Code != http.StatusUnprocessableEntity {
+		t.Errorf("ADVERSARIAL FAIL: binMissing 分类塌缩，status=%d want 422", rec3.Code)
 	}
 }
