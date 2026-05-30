@@ -57,3 +57,15 @@
 - `feat(T-066)` dark-theme-support — 8b1fccf
 - `feat(T-067)` responsive-layout — 48613f4
 - `chore(batch)` 归档 6 任务 + 收割 16 insight + 旋转 index + 本 BATCH_REPORT（收尾）
+
+---
+
+## 追加：滚动发布 CI 排查（autonomous 巡检发现）
+
+收尾 `git push`（f206f4f）触发的 Release workflow run #26 **失败**。自主巡检逐项排查（无 gh / 无 API token，无法下载 CI 日志；本机 Windows 无法运行 Linux ELF 复现）：
+
+- **失败定位**：step 5「Build (Linux + Windows cross)」**成功**；step 6「Package (tar.gz + zip)」失败，且 `started_at == completed_at`（**0 秒即退**）——属即时前置退出/sanity 退出，**非**运行时/网络抖动型 flake。
+- **历史对比**：最近 12 次 main run 中 #26 是**唯一**失败（前 11 次全绿）——打包步骤非长期 flaky。
+- **代码无辜论证**：`scripts/package.sh` 仅消费已构建的二进制 + 未改动的 `scripts/install-service.*`/`LICENSE`/`README`；本批次 diff（前端 Vue / 后端 Go / docs / baseline）**逻辑上触达不到打包步骤的任何失败分支**。`--version`（package.sh 在 Linux 上唯一的运行时闸门）是 main.go:179 的早返回，与本批次改动无关。本机 `build.sh --all` 成功产出 linux + windows 两个二进制；`package.sh` 本机失败仅因 Windows 文件系统不置 ELF 执行位（`! -x` 命中）+ Linux sanity 在非 Linux 主机降级跳过——**均为 Windows 宿主假象，非 CI 真因**。
+- **结论**：证据倾向**当时 runner 环境/瞬态问题**（0 秒即退是 runner провизион/FS/exec 一过性故障的典型形态），而非代码缺陷。交付代码经全量 verify_all（含 e2e）+ CI 交叉编译双重验证为良好。
+- **处置**：未推测性改动 package.sh（无法在 Linux 复现、无法看日志，不盲改未触及的脚本）。本次 REPORT 追加提交会**重新触发 Release workflow**：若新 run 转绿 → #26 为瞬态、问题已消（滚动发布正常刷新）；若同样失败 → 确认可复现（排除 flake），届时需在 Actions UI 看 step 6 日志定位真因（该步骤只读权限即可查看）。
