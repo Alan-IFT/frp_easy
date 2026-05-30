@@ -17,7 +17,10 @@
       >
         <div style="display: flex; align-items: center; gap: 8px">
           <span style="font-family: monospace; font-size: 15px">{{ result.ip }}</span>
-          <n-button size="tiny" type="default" text @click="copyIp">
+          <!-- T-064 menu-icons-and-a11y · 02 §3.3：复制反馈承载元素加 aria-live="polite"，
+               让"复制"→"已复制 ✓"的文案变化被屏幕阅读器播报（首次渲染建立基线不播报）。
+               仅加 ARIA 属性，不改 copyToClipboard 逻辑 / 复制行为 / 文案。 -->
+          <n-button size="tiny" type="default" text aria-live="polite" @click="copyIp">
             {{ copied ? '已复制 ✓' : '复制' }}
           </n-button>
         </div>

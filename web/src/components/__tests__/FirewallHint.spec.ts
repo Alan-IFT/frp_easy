@@ -152,6 +152,40 @@ describe('FirewallHint.vue — copyAll 复制全部（A）', () => {
   })
 })
 
+// T-064 menu-icons-and-a11y · IS-4 / AC-7：两处复制反馈承载元素 aria-live="polite"
+describe('FirewallHint.vue — a11y 复制反馈 aria-live（T-064）', () => {
+  it('单条命令复制按钮带 aria-live="polite"', async () => {
+    const w = mountHint()
+    await settle()
+    const btn = findCopyButton(w)
+    expect(btn).toBeTruthy()
+    // 查 DOM 属性，不查 naive-ui 组件名（insight L45）
+    expect(btn!.attributes('aria-live')).toBe('polite')
+  })
+
+  it('复制全部按钮带 aria-live="polite"', async () => {
+    const w = mountHint([7000, 7500])
+    await settle()
+    const btn = findCopyAllButton(w)
+    expect(btn).toBeTruthy()
+    expect(btn!.attributes('aria-live')).toBe('polite')
+  })
+
+  it('aria-live 不改变既有复制行为/文案（AC-9 行为保真）', async () => {
+    writeTextMock.mockResolvedValue(undefined)
+    const w = mountHint()
+    await settle()
+    const btn = findCopyButton(w)
+    // 初始态"复制"（aria-live=polite 首渲染不播报，BC-4）
+    expect(btn!.text()).toContain('复制')
+    expect(btn!.text()).not.toContain('已复制')
+    await btn!.trigger('click')
+    await settle()
+    expect(writeTextMock).toHaveBeenCalled()
+    expect(w.text()).toContain('已复制 ✓')
+  })
+})
+
 // ## Adversarial tests
 describe('FirewallHint.vue — Adversarial', () => {
   it('clipboard reject 且 execCommand 抛异常（双重失败）→ 仍走 message.error，不抛出未捕获错误', async () => {

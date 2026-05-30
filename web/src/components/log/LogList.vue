@@ -19,9 +19,16 @@
       v-else
       ref="scrollEl"
       class="log-list-scroll"
+      tabindex="0"
+      role="log"
+      aria-label="日志输出"
       :style="{ '--log-list-height': heightPx + 'px', '--log-font-size': fontSizePx }"
       @scroll="onScrollNative"
     >
+      <!-- T-064 menu-icons-and-a11y · 02 §3.2：滚动容器加 tabindex="0" 让纯键盘用户可
+           Tab 聚焦后用方向键/PageUp/PageDown 滚动长日志（overflow-y:auto 原生支持，
+           无需显式 keydown，区别于 paused-banner 的 button 语义）；role="log" + aria-label
+           让屏幕阅读器识别为日志区域（范式对齐同文件 paused-banner :30-41 的 a11y）。 -->
       <!-- justify-inline-style: 单一动态 CSS 变量赋值（max-height + font-size），
            无法走静态 class（高度 300/500/800/全屏 任意切换 + 字号未来扩展）；
            NFR-4 self-check 02 §10 PM/SA 已签字接受（C-3 落实位置）。 -->

@@ -156,6 +156,36 @@ describe('PublicIpDetector.vue — copyIp 复制 IP（A）', () => {
   })
 })
 
+// T-064 menu-icons-and-a11y · IS-4 / AC-8：复制反馈承载元素 aria-live="polite"
+describe('PublicIpDetector.vue — a11y 复制反馈 aria-live（T-064）', () => {
+  it('成功展示 IP 后，复制按钮带 aria-live="polite"（屏幕阅读器可播报复制结果）', async () => {
+    getIpMock.mockResolvedValue({ ip: '203.0.113.42' })
+    const w = withProvider()
+    await w.find('button').trigger('click')
+    await settle()
+    const btn = findCopyButton(w)
+    expect(btn).toBeTruthy()
+    // 查 DOM 属性，不查 naive-ui 组件名（insight L45）
+    expect(btn!.attributes('aria-live')).toBe('polite')
+  })
+
+  it('aria-live 不改变既有复制行为/文案（AC-9 行为保真）', async () => {
+    writeTextMock.mockResolvedValue(undefined)
+    getIpMock.mockResolvedValue({ ip: '203.0.113.42' })
+    const w = withProvider()
+    await w.find('button').trigger('click')
+    await settle()
+    const btn = findCopyButton(w)
+    // 初始态文案"复制"（aria-live=polite 首渲染不播报，BC-4）
+    expect(btn!.text()).toContain('复制')
+    expect(btn!.text()).not.toContain('已复制')
+    await btn!.trigger('click')
+    await settle()
+    expect(writeTextMock).toHaveBeenCalledWith('203.0.113.42')
+    expect(w.text()).toContain('已复制 ✓')
+  })
+})
+
 // ## Adversarial tests
 describe('PublicIpDetector.vue — Adversarial', () => {
   it('clipboard reject 且 execCommand 抛异常（双重失败）→ 仍走 message.error 不抛未捕获错误', async () => {

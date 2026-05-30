@@ -103,7 +103,7 @@ frp_easy/
         ├── utils/          ← T-042 抽取：format.ts（formatBytes + formatTime；T-048 formatTime 统一本地化）+ proxyStatus.ts（getProxyStatusTag）
         ├── test-utils/     ← T-043 测试 helper：exposed.ts（getExposed 读 defineExpose，避开 VTU exposeProxy 脆弱性）+ apiError.ts（构造 axios 形状错误模拟后端响应）
         ├── components/
-        │   ├── AppLayout.vue    ← 侧边导航 + 头部 + 内容公用布局（T-002: 新增下载按钮；T-018: banner 内追加 UploadBinButton）
+        │   ├── AppLayout.vue    ← 侧边导航 + 头部 + 内容公用布局（T-002: 新增下载按钮；T-018: banner 内追加 UploadBinButton；T-064: 菜单图标 a11y——抽 menuIcon(glyph,name) helper，7 项字形两两互不相同（'设置' ⚙→⚒ 消除与'服务端配置'折叠态撞车）+ 每 icon span 挂 aria-label/title/role=img 无障碍名）
         │   ├── StatusBadge.vue  ← ProcessState → 带颜色的 NTag
         │   ├── ProxyForm.vue    ← Proxy 新增/编辑表单（type 联动字段切换；T-018: 加端口预设 Tag；T-037: 移除批量模式 / 端口探测按钮；T-062: tcp/udp 远程端口字段加纯文案提示「需在服务端端口策略允许范围内」，不读 allowPorts 不联动校验）
         │   ├── UploadBinButton.vue ← T-018 §A：手动上传 frpc/frps 二进制（multipart；进度条；前端 64 MiB 预校验）
@@ -112,11 +112,11 @@ frp_easy/
         │   ├── LogViewer.vue    ← T-036 重写：日志查看器壳组件（持有 5 composable 实例 + 协调 4 子组件 + watch kind 切换；< 200 行）
         │   ├── log/             ← T-036：LogViewer 子组件（4 个）；
         │   │   ├── LogToolbar.vue        ← 工具条：搜索 + Aa + 等级多选 + 跟随 / 折行 / 自动刷新 + 高度 + 复制 / 清屏 / ↓底部 / 全屏 + 心跳 / 计数 / 失败小红点
-        │   │   ├── LogList.vue           ← 滚动容器 + 5 状态分支（错误 / 加载中 / 空态 / 无命中 / 列表）+ 暂停跟随提示条 sticky banner
+        │   │   ├── LogList.vue           ← 滚动容器 + 5 状态分支（错误 / 加载中 / 空态 / 无命中 / 列表）+ 暂停跟随提示条 sticky banner（T-064: 滚动容器加 tabindex=0 + role=log + aria-label，纯键盘可聚焦滚动；范式对齐 paused-banner a11y）
         │   │   ├── LogLine.vue           ← 单行渲染：行号 + timestamp + level + message；先 escape 后 mark 包裹（NFR-7 / ADV-A）
         │   │   └── FullscreenLogModal.vue← n-modal 全屏包装 LogList；95vw/90vh 走 scoped :deep(.n-card) 无 inline style
-        │   ├── FirewallHint.vue ← T-002: Linux ufw/iptables 命令提示（ports[] props）；T-058 (A): copyCmd/copyAll 剪贴板失败不再静默——1:1 内联 LogViewer onCopy 范式（clipboard→message.success / catch textarea+execCommand fallback → 成功 success / 失败 error）
-        │   ├── PublicIpDetector.vue← T-002: 公网 IP 检测按钮 + 结果显示；T-058 (A): copyIp 同款剪贴板失败反馈
+        │   ├── FirewallHint.vue ← T-002: Linux ufw/iptables 命令提示（ports[] props）；T-058 (A): copyCmd/copyAll 剪贴板失败不再静默——1:1 内联 LogViewer onCopy 范式（clipboard→message.success / catch textarea+execCommand fallback → 成功 success / 失败 error）；T-064: 复制按钮加 aria-live=polite 播报复制结果
+        │   ├── PublicIpDetector.vue← T-002: 公网 IP 检测按钮 + 结果显示；T-058 (A): copyIp 同款剪贴板失败反馈；T-064: 复制按钮加 aria-live=polite
         │   └── __tests__/      ← Vitest 组件测试（T-036 +6 个：LogViewer / parseLogLine / useLogBuffer / useLogSearch / useFollowTail / useLogPrefs；T-051 +1：useLogLevelFilter）
         └── pages/
             ├── Setup.vue     ← 首次安装（username + password）

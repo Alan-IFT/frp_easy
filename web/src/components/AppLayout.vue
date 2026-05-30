@@ -127,37 +127,47 @@ const activeKey = computed(() => {
   return path.replace(/^\//, '') || 'dashboard'
 })
 
+// T-064 menu-icons-and-a11y · 02 §3.1
+// 折叠态（:collapsed-width="64"）仅显示图标，故 (a) 7 个顶层项字形两两互不相同
+// （此前"服务端配置"与"设置"同用 ⚙ 折叠态撞车 → 误点；"设置"改用 ⚒ 消除重复），
+// (b) 每个 icon span 挂 aria-label + title + role="img" 给出无障碍名，使折叠态 +
+// 屏幕阅读器可区分（aria-label 主路径 / title 悬停 tooltip / role="img" 让 AT 当
+// 有名图像而非逐字朗读裸字形）。取值 = 该项 label，故 server≠settings 可访问名不同。
+// 不改菜单结构 / 路由 key / activeKey 计算（:122-128 /server/monitor 特判不变）。
+const menuIcon = (glyph: string, name: string) =>
+  h('span', { class: 'n-icon', role: 'img', 'aria-label': name, title: name }, glyph)
+
 const menuOptions: MenuOption[] = [
   {
     label: '仪表盘',
     key: 'dashboard',
-    icon: () => h('span', { class: 'n-icon' }, '⊙'),
+    icon: () => menuIcon('⊙', '仪表盘'),
   },
   {
     label: '代理规则',
     key: 'proxies',
-    icon: () => h('span', { class: 'n-icon' }, '⇌'),
+    icon: () => menuIcon('⇌', '代理规则'),
   },
   {
     label: '服务端配置',
     key: 'server',
-    icon: () => h('span', { class: 'n-icon' }, '⚙'),
+    icon: () => menuIcon('⚙', '服务端配置'),
   },
   {
     // T-041 server-monitor-page-ui：frps 运行态监控入口
     label: '服务端监控',
     key: 'server/monitor',
-    icon: () => h('span', { class: 'n-icon' }, '◉'),
+    icon: () => menuIcon('◉', '服务端监控'),
   },
   {
     label: '客户端配置',
     key: 'client',
-    icon: () => h('span', { class: 'n-icon' }, '↗'),
+    icon: () => menuIcon('↗', '客户端配置'),
   },
   {
     label: '日志',
     key: 'logs',
-    icon: () => h('span', { class: 'n-icon' }, '≡'),
+    icon: () => menuIcon('≡', '日志'),
     children: [
       { label: 'frpc 日志', key: '/logs/frpc' },
       { label: 'frps 日志', key: '/logs/frps' },
@@ -166,7 +176,8 @@ const menuOptions: MenuOption[] = [
   {
     label: '设置',
     key: 'settings',
-    icon: () => h('span', { class: 'n-icon' }, '⚙'),
+    // T-064：原 ⚙ 与"服务端配置"重复，折叠态视觉撞车 → 改 ⚒（工具/设置语义，形态不同）
+    icon: () => menuIcon('⚒', '设置'),
   },
 ]
 

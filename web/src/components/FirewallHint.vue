@@ -16,6 +16,7 @@
             size="tiny"
             type="default"
             text
+            aria-live="polite"
             @click="copyCmd(cmd)"
           >
             {{ copiedCmd === cmd ? '已复制 ✓' : '复制' }}
@@ -26,7 +27,7 @@
 
     <!-- 复制全部按钮 -->
     <div style="margin-top: 8px; text-align: right">
-      <n-button size="small" @click="copyAll">
+      <n-button size="small" aria-live="polite" @click="copyAll">
         {{ copiedAll ? '已复制全部 ✓' : '复制全部' }}
       </n-button>
     </div>
