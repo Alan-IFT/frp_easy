@@ -14,3 +14,4 @@
 2026-05-30 · T-057 · DELIVERED · verify_all 全量 PASS 32/0/0 · +17 前端测试 (frontend_tests 437→454, test_count 755→772) · 6 files · e2e 无影响
 2026-05-30 · T-058 · dispatching pm-orchestrator · slug=frontend-interaction-polish · mode=full
 2026-05-30 · T-058 · DELIVERED · verify_all 全量 PASS 32/0/0 · +27 前端测试 (frontend_tests 454→481, test_count 772→799) · 11 files · e2e 无影响
+2026-05-30 · batch wrap · 归档 16 个已完成任务（prior 11 + 本轮 5）· 收割 40 insight · insight-index 47→30（≤30 cap）· 119 条旋至 insight-history · 归档后 verify_all 全量 PASS 32/0/0

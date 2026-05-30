@@ -140,3 +140,93 @@ T-016 已用此真相替换主索引第 18 行。
 - 2026-05-24 · 静态闸门反向证伪（adversarial）= 临时破坏闸门期望的字面串 → grep 命中数从 1 跌到 0 → 恢复 → 命中数回到 1，是验证 "verify_all step 非假阳性 PASS" 的最小成本、最高确定性手段；可作为未来项目所有 grep-based 静态闸门的标准 QA 范式（成本：每闸门 4 个工具调用 / 30 秒） · evidence: T-034 06 §4 + 07 ## Adversarial tests AC-1 / AC-3 实测
 - 2026-05-24 · Playwright `reuseExistingServer: !process.env.CI` 是 e2e 本地 flake 类问题最常见但**最隐性**的根因 —— CI 永不复现（CI=true → 永远 fresh server）让 dev 容易盲目假设环境正常，本地却长期偶发 FAIL；fix 的最佳路径是**测试侧主动调 `/api/v1/system/ready` 守门 + Error.message 包含具体根因 + 修复指引**（而非改 reuseExistingServer 默认值，那会让本地每次跑 verify_all 强启 webServer 损害 dev 体验），将隐性环境耦合显性化让维护者立即知道"为什么 + 怎么修" · evidence: T-033 02 §13 方案 A vs B vs C vs D 决策矩阵 + fixtures/auth.ts:21-44 assertFreshBackend 三分支实现
 - 2026-05-24 · e2e fixture 类 helper（前置条件守门 / 状态查询）不应用 Vitest mock 测试 —— mock `page.request.get` 等于复制实现，零 adversarial value；它们的"测试"就是 spec 自身在反向构造场景中触发 / 不触发的实测行为，由 QA stage 6 用独立 reproducer 验证。这是与"业务逻辑 composable / store 必须有 Vitest 单测" (T-032) 的对称镜像约定 · evidence: T-033 03 GR Q4 pre-answered + 06 §"Boundary tests added" 解释
+
+## Rotated 2026-05-30
+
+- 2026-05-24 · PM 派发上下文工具裁剪（无 Task / Bash / PowerShell）让 7-stage pipeline 在单任务内**事实上**全部角色化在 PM 上下文跑（PM 即 RA 即 Architect 即 Gate 即 dev 即 Reviewer 即 QA）；这与 T-034 reviewer 双模式协议是同一现象的延伸：sub-agent 派发不可达 → 角色 collapse 到 PM。**唯一保留的协议保护**是把每个 stage 的角色契约 + 输出格式严格按 .harness/agents/<name>.md 落 markdown 文件（与 sub-agent 实际派发时输出物字节对齐），让维护期 grep / archive-task / verify_all 等下游工具读到的产物形状与"真派发"路径不可区分 · evidence: T-033 全部 6 个 stage 文档（01-06）均 PM 上下文角色化产出，结构与 T-027 / T-031 等真派发任务字节级同构
+- 2026-05-24 · 一键安装管道脚本"environment variable + `sudo -E` 透传"模式是脆弱契约：依赖 (1) shell 解析 `VAR=val cmd` 语法、(2) sudo 不剥离自定义 env（受 sudoers `Defaults env_reset` + `env_keep` 白名单控制）、(3) bash 接收，三者任一失败即败。Ubuntu 24/26 LTS、Debian 13 等较新 sudo 默认拒绝 `-E` 透传（打印 `sudo: '-E' is ignored`）让链路 2 断裂。**根治路径不是争论 sudoers 配置**而是改信号通道：CLI 参数 `--role <value>` 走 `bash -s -- <args>` 位置参数透传，与 sudo 安全策略完全解耦。这是 rustup / k3s / docker / nvm 等业界主流一键安装脚本的共同 pattern——env-based 是 90s 风格、CLI-based 是当前主流。改 README 推荐入口时务必同步 install.sh 顶端注释 + help heredoc + 横幅"更新"段 + 错误提示段 4 处文案，并保留 env 形态作"兼容回退"（删除会破坏老用户 / 老群文档存量）· evidence: T-035 用户实测 Ubuntu 26 LTS curl: (23) Failure writing output；改后 reproducer.sh 14/14 PASS
+- 2026-05-24 · `bash -s -- <args>` 中的 POSIX `--` 终止符是**强必要条件**：bash 5.x 实测 `echo cmd | bash -s --role server` 直接报 `bash: --: invalid option`（rc=2），脚本根本不执行；必须 `bash -s -- --role server` 让 bash 停止解析自身 option。这与 Windows `pwsh -NoExit -Command "..."`（insight L24）对称："管道脚本入口字串语法不可省字符"是另一类"主流 idiom 看起来冗余但绝对必要"的 pitfall。任何用 `curl ... | sudo bash -s -- <args>` 推荐入口的项目**必须**在 README + 错误提示中显式警告 `--` 不可省，否则用户拿到的是 bash 英文 `invalid option` 报错（而非项目自己的中文诊断）· evidence: T-035 reproducer.sh ADV-11/12 反向证伪 + install.sh L14 + L71-72 + L182 + README.md L67 + DEPLOYMENT.md L48 共 5 处显式警告
+- 2026-05-24 · GR 03 conditions 中"WARN / 建议"类 finding 不阻塞 stage 4 启动，但**应该被 developer 主动消化**（即兴补注释、补警告、纠正失实描述）：T-035 03 C-1（`--` 不可省警告 ≥2 处）→ 04 落实 5 处远超下限；03 C-2（last-wins 注释）→ 04 设计依据块明示；03 C-4（02 §4.2 partition 失实）→ 04 "Design drift" 段一行话纠正。**好的 developer 不是"满足 C-1 下限"而是"在自然顺手时一并消化所有 C-N"**，让 stage 5 处于"几乎无需改"状态而非要求 fix 循环。与 T-027 / T-031 同款节奏 · evidence: T-035 03 §5 五条 conditions + 04 §"Design drift" + 05 Verdict APPROVED 一次过
+- 2026-05-24 · `scripts/archive-task.sh` 的 `## Insight` regex `^##[[:space:]]+Insights?[[:space:]]*$` 不容错 `§N` 数字编号前缀（与 .ps1 在 T-028 修复后**不对称**）—— 即 T-028 仅修了 .ps1，.sh 版本仍踩 insight L23 / L43 / L46 / L49 老坑。短期：PM 写 07 §N Insight 必须用裸 `## Insight`（无 `§N` 前缀），否则 harvest 0 命中。长期：建议下一个 trivial 任务（T-037 候选）把 .ps1 同款容错 regex `^##[[:space:]]+([^[:space:]]+[[:space:]]+)?Insights?[[:space:]]*$` 同步到 .sh，让两实现对齐（insight L26 双实现对账原则）· evidence: T-035 archive-task.sh L66 awk regex 实测无 §7 前缀容错 + PM 手工追加 3 条 insight
+
+## Rotated 2026-05-30
+
+- 2026-05-24 · 跨任务工作树污染归责的高效路径：本任务与并行进行中的 T-036（log-ui-ux-polish）共享工作树，T-036 的 untracked 文件含预先存在的 TS 编译错误，会让 verify_all B.1 / B.3 在裸跑时 FAIL。**归责动作的最稳形态**是 `git stash push --include-untracked --keep-index` 把 T-036 modifications + untracked 全 stash → **再加一步** `mv <git-stash-未捕获的-untracked.spec.ts> /tmp/`（git stash 对部分 untracked 文件路径捕获不到，尤其在 staged + working tree 已经分流时）→ 跑 verify_all 拿到隔离后 PASS 数 → `mv` 恢复 + `git stash pop` 恢复。"verify_all 跑出 PASS 不带 T-036 / FAIL 带 T-036"双侧对照是 insight L30 的延伸形态，可作为多任务并行 dev 的标准范式 · evidence: T-037 04 §3 + 06 §3 + 07 §4 验证 LogViewer.spec.ts git stash 不能捕获、需手工 mv 后才能纯净跑 verify_all
+- 2026-05-24 · UI 表格"虚拟列"与底层 DB 字段名同名时是隐性 bug 高发面：T-018 引入 Proxies.vue group row 的"远程端口/域名"列同时承担 single row 的 `remotePort` 字面 + group row 的 `portRangeText`（compressPorts(localPort 数组)）—— 同列名但**语义来源不同**让用户输入的远程端口值在折叠场景下被静默替换为 localPort 派生字符串。修复路径不是"加 group row 用 remotePort 计算"而是**整体删除 group row**（T-037 选择），因为该展示功能与"批量创建"语义耦合，批量删除后折叠展示也失去意义。规则：UI 列名与 DB 字段名同名时，该列的所有 render 分支必须**字面引用同一字段**，否则视为反模式 · evidence: T-037 02 §6 流程对比 + 04 §5 / 05 §3 修复路径论证
+- 2026-05-24 · verify_all H.1 双实现（PS + Bash）共用同一 alternation 正则 + 同款豁免（`docs/features/_archived/**` + `.harness/**`）让"删除面静默回退"从纸面规则升级为运行时硬约束。AT-1 反向证伪（注入 `batchMode` 字面 → H.1 FAIL → 删除 → PASS）证明禁词正则确实捕获字面、非假阳性。这是"删除型任务"特有的守门范式：删除完代码后**必须**加一个 grep step 守门未来回退（与"新增型任务"的"加 step 守门新功能正确性"对称），让 T-037 的删除决策长期不可逆 · evidence: T-037 04 §1 步骤 5 + 06 AT-1 / AT-2 实测
+- 2026-05-24 · Vue SFC "组件 > 200 行必须拆分" 红线（`.harness/rules/50-fullstack.md`）在项目实践与 SA self-check 中实质判定按"逻辑复杂度行数"（script 段非空非 import 非测试 hook 的纯 setup 行）而非"物理总行数"。LogViewer.vue 244 物理 / 125 纯逻辑、LogToolbar.vue 206 物理 / 79 纯逻辑都属"接口声明型膨胀"（模板段大量是子组件 props / emit 一字排开），强行物理拆分会破坏数据流协调中枢且失去 IDE 跳转可读性。Code Reviewer 05 §2.1 / 04 §4.3 已落 justify。未来碰到大 SFC 红线复评，先核 "script 段非 import 非 testing hook 纯逻辑行数" 这条 metric，不是 wc -l · evidence: T-036 LogViewer / LogToolbar 双 SFC 物理超 200 但纯逻辑均 < 200，CR APPROVED 一次过
+
+## Rotated 2026-05-30
+
+- 2026-05-24 · "搜索高亮 v-html + escape" 顺序在前端 XSS 防御中是单点不可调换约束：必须**先**对 message 全文 escapeHtml（`& < > " '`），**再**在 escape 后字符串上按搜索命中坐标插入 `<mark>` 包裹标签。反过来会让 `<mark>` 本身被 escape 成 `&lt;mark&gt;` 失去高亮，且若 escape 顺序写错可能让 raw `<` 没被 escape 进入 innerHTML 触发 XSS。LogLine.vue:34-73 把这条顺序在源码层硬锁（先 escape → 再按区间 split-by-index 插 `<mark>`），并配 ADV-A reproducer（`<script>` / `<img onerror>` 类 payload 测 `querySelectorAll('script').length === 0` + textContent 字面文本）反向证伪。任何"搜索 / 高亮 / mark"类 UI 复刻此模式必须保持顺序硬锁 + ADV 反向证伪两层防御 · evidence: T-036 LogLine.vue + qa_t036_adversarial.spec.ts ADV-A 实测
+- 2026-05-24 · Naive UI `useThemeVars()` 返回的 ComputedRef 在 `n-config-provider :theme` 切换时**自动**触发 reactivity，把 token 投到根容器 CSS 变量后子节点全部走 `var(--log-error)` 等读取，主题切换实时跟随 0 额外代码（无需 watch + manual trigger，无需双 class 方案）。这是与 T-036 02 §6 假设 A-2 + 03 §7 C-2 的 dev spike 一次验证通过的项目结论：未来涉及"主题感知 UI 组件"直接走"useThemeVars + CSS 变量"模式，把 ComputedRef 解构后投到根容器 `:style` 即可。LogViewer.vue:126 `rootCssVars` computed 是范本 · evidence: T-036 dev stage 4 spike + AC-13 mount × 2 不同 theme provider 实测背景色不同 + 04 §3 C-2 验证记录
+- 2026-05-24 · `verify_all` 在 multi-task 工作树中"非本任务 FAIL 归责"动作（insight L30）的 T-036 实例：本机 7800 端口被既有 frp-easy 进程占用 → Playwright `reuseExistingServer` 复用已初始化后端 → 触发 T-033 fixture 显性 fail-fast → C.1 FAIL。QA stage 6 + PM stage 7 各独立 netstat 实证 + 与 T-036 改动域（纯 UI 组件，无 API / 后端 / e2e 路径）零相关。baseline.json 文档化"C.1 pre-existing 环境"让未来归档审查不再二次怀疑 · evidence: netstat pid 34152 LISTENING 7800 + git diff 改动域 100% web/src/components/log/ + web/src/composables/log/，无任何 e2e/playwright/Go 后端文件触碰
+
+## Rotated 2026-05-30
+
+- 2026-05-25 · **systemd unit `After=network.target` 是"开机后服务跑了但网络业务不通"类问题的最常见根因，正确写法是 `Wants=network-online.target + After=network-online.target`**。`network.target` 是"网络栈配置完成"语义、`network-online.target` 是"网络在线可路由"语义，FRP 客户端这类需要立即拨号外部服务器的进程必须等后者。NetworkManager-wait-online.service 或 systemd-networkd-wait-online.service 任一 enabled 即可让 Wants 自动 gating。这是 systemd 文档化但实操常忽视的差别 · evidence: T-038 测试机 alan-911 Ubuntu 26.04 LTS 实测旧 unit `After=network.target` → frpc `connect: network is unreachable` → 新 unit `Wants/After=network-online.target` → frpc 直接 connect 成功
+- 2026-05-25 · **frp 上游 frpc.toml 字段 `loginFailExit` 默认 true 是"客户端首次登录失败立即放弃"反生产语义**——frp_easy 渲染 frpc.toml 时必须强制设 false 让 frpc 走自身的 dial-retry / heartbeat 重连机制。指针 `*bool + omitempty` 模式让 nil（未设）与 false（显式禁用 exit）语义可区分；与本包 frpcRoot 其它 `*frpAuth / *frpLog` 指针字段一致。frpc 启动日志末行字面 `With loginFailExit enabled, no additional retries will be attempted` 是踩坑信号；任何"客户端 reboot 后失联"类问题都应先 grep frpc.log 找这行 · evidence: T-038 06 §3.1 实测 frpc.log 末行原话
+- 2026-05-25 · **autoRestoreProcs 类"启动尾巴一次性恢复子进程"逻辑必须配指数 backoff retry**——一次性等于把"首启失败"放大为"用户永久失联"。本任务 retryBackoff = [5s, 15s, 45s, 120s, 300s] 总累计 ~8 分钟，覆盖 systemd network-online 兜底 30-60s + frps server cold-boot 30-90s + 网络抖动 < 5s 三类瞬时失败。retry goroutine 必须 (a) 异步不阻塞 ready gate；(b) 每轮 `select { <-ctx.Done() | <-time.After(d) }` 让 SIGTERM 能取消；(c) 每轮判 `pm.Status(kind).State` 检测用户介入；(d) 所有退出路径（ok / exhausted / canceled / user-initiated / binary-missing / config-missing）都写 kv 让 UI 可见。这是"开机即用"硬保证的应用层范式 · evidence: T-038 06 §3.3 iptables 真机模拟 attempts 1/2/3 backoff 严格 5.105s/15.116s/45.120s 实测
+
+## Rotated 2026-05-30
+
+- 2026-05-25 · **"安装在用户级"vs"system-level 但 User=non-root"是常见用户认知错觉**——systemd unit 写到 `/etc/systemd/system/` 含 `User=alan` 让进程以 alan 身份跑（降权运行）≠ user-level service（`~/.config/systemd/user/` 才是 user-level）。两者最重要差别：system-level 服务**不需要任何用户登录**就能在 boot 时启动；user-level 服务需要 systemctl --user 配 linger 才能。UI 必须显式展示"监管方式：systemd / 运行用户：X / 开机自启：是"三行让用户消除误判。本任务 ServiceStatusCard.vue 是范本 · evidence: T-038 用户原话主诉"安装在用户级"为误判 + 实测 `/etc/systemd/system/frp-easy.service` 含 `User=alan` 但 enabled + reboot 自启的双重 system-level 特征
+- 2026-05-25 · **verify_all 双实现新增 step 必须先按 grep 闸门反向证伪（破坏字面 → FAIL → 恢复 → PASS）4 次**，否则会因 PowerShell Raw + match 模式踩 insight L26 假阳性陷阱。本任务 I.1~I.4 每个闸门都跑过 ADV 反向证伪，确认精准 FAIL 单一闸门、不连带误伤其它；用 `Get-Content` + `Where-Object { $_ -cmatch ... }` 严格行内匹配避免 Raw 假阳性。这应成为未来所有 grep-based 静态闸门的标准 stage 6 contract · evidence: T-038 06 §3.2 ADV-1~ADV-4 实测 + verify_all.ps1 I.x 代码段
+
+## Rotated 2026-05-30
+
+- 2026-05-27 · frps admin HTTP API 上游 `/api/proxy/{type}` 实测返回 `{"proxies":[...]}` envelope 包装而非裸数组，与 frpc admin `/api/status` 直接返回 `map[type][]ProxyStatus` 不同；客户端必须在 client 层 envelope unwrap 让调用方拿扁平数组，避免每个 handler 各自解包 · evidence: T-039 frpsadmin/client.go::proxiesEnvelope + Proxies() 实现
+- 2026-05-27 · 凭据"用户填值优先 + autogen fallback"的合并优先级必须 per-field 而非 per-struct——如果用 `if cfg.DashboardUser == "" { cfg = auto }` 整体替换，用户只填了 user 但 pass 空的场景会被错误覆盖；正确写法是 `if cfg.DashboardUser == "" { cfg.DashboardUser = auto.User }; if cfg.DashboardPass == "" { cfg.DashboardPass = auto.Pass }` · evidence: T-039 config_helper.go::renderAndApplyFrps fallback 块 per-field 实现 + TestRenderAndApplyFrps_UserCredsTakePrecedence 验证
+- 2026-05-27 · frp 上游 `[[allowPorts]]` TOML 数组段在 frpsRoot struct 必须放最后字段，让 go-toml v2 按字段顺序输出时所有表段（`[log]/[auth]/[webServer]`）在前、数组段在后，符合 TOML 规范"表段不能出现在数组段之后"；放中间会产生 frp 上游能解析但 toml.Unmarshal 反向 round-trip 失败的二义性输出 · evidence: T-040 frpconf/render.go::frpsRoot 字段顺序 + TestRenderFrps_AllowPorts_TOMLRoundTrip 反序列化验证
+
+## Rotated 2026-05-30
+
+- 2026-05-27 · 端口"闭区间重叠"语义（`[1000,2000]` 与 `[2000,3000]` 算重叠，因 2000 同属两段）必须前后端镜像 + verify_all 单测固化，不能只在文档约定——frp 上游 parser 接受重叠并 last-wins 加入 allow set，前端不挡 + 后端不挡的话会让"UI 列表展示"与"实际生效允许端口集合"不一致让用户无法治理。规则：UI 编辑器型组件涉及"区间集合"概念，必须在 PM 决策矩阵显式定义开闭区间 + 前后端用同一闭区间相交条件 `a.lo <= b.hi && b.lo <= a.hi` · evidence: T-040 ValidateFrpsAllowPorts + AllowPortsEditor.validateRow 镜像 + TestRenderFrps_AllowPorts_OverlapBoundary
+- 2026-05-27 · 集合类参数（如 `allowPorts []Range`）的更新语义与单字段（如 dashboard user/pass）的更新语义不同——前者**适合 last-wins 整体替换**（一次保存就是完整快照），后者**适合 per-field fallback**（T-039 insight L41 范式）。如把数组也按 per-field 处理（如"只填了第 0 项就只更第 0 项"）会让 UI 删除行的操作没有任何 backend 信号，逻辑不可达。任何"用户面向的集合编辑器"PUT 都应整存整取 · evidence: T-040 handlers_server.go::putServer 直接 KVSet 整 marshalled cfg + T-039 config_helper.go::renderAndApplyFrps per-field fallback 形成范式对照
+- 2026-05-28 · Vue composable 内调用 `onUnmounted` 强制要求"在 setup 同步路径 / 同 tick" —— `addEventListener(...) + onUnmounted(...)` 必须连写不能 await 后再注册，否则 unmount 时只清 listener、timer 泄漏。useServerRuntime.ts L160-167 把 listener 与 onUnmounted 紧邻放置是项目范本；spec 用 mount(Holder).unmount() 方式触发生命周期才能验证 timer / listener 同时清。· evidence: T-041 useServerRuntime.spec "onUnmounted 清理" + spy removeEventListener 命中
+
+## Rotated 2026-05-30
+
+- 2026-05-28 · "用户显式暂停"+"系统自动暂停（visibility）" 两类 stop 路径必须用一个 flag 区分语义（如本任务 `userStoppedExplicitly`），否则 visibility 恢复时会"善意地"覆盖用户意图。BC-7 反向证伪："用户 stop → 切后台 → 切回不自动恢复" 用例必须独立存在才能锁死语义，否则未来 dev 重构 visibilitychange 路径时极易引入回归。· evidence: T-041 useServerRuntime.ts L98-110 stopInternal(setUserFlag) + spec BC-7 用例
+- 2026-05-28 · `naive-ui` 的 `n-tabs` activeKey 用 `Object.keys(data)` 顺序绑定时会因 polling 后端返回顺序漂移导致 tab 闪烁（用户体验灾难）。正确路径是**前端 hardcode 显示顺序列表**（如 `allKnownTypes = ['tcp','udp','http','https','stcp','sudp','xtcp']` const 数组）+ `Set` 收集"有数据 / 有 errors"的 type → `allKnownTypes.filter(t => has.has(t))`。这与 T-018 端口预设清单"前端 hardcode 主导显示"是同类范式（信息架构稳定性 > 数据驱动）。· evidence: T-041 ServerMonitor.vue allProxyTypes computed
+- 2026-05-28 · 三态 UI（loading / empty / error）容易踩"loading 与 error 互斥但代码上没显式互斥"的陷阱：本任务用三个 computed `firstLoading` / `firstLoadFailed` / `showStaleBanner` 通过判断 `info === null && proxies === null` 自然形成三态切换（loading: 全 null + 无 error；first-fail: 全 null + 有 error；stale: 至少一非 null + 有 error）。任何一个 condition 写错会让 UI 出现"loading 转圈 + 红色错误同时显示"的尴尬状态。设计阶段就把三态写成布尔代数式（互斥矩阵）能避免 dev 阶段返工。· evidence: T-041 ServerMonitor.vue firstLoading / firstLoadFailed / showStaleBanner 三个 computed
+
+## Rotated 2026-05-30
+
+- 2026-05-28 · `## Adversarial tests` 标题与 `## Insight` 同款规则：**禁带任何前缀**（数字编号 `## 3. Adversarial tests`、`§N` 前缀、章节标号均不行）。verify_all E.6 regex `^##\s+Adversarial\s+tests\s*$` 严格行首裸标题锚定，本任务 06_TEST_REPORT.md 初版写 `## 3. Adversarial tests` 让 E.6 由 PASS 转 FAIL（FAIL 数 1→2 触发 batch strong-signal stop）；改回裸 `## Adversarial tests` 后 PASS=31 / FAIL=1 回 baseline。这是 insight L43/L48/L49 系列"`## Insight` 禁数字前缀"的姐妹陷阱 —— 任何 verify_all E 段静态闸门锚定的 H2 标题都禁带前缀，应在 PM 写 06 模板时硬约束。· evidence: T-041 06_TEST_REPORT.md L48 字面 `## 3. Adversarial tests` 触发 verify_all E.6 FAIL + 一行 Edit 修复为裸标题后 PASS 回归
+- 2026-05-28 · "配置态 ⊗ 运行态"叠加 UI 范式：当 UI 同时展示两份不同来源数据集合时，**必须用 Map 摊平 runtime 数据 + 以配置态作主表左外连接渲染**（runtime 缺则降级"离线"），切忌反向（以 runtime 为主表）。本任务 runtimeMap computed + columns 内 `runtimeMap.value.get(row.name)` 是范本；反例：以 runtime 为主表会让"用户刚创建但 frps 尚未感知"的 proxy 在配置页消失（用户感知 = bug）。AC-4 / AC-5 反向构造矩阵专门守门这两侧。任何"配置/状态混合表格"复刻此模式 · evidence: T-042 Proxies.vue runtimeMap + Proxies.spec.ts AC-4 / AC-5 用例
+
+## Rotated 2026-05-30
+
+- 2026-05-28 · UI utils 抽取的"字节级搬运 + 一处新增防御"模式：从既有 SFC 抽 utils 时严格遵守"先按 inline 实现 1:1 搬运 → 在 utils 提交后再以单独提示在文件顶端注释 + 单测显式覆盖方式新增防御行为"（如本任务在 utils/format.ts 顶端注释 + AC-7 单测覆盖 `formatBytes(-1) → '—'` 新增负数防御），让 reviewer 可一眼区分"搬运"与"行为变更"，避免回归。反例：抽取时静默加防御 → 既有 spec 不覆盖 → 未来若有依赖该 bug 行为的下游会断 · evidence: T-042 utils/format.ts 头注释 + format.spec.ts "负数（防御）→ '—'" 用例
+- 2026-05-28 · "降级"列的 UI 表达必须满足"独立判定 + 不挂主功能"双约束：本任务 runtimeUnavailable computed 只看 `runtime.proxies.value === null && runtime.error.value !== null` 不耦合配置态 store；frps 不可用时整列灰点，但 Proxies CRUD 走的 store.fetchProxies / createProxy / updateProxy / deleteProxy 通路完全不接触 runtime ref，保证配置功能零回归。这是与 T-038 boot-autostart "尾巴 retry 不阻塞 ready gate" 同款异步降级范式（叠加层失败不影响主面） · evidence: T-042 Proxies.vue runtimeUnavailable + Proxies.spec.ts AC-6 双用例（降级 + listMock 仍调用）
+- 2026-05-30 · VTU 2.4.x `findComponent(C).vm.<exposedKey>` 读 defineExpose 是脆弱反模式：依赖 createVMProxy 透传，而透传需 `vm.$.exposeProxy` 已被 Vue 创建（取决于实例是否被父级 ref 访问过，不可靠）—— 同款 `defineExpose({__testing})` 在 LogViewer 能取、ServerMonitor/Proxies 取 undefined，曾让整条前端测试基线变红半个批次无人发现（T-038~T-042 带 39 个失败假报 PASS 交付）。规范读 `vm.$.exposed[key]`（defineExpose 后必然存在）；统一封装 `web/src/test-utils/exposed.ts::getExposed`（先 vm[key] 再回落 $.exposed[key]）。任何 `defineExpose({__testing})` + spec 读 internals 的组件必须走它。另：前端测试模拟 API 失败必须用 axios 形状错误（`web/src/test-utils/apiError.ts`），不能用 `new Error()`——extractErrorMessage 只透传结构化错误的 message · evidence: T-043 getExposed 修 38/39 失败 + apiError 修剩余 + 4 个 adversarial 误判
+
+## Rotated 2026-05-30
+
+- 2026-05-30 · verify_all 双实现必须逐桩对账：`.sh` 的 B.3 靠退出码有效，但 `.ps1` 的 B.3 `& npm test | Out-Null` 不查 `$LASTEXITCODE` → vitest 失败也报 PASS；加上 B.4「测试数≥基线」双实现都是空操作 + baseline.json 过期，三洞叠加让红树通过 `pwsh verify_all.ps1` 假报 PASS 交付（破红线"声明完成前必须 verify_all PASS"）。教训：(a) PS Step 模式下 native 命令失败必须显式 `throw`（查 `$LASTEXITCODE`），不能靠管道吞；(b) 静态计数闸门要真比较——Go 用 `go test -list` 顶层计数、前端解析 vitest `Tests N passed`（NO_COLOR 去 ANSI），读了 baseline 不比较等于没闸门；(c) 加测试的任务必须同步 bump baseline.json 的 go_tests/frontend_tests/test_count，否则 B.4 守门松一档。批次 orchestrator 必须自己真跑 verify_all（不能信角色扮演的 QA，insight L14 role-collapse 的危害延伸） · evidence: T-044 修 .ps1 B.3 + B.4 双实现真计数 + 反向证伪(抬高基线→FAIL→恢复→PASS)
+- VTU `findComponent(C).vm.<exposedKey>` 读 `defineExpose` 是**脆弱反模式**：依赖 `vm.$.exposeProxy` 被 Vue 创建（取决于实例是否被父级 ref 访问），同款 `defineExpose({__testing})` 在不同组件下一个能取一个取 `undefined`，曾让整条前端测试基线变红半批次无人发现。规范做法读 `vm.$.exposed[key]`（defineExpose 后必然存在）。统一封装 `getExposed`（先 `vm[key]` 再回落 `vm.$.exposed[key]`）根治。任何 `defineExpose({__testing})` + spec 读 internals 的组件必须走这个 helper。
+
+## Rotated 2026-05-30
+
+- 前端测试模拟 API 失败必须用 axios 形状错误（`isAxiosError:true` + `response.data.error.message`），不能用 `new Error()`：`extractErrorMessage` 只透传结构化错误的 message，普通 Error 走 fallback。用 `new Error()` 会让"断言 UI 显示具体后端原因/按错误关键词分流"的测试误判（fallback 不含关键词时恰好不报错 → 假绿/假红）。统一用 `apiError()` helper。
+- 红线复发的根因是 verify_all 的 QA/verify 阶段被角色扮演而非真跑（insight L14 role-collapse 的延伸危害）。修复手段在 T-044：让 B.4 真计数 + 后续 batch orchestrator 真跑 verify_all。
+
+## Rotated 2026-05-30
+
+- verify_all 双实现必须**逐桩对账**：`.sh` 的 B.3 有效但 `.ps1` 的 B.3 瞎了，导致跑哪个脚本结果不同 —— 这是 insight L26"双实现对账原则"被违反的真实代价（红树交付）。任何 verify_all 改动必须同时改 .ps1 + .sh 并各自反向证伪。
+- 静态计数闸门要真比较，"读了 baseline 但不比较"等于没有闸门。Go 用 `go test -list` 顶层计数（稳定，无子测试膨胀）、前端复用测试运行输出的 "Tests N passed"（`NO_COLOR=1` 去 ANSI 便于正则），是低成本可维护的双语言计数范式。
+
+## Rotated 2026-05-30
+
+- PowerShell Step 模式下"native 命令失败"必须显式 `throw`（查 `$LASTEXITCODE`），不能依赖管道；`& cmd | Out-Null` 会吞掉退出码让失败静默通过。
+
+## Rotated 2026-05-30
+
+- `## Adversarial tests`（及 `## Insight`）标题禁带任何前缀（数字编号 `## N.`、`§N` 均不行），E.6/archive 正则严格锚定裸标题。PM 写 06 模板时应硬约束（insight L40 第三次复现：T-038/039/040 三连犯）。
+- e2e 测试**绝不应复用产品默认端口**：任何会被用户/开发者实际安装运行的服务，其 e2e 必须用独立端口（这里 17800），否则 `reuseExistingServer` 会复用真实运行实例造成脏后端。这比 assertFreshBackend 那种"事后检测 + 报错指引"更治本——后者只能告诉你坏了，端口隔离让它根本不发生。
+
+## Rotated 2026-05-30
+
+- Playwright `webServer.env` 是让 config 与启动脚本共享运行参数的正道：config 解析一次 `E2E_PORT` 后通过 env 显式下发，避免两处各自读环境变量 + 默认值漂移。
+- 即使 e2e webServer 在 win32 下经 `pwsh` 子进程启动后端，作为 `npx playwright test`（bash 发起）的嵌套子进程也能正常运行（本会话 PowerShell 直接调用被 deny，但嵌套 spawn 不受影响）。
