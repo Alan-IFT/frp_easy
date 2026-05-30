@@ -57,6 +57,13 @@ vi.mock('naive-ui', async (importOriginal) => {
   }
 })
 
+// T-062：vue-router push spy（IS-5 查看运行态跳转断言）。Server.vue 原不 import useRouter；
+// 此模块级 mock 只提供 push spy，不影响既有用例（既有用例不依赖 router）。
+const pushSpy = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: pushSpy }),
+}))
+
 import Server from '../Server.vue'
 import * as api from '../../api/server'
 
@@ -94,6 +101,8 @@ interface TestingHandle {
       hasValidationError: () => boolean
     } | null
   }
+  // T-062 IS-5
+  goToMonitor: () => void
 }
 
 function mountPage() {
@@ -132,6 +141,7 @@ const HAPPY_CFG = {
 beforeEach(() => {
   getMock.mockReset()
   getMock.mockResolvedValue({ ...HAPPY_CFG })
+  pushSpy.mockReset()
 })
 
 afterEach(() => {
@@ -164,6 +174,54 @@ describe('Server.vue — 三态：loaded 渲染真实值（A1）', () => {
     expect(t.form.value.dashboardEnabled).toBe(true)
     expect(t.form.value.dashboardUser).toBe('realuser')
     expect(w.text()).toContain('监听端口')
+  })
+})
+
+// T-062 IS-5：查看运行态链接（loaded 态 + 双向连通）
+describe('Server.vue — 查看运行态链接（T-062 IS-5）', () => {
+  it('AC-7：loaded 态 → 出现"查看运行态"链接', async () => {
+    const w = mountPage()
+    await settle()
+    expect(w.text()).toContain('查看运行态')
+  })
+
+  it('AC-7 / AC-12：点击"查看运行态" → router.push(/server/monitor)', async () => {
+    const w = mountPage()
+    await settle()
+    const btn = w.findAll('button').find((b) => b.text().includes('查看运行态'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/server/monitor')
+  })
+
+  it('goToMonitor handler 直接调用 → push(/server/monitor)', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.goToMonitor()
+    expect(pushSpy).toHaveBeenCalledWith('/server/monitor')
+  })
+
+  it('AC-7 / BC-8：加载失败态（loadError）不出现"查看运行态"链接', async () => {
+    getMock.mockReset()
+    getMock.mockRejectedValue(apiError('后端 500：加载配置失败'))
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.loadError.value).not.toBeNull()
+    expect(w.text()).toContain('加载服务端配置失败')
+    // 失败态 card（v-if=loadError）不含 loaded 态 #action 区的"查看运行态"按钮
+    expect(w.text()).not.toContain('查看运行态')
+  })
+
+  it('AC-7 / BC-8：加载中态（loading）不出现"查看运行态"链接', async () => {
+    getMock.mockReset()
+    getMock.mockReturnValue(new Promise<typeof HAPPY_CFG>(() => {}))
+    const w = mountPage()
+    await nextTick()
+    const t = getTesting(w)
+    expect(t.loading.value).toBe(true)
+    expect(w.text()).not.toContain('查看运行态')
   })
 })
 

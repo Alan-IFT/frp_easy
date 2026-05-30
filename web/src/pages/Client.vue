@@ -73,6 +73,19 @@
       </template>
     </n-card>
 
+    <!-- T-062 IS-2：保存成功后正向下一步引导。仅 handleSave 成功置 showNextStepHint=true，
+         失败（catch）不显示（BC-7）。SPA 内导航 router.push（insight L17）。 -->
+    <n-alert
+      v-if="showNextStepHint"
+      type="success"
+      title="客户端配置已保存"
+      style="margin-top: 16px"
+    >
+      <n-button text type="primary" @click="goToProxies">
+        下一步：前往「代理规则」添加要转发的端口 →
+      </n-button>
+    </n-alert>
+
     <!-- T-058 (B)：dirty 时确认放弃未保存编辑（复用 T-056 ConfirmDialog 范式） -->
     <confirm-dialog
       v-model:show="reloadConfirmShow"
@@ -85,16 +98,20 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   NPageHeader, NCard, NForm, NFormItem, NInputNumber, NInput,
-  NSpace, NButton, NSkeleton, NResult, useMessage,
+  NSpace, NButton, NSkeleton, NResult, NAlert, useMessage,
 } from 'naive-ui'
 import type { FormInst, FormRules } from 'naive-ui'
 import { apiGetClient, apiPutClient } from '../api/frpclient'
 import { extractErrorMessage } from '../api/client'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 
+const router = useRouter()
 const message = useMessage()
+// T-062 IS-2：保存成功后显示「前往代理规则」引导（仅 handleSave 成功置 true）
+const showNextStepHint = ref(false)
 const formRef = ref<FormInst | null>(null)
 const saving = ref(false)
 // T-047 A1：三态。loading 初始 true；loadError 非 null = 失败态；loaded = !loading && !loadError。
@@ -190,11 +207,18 @@ async function handleSave() {
       authMethod: form.value.authToken ? 'token' : undefined,
     })
     message.success('客户端配置已保存（重启 frpc 后生效）')
+    // T-062 IS-2：保存成功后展示正向下一步引导（失败 catch 不置，BC-7）
+    showNextStepHint.value = true
   } catch (e) {
     message.error(extractErrorMessage(e, '保存失败'))
   } finally {
     saving.value = false
   }
+}
+
+// T-062 IS-2：前往代理规则页（SPA 内导航 router.push，insight L17）
+function goToProxies(): void {
+  void router.push('/proxies')
 }
 
 onMounted(() => {
@@ -217,6 +241,9 @@ defineExpose({
     isDirty,
     handleReloadClick,
     confirmReload,
+    // T-062 IS-2
+    showNextStepHint,
+    goToProxies,
   },
 })
 </script>

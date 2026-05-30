@@ -29,9 +29,31 @@
       style="margin-top: 16px"
     >
       <template #empty>
-        <n-empty description="暂无代理规则，点击右上角「新增规则」开始配置" />
+        <!-- T-062 IS-4：空态在现有引导文案基础上补跨页连通入口（不重复"新增规则"文案）。
+             无规则时去仪表盘启动 frpc 意义不大，故仅补"去服务端监控查看运行态"（看 frps 是否在跑）。 -->
+        <n-empty description="暂无代理规则，点击右上角「新增规则」开始配置">
+          <template #extra>
+            <n-button text type="primary" size="small" @click="goToMonitor">
+              去服务端监控查看运行态 →
+            </n-button>
+          </template>
+        </n-empty>
       </template>
     </n-data-table>
+
+    <!-- T-062 IS-3：保存（新增/编辑）成功后正向下一步引导。删除不触发（BC-6）。
+         SPA 内导航 router.push（insight L17）。 -->
+    <n-alert
+      v-if="showPostSaveHint"
+      type="success"
+      title="规则已保存"
+      style="margin-top: 16px"
+    >
+      <n-space>
+        <n-button text type="primary" @click="goToDashboard">去仪表盘启动 frpc →</n-button>
+        <n-button text type="primary" @click="goToMonitor">去服务端监控查看运行态 →</n-button>
+      </n-space>
+    </n-alert>
 
     <!-- 防火墙提示（保存成功后展示） -->
     <firewall-hint :ports="firewallPorts" :proto="firewallProto" />
@@ -78,9 +100,10 @@
 // SFC 自检：script 段纯逻辑行数（去 import / 注释 / interface）目标 < 200（insight L31）。
 
 import { ref, h, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   NPageHeader, NButton, NDataTable, NModal, NSpace, NTag, NEmpty, NTooltip, NResult,
-  useMessage,
+  NAlert, useMessage,
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import ProxyForm from '../components/ProxyForm.vue'
@@ -95,6 +118,10 @@ import type { Proxy, ProxyInput, ServerRuntimeProxyStatus } from '../types'
 
 const proxiesStore = useProxiesStore()
 const message = useMessage()
+const router = useRouter()
+
+// T-062 IS-3：保存（新增/编辑）成功后展示去启动/看运行态引导（删除不触发，BC-6）
+const showPostSaveHint = ref(false)
 
 const showForm = ref(false)
 const showDeleteConfirm = ref(false)
@@ -146,6 +173,14 @@ const formData = ref<ProxyInput>(defaultFormData())
 // T-047 A3：错误态重试入口（store.fetchProxies 已自捕获并维护 error ref）
 function reloadProxies(): void {
   void proxiesStore.fetchProxies()
+}
+
+// T-062 IS-3 / IS-4：跨页连通导航（SPA 内 router.push，insight L17）
+function goToDashboard(): void {
+  void router.push('/dashboard')
+}
+function goToMonitor(): void {
+  void router.push('/server/monitor')
 }
 
 function handleAdd() {
@@ -213,6 +248,8 @@ async function handleSubmit() {
       message.success('规则已创建')
     }
     showForm.value = false
+    // T-062 IS-3：新增 / 编辑成功（BC-5 两路径都经此）后展示正向下一步引导
+    showPostSaveHint.value = true
 
     // Show firewall hint for tcp/udp proxies with a remotePort
     if ((savedProxy.type === 'tcp' || savedProxy.type === 'udp') && savedProxy.remotePort) {
@@ -348,6 +385,10 @@ defineExpose({
     handleDeleteRequest,
     reloadProxies,
     proxiesStore,
+    // T-062
+    showPostSaveHint,
+    goToDashboard,
+    goToMonitor,
   },
 })
 </script>

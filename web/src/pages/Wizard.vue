@@ -121,6 +121,12 @@
             </n-form>
           </div>
 
+          <!-- T-062 IS-7：both 模式两端 token 均非空且不等 → 非阻断 warning。
+               仅展示，不进入 handleNext 校验、不写 configError、不阻止推进（高级用户可能有意如此）。 -->
+          <n-alert v-if="tokenMismatch" type="warning" style="margin-top: 12px">
+            两端 token 不一致，frpc 将无法连接 frps（如非有意配置，请改为一致）
+          </n-alert>
+
           <n-alert v-if="configError" type="error" style="margin-top: 12px">
             {{ configError }}
           </n-alert>
@@ -143,6 +149,16 @@
               <n-text depth="3">已保存配置并启用对应模式，现在跳转到仪表盘</n-text>
             </div>
             <n-spin v-if="completing" style="margin-top: 16px" />
+            <!-- T-062 IS-1：正向下一步引导（仅 frpc/both 角色 + 二进制就绪分支）。
+                 frps 纯服务端无 frpc 转发规则概念，故不展示（BC-1）。
+                 缺失分支（v-else）不加此引导（BC-2，聚焦补二进制）。
+                 全就绪分支会自动 push('/dashboard')；此按钮是附加的手动 push('/proxies')，
+                 不阻断自动跳转（不破坏 T-057）。 -->
+            <div v-if="selectedRole === 'frpc' || selectedRole === 'both'" style="margin-top: 12px">
+              <n-button text type="primary" @click="goToProxies">
+                下一步：前往「代理规则」添加要转发的端口 →
+              </n-button>
+            </div>
           </template>
 
           <!-- T-057：所选角色二进制缺失 → 配置已保存但不自动跳走，就地警告 + 引导 + 手动进入按钮。 -->
@@ -181,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NCard, NSteps, NStep, NRadioGroup, NRadio, NSpace, NText,
@@ -224,6 +240,16 @@ const frpcForm = ref({
 
 const frpsFormRef = ref<FormInst | null>(null)
 const frpcFormRef = ref<FormInst | null>(null)
+
+// T-062 IS-7：both 模式两端 token 一致性预警（非阻断）。
+// 触发条件：角色为 both，且 frps/frpc token trim 后均非空，且二者不相等（BC-3 / BC-4：
+// trim 后判空避免纯空白误报；与提交时 authToken || undefined 的语义对齐）。
+const tokenMismatch = computed(() => {
+  if (selectedRole.value !== 'both') return false
+  const fs = frpsForm.value.authToken.trim()
+  const fc = frpcForm.value.authToken.trim()
+  return fs !== '' && fc !== '' && fs !== fc
+})
 
 const frpsRules: FormRules = {
   bindPort: [
@@ -351,6 +377,11 @@ function goToDashboard(): void {
   void router.push('/dashboard')
 }
 
+// T-062 IS-1：正向下一步——前往代理规则页添加转发端口（SPA 内导航，insight L17）。
+function goToProxies(): void {
+  void router.push('/proxies')
+}
+
 async function handleSkip() {
   try {
     await wizardStore.completeWizard()
@@ -372,6 +403,11 @@ defineExpose({
     handleSkip,
     missingForRole,
     goToDashboard,
+    // T-062
+    tokenMismatch,
+    goToProxies,
+    frpsForm,
+    frpcForm,
   },
 })
 </script>

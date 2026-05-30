@@ -283,3 +283,43 @@ describe('T-032 AC-7: ProxyForm initialValue 引用变化时不进入无限 emit
     expect(Object.keys(wrapper.emitted())).toHaveLength(0)
   })
 })
+
+// T-062 IS-6：远程端口纯文案提示（需在服务端「端口策略」允许范围内）
+describe('ProxyForm.vue — 远程端口端口策略文案（T-062 IS-6）', () => {
+  const tcpSeed = (): ProxyInput => ({
+    name: 'ssh',
+    type: 'tcp',
+    localIP: '127.0.0.1',
+    localPort: 22,
+    remotePort: 6000,
+    enabled: true,
+  })
+  const httpSeed = (): ProxyInput => ({
+    name: 'web',
+    type: 'http',
+    localIP: '127.0.0.1',
+    localPort: 80,
+    customDomains: ['example.com'],
+    enabled: true,
+  })
+
+  it('AC-8：tcp 类型 → 远程端口字段含「端口策略」纯文案提示', async () => {
+    const wrapper = mount(ProxyForm, { props: { initialValue: tcpSeed() } })
+    for (let i = 0; i < 5; i++) await nextTick()
+    expect(wrapper.text()).toContain('远程端口')
+    expect(wrapper.text()).toContain('需在服务端「端口策略」允许范围内')
+  })
+
+  it('AC-8：udp 类型 → 同样含端口策略文案（isTcpUdp 分支）', async () => {
+    const wrapper = mount(ProxyForm, { props: { initialValue: { ...tcpSeed(), type: 'udp' } } })
+    for (let i = 0; i < 5; i++) await nextTick()
+    expect(wrapper.text()).toContain('需在服务端「端口策略」允许范围内')
+  })
+
+  it('AC-8：http 类型 → 无远程端口字段，不强制出现端口策略文案', async () => {
+    const wrapper = mount(ProxyForm, { props: { initialValue: httpSeed() } })
+    for (let i = 0; i < 5; i++) await nextTick()
+    // http 不渲染 remotePort 字段（isTcpUdp=false）→ 端口策略文案随之不出现
+    expect(wrapper.text()).not.toContain('需在服务端「端口策略」允许范围内')
+  })
+})

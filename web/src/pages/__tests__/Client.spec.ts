@@ -51,10 +51,18 @@ vi.mock('naive-ui', async (importOriginal) => {
   }
 })
 
+// T-062：vue-router push spy（IS-2 引导跳转断言）。Client.vue 原不 import useRouter；
+// 此模块级 mock 只提供 push spy，不影响既有用例（既有用例不依赖 router）。
+const pushSpy = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: pushSpy }),
+}))
+
 import Client from '../Client.vue'
 import * as api from '../../api/frpclient'
 
 const getMock = vi.mocked(api.apiGetClient)
+const putMock = vi.mocked(api.apiPutClient)
 
 interface ClientForm {
   serverAddr: string
@@ -75,6 +83,9 @@ interface TestingHandle {
   isDirty: () => boolean
   handleReloadClick: () => void
   confirmReload: () => void
+  // T-062 IS-2
+  showNextStepHint: { value: boolean }
+  goToProxies: () => void
 }
 
 function mountPage() {
@@ -109,6 +120,9 @@ const HAPPY_CFG = {
 beforeEach(() => {
   getMock.mockReset()
   getMock.mockResolvedValue({ ...HAPPY_CFG })
+  putMock.mockReset()
+  putMock.mockResolvedValue(undefined as never)
+  pushSpy.mockReset()
 })
 
 afterEach(() => {
@@ -138,6 +152,52 @@ describe('Client.vue — 三态：loaded 渲染真实值（A1）', () => {
     expect(t.form.value.serverAddr).toBe('frps.example.com')
     expect(t.form.value.serverPort).toBe(7001)
     expect(w.text()).toContain('服务端地址')
+  })
+})
+
+// T-062 IS-2：保存成功后正向下一步引导
+describe('Client.vue — 保存成功后加规则引导（T-062 IS-2）', () => {
+  it('初始 loaded 态不显示引导（保存前 showNextStepHint=false）', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.showNextStepHint.value).toBe(false)
+    expect(w.text()).not.toContain('前往「代理规则」')
+  })
+
+  it('AC-4：handleSave 成功 → showNextStepHint=true + 引导文案出现', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleSave()
+    await settle()
+    expect(putMock).toHaveBeenCalled()
+    expect(t.showNextStepHint.value).toBe(true)
+    expect(w.text()).toContain('前往「代理规则」')
+  })
+
+  it('AC-4 / AC-12：点击引导按钮 → router.push(/proxies)（SPA 内导航）', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleSave()
+    await settle()
+    const btn = w.findAll('button').find((b) => b.text().includes('前往「代理规则」'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/proxies')
+  })
+
+  it('BC-7：保存失败（apiPutClient reject）→ 不显示引导', async () => {
+    putMock.mockReset()
+    putMock.mockRejectedValue(apiError('后端 500：保存失败'))
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    await t.handleSave()
+    await settle()
+    expect(t.showNextStepHint.value).toBe(false)
+    expect(w.text()).not.toContain('前往「代理规则」')
   })
 })
 

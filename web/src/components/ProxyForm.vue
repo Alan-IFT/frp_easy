@@ -58,13 +58,20 @@
       label="远程端口"
       path="remotePort"
     >
-      <n-input-number
-        v-model:value="form.remotePort"
-        :min="1"
-        :max="65535"
-        placeholder="1-65535"
-        style="width: 100%"
-      />
+      <!-- T-062 IS-6：远程端口加纯文案提示——需在服务端「端口策略」允许范围内。
+           纯文案，不读 allowPorts 数据、不做跨页校验联动（OOS-1）。 -->
+      <n-space vertical :size="2" style="width: 100%">
+        <n-input-number
+          v-model:value="form.remotePort"
+          :min="1"
+          :max="65535"
+          placeholder="1-65535"
+          style="width: 100%"
+        />
+        <n-text depth="3" style="font-size: 12px">
+          需在服务端「端口策略」允许范围内
+        </n-text>
+      </n-space>
     </n-form-item>
 
     <n-form-item
@@ -94,7 +101,7 @@
 import { ref } from 'vue'
 import {
   NForm, NFormItem, NInput, NInputNumber, NSelect, NSwitch, NDynamicTags,
-  NSpace, NTag,
+  NSpace, NTag, NText,
 } from 'naive-ui'
 import type { FormInst, FormRules, SelectOption } from 'naive-ui'
 import type { Proxy, ProxyInput } from '../types'

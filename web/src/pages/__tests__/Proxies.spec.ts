@@ -63,6 +63,13 @@ vi.mock('naive-ui', async (importOriginal) => {
   }
 })
 
+// T-062：vue-router push spy（IS-3/IS-4 跨页连通断言）。Proxies.vue 原不 import useRouter；
+// 此模块级 mock 只提供 push spy，不影响既有用例（既有用例不依赖 router）。
+const pushSpy = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: pushSpy }),
+}))
+
 import Proxies from '../Proxies.vue'
 import * as rtApi from '../../api/serverRuntime'
 import * as pxApi from '../../api/proxies'
@@ -119,6 +126,10 @@ interface TestingHandle {
   handleDeleteRequest: (proxy: Proxy) => void
   reloadProxies: () => void
   proxiesStore: { proxies: Proxy[]; loading: boolean; error: string | null }
+  // T-062
+  showPostSaveHint: { value: boolean }
+  goToDashboard: () => void
+  goToMonitor: () => void
 }
 
 function getTesting(wrapper: ReturnType<typeof mountPage>): TestingHandle {
@@ -134,6 +145,7 @@ beforeEach(() => {
   infoMock.mockReset()
   proxiesRtMock.mockReset()
   listMock.mockReset()
+  pushSpy.mockReset()
 
   listMock.mockResolvedValue([
     makeProxy('ssh', 'tcp', { localPort: 22, remotePort: 6022 }),
@@ -348,6 +360,89 @@ describe('Proxies.vue — 加载失败 vs 暂无规则（A3）', () => {
   })
 })
 
+// T-062 IS-3：保存成功后引导去启动/看运行态
+describe('Proxies.vue — 保存成功后引导（T-062 IS-3）', () => {
+  it('初始不显示保存引导（showPostSaveHint=false）', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.showPostSaveHint.value).toBe(false)
+    expect(w.text()).not.toContain('去仪表盘启动 frpc')
+  })
+
+  it('AC-5：showPostSaveHint=true → 出现"去仪表盘启动"+"去服务端监控"两入口', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.showPostSaveHint.value = true
+    await settle()
+    expect(w.text()).toContain('去仪表盘启动 frpc')
+    expect(w.text()).toContain('去服务端监控查看运行态')
+  })
+
+  it('AC-5 / AC-12：点击"去仪表盘启动" → router.push(/dashboard)', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.showPostSaveHint.value = true
+    await settle()
+    const btn = w.findAll('button').find((b) => b.text().includes('去仪表盘启动'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('AC-5 / AC-12：点击"去服务端监控" → router.push(/server/monitor)', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.showPostSaveHint.value = true
+    await settle()
+    const btn = w.findAll('button').find((b) => b.text().includes('去服务端监控查看运行态'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/server/monitor')
+  })
+
+  it('goToDashboard / goToMonitor handler 直接调用各推对应路由', async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.goToDashboard()
+    expect(pushSpy).toHaveBeenCalledWith('/dashboard')
+    t.goToMonitor()
+    expect(pushSpy).toHaveBeenCalledWith('/server/monitor')
+  })
+})
+
+// T-062 IS-4：空态补跨页连通入口（不重复"新增规则"文案）
+describe('Proxies.vue — 空态连通入口（T-062 IS-4）', () => {
+  it('AC-6：列表为空 → #empty 含"去服务端监控"入口 + 保留"新增规则"引导文案', async () => {
+    listMock.mockReset()
+    listMock.mockResolvedValue([])
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.proxiesStore.error).toBeNull()
+    // 现有空态文案仍在
+    expect(w.text()).toContain('暂无代理规则')
+    expect(w.text()).toContain('点击右上角「新增规则」')
+    // 新增连通入口
+    expect(w.text()).toContain('去服务端监控查看运行态')
+  })
+
+  it('AC-6 / AC-12：空态点击"去服务端监控" → router.push(/server/monitor)', async () => {
+    listMock.mockReset()
+    listMock.mockResolvedValue([])
+    const w = mountPage()
+    await settle()
+    const btn = w.findAll('button').find((b) => b.text().includes('去服务端监控查看运行态'))
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/server/monitor')
+  })
+})
+
 // ## Adversarial tests
 describe('Proxies.vue — Adversarial（A3：失败绝不渲染成空列表）', () => {
   it('fetchProxies 失败时 proxies 列表为空，但页面绝不显示 empty 态误导用户去新建', async () => {
@@ -362,5 +457,17 @@ describe('Proxies.vue — Adversarial（A3：失败绝不渲染成空列表）',
     expect(t.proxiesStore.error).not.toBeNull()
     expect(w.text()).not.toContain('暂无代理规则')
     expect(w.text()).toContain('加载代理规则失败')
+  })
+
+  // T-062 反向证伪：加载失败态绝不渲染空态连通入口（错误态 n-result 而非 n-empty）。
+  // 假设：若 IS-4 入口被错误地放在数据表外层无条件渲染，则失败态也会出现"去服务端监控" → 断言失败。
+  it('ADV（T-062）：加载失败态不出现空态连通入口（"去服务端监控"仅在 #empty 出现）', async () => {
+    listMock.mockReset()
+    listMock.mockRejectedValue(apiError('网络中断'))
+    const w = mountPage()
+    await settle()
+    // 失败态走 n-result，data-table（含 #empty slot）整体 v-else 不渲染 → 空态入口不出现
+    expect(w.text()).toContain('加载代理规则失败')
+    expect(w.text()).not.toContain('去服务端监控查看运行态')
   })
 })

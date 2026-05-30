@@ -105,7 +105,7 @@ frp_easy/
         ├── components/
         │   ├── AppLayout.vue    ← 侧边导航 + 头部 + 内容公用布局（T-002: 新增下载按钮；T-018: banner 内追加 UploadBinButton）
         │   ├── StatusBadge.vue  ← ProcessState → 带颜色的 NTag
-        │   ├── ProxyForm.vue    ← Proxy 新增/编辑表单（type 联动字段切换；T-018: 加端口预设 Tag；T-037: 移除批量模式 / 端口探测按钮）
+        │   ├── ProxyForm.vue    ← Proxy 新增/编辑表单（type 联动字段切换；T-018: 加端口预设 Tag；T-037: 移除批量模式 / 端口探测按钮；T-062: tcp/udp 远程端口字段加纯文案提示「需在服务端端口策略允许范围内」，不读 allowPorts 不联动校验）
         │   ├── UploadBinButton.vue ← T-018 §A：手动上传 frpc/frps 二进制（multipart；进度条；前端 64 MiB 预校验）
         │   ├── AllowPortsEditor.vue ← T-040 端口策略编辑器：单端口 / 范围混合 list + 实时校验 + defineExpose getAllowPortsInput()/hasValidationError()；继承 T-032 单向数据流范式
         │   ├── ConfirmDialog.vue← 破坏性操作二次确认弹窗
@@ -122,13 +122,13 @@ frp_easy/
             ├── Setup.vue     ← 首次安装（username + password）
             ├── Login.vue     ← 登录（429 倒计时支持）
             ├── Dashboard.vue ← frpc/frps 状态徽章 + 启动/停止/重启按钮（T-047: 自动启动开关获取失败不再静默 → warning + 失败态开关 disabled + tooltip + 刷新入口；T-056: 停止/重启破坏性操作复用 ConfirmDialog 二次确认，pendingAction 状态机驱动动态文案，启动不确认）
-            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组；T-042: 叠加 runtime 列「运行状态 / 流量（入/出）」，消费 useServerRuntime；frps 不可达时降级灰点 + 配置 CRUD 通路零关联；T-047: 区分加载失败 n-result+重试 vs 暂无规则 empty 态）
-            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor；T-047: 加载三态 skeleton/n-result+重试/loaded + Dashboard 三字段补校验；T-058 (B): 「重置」→「重新加载」，加载存标量快照 loadedSnapshot，dirty 时弹 ConfirmDialog 防误丢未保存编辑，不 dirty 直接重载；T-060: dirty 检测已纳入 AllowPortsEditor 端口策略（normalizeAllowPorts 规范化字符串快照 loadedAllowPortsSnapshot + isDirty 末尾比较编辑器 getAllowPortsInput()，消除"只改端口策略→静默丢弃"路径，保留单向数据流不引 v-model 桥））
+            ├── Proxies.vue   ← Proxy 列表 + 新增/编辑/删除（T-002: 新增 FirewallHint；T-037: 退回一行一条直接渲染，移除折叠分组；T-042: 叠加 runtime 列「运行状态 / 流量（入/出）」，消费 useServerRuntime；frps 不可达时降级灰点 + 配置 CRUD 通路零关联；T-047: 区分加载失败 n-result+重试 vs 暂无规则 empty 态；T-062: 保存成功 showPostSaveHint 显示「去仪表盘启动 frpc→」+「去服务端监控查看运行态→」引导（删除不触发），#empty 补「去服务端监控」连通入口，导航用 router.push）
+            ├── Server.vue    ← frps 配置表单（T-002: 新增 PublicIpDetector + FirewallHint；T-040: 端口策略段 AllowPortsEditor；T-047: 加载三态 skeleton/n-result+重试/loaded + Dashboard 三字段补校验；T-058 (B): 「重置」→「重新加载」，加载存标量快照 loadedSnapshot，dirty 时弹 ConfirmDialog 防误丢未保存编辑，不 dirty 直接重载；T-060: dirty 检测已纳入 AllowPortsEditor 端口策略（normalizeAllowPorts 规范化字符串快照 loadedAllowPortsSnapshot + isDirty 末尾比较编辑器 getAllowPortsInput()，消除"只改端口策略→静默丢弃"路径，保留单向数据流不引 v-model 桥）；T-062: loaded 态 #action 加「查看运行态→」push('/server/monitor')，与 ServerMonitor goServerConfig→push('/server') 双向连通，加载失败/中态不显示）
             ├── ServerMonitor.vue ← T-041：frps 服务端运行态监控页（消费 T-039 API；5s 轮询 + visibilitychange 自动暂停；ServerInfo 卡片 + n-tabs 分 type proxy 表格 + 状态条 + 三态完备）
-            ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken；T-047: 加载三态 skeleton/n-result+重试/loaded；T-058 (B): 「重置」→「重新加载」+ dirty 弹 ConfirmDialog 防误丢，同 Server.vue 范式）
+            ├── Client.vue    ← frpc 连接配置表单（serverAddr / serverPort / authToken；T-047: 加载三态 skeleton/n-result+重试/loaded；T-058 (B): 「重置」→「重新加载」+ dirty 弹 ConfirmDialog 防误丢，同 Server.vue 范式；T-062: handleSave 成功 showNextStepHint 显示「前往代理规则添加端口→」push('/proxies') 引导，失败不显示）
             ├── Logs.vue      ← 日志查看器（使用 LogViewer 组件）
             ├── Settings.vue  ← 修改密码表单
-            └── Wizard.vue    ← T-002: 部署向导（顶级路由 /wizard，3 步；不在 AppLayout 内→顶栏缺失横幅向导阶段不可见）；T-057: 完成保存配置+开启自动启动后、跳转前 await appStore.fetchReady() 刷新 binMissing，按所选角色（frpc/frps/both）算缺失交集 missingForRole——缺失则不自动跳走、不发「正在跳转」toast，step3 就地 warning alert + 「进入仪表盘」手动按钮（引导用户去仪表盘顶栏横幅下载/上传）；不缺失维持原自动跳转。binWarning 用 ref 定格快照；T-058 (C): step2 frpc 标题死分支清理（原 v-if='both'/v-else 两分支文案相同 → 合并单个无条件 n-text，外层 div v-if 已控可见性，零行为变化）
+            └── Wizard.vue    ← T-002: 部署向导（顶级路由 /wizard，3 步；不在 AppLayout 内→顶栏缺失横幅向导阶段不可见）；T-057: 完成保存配置+开启自动启动后、跳转前 await appStore.fetchReady() 刷新 binMissing，按所选角色（frpc/frps/both）算缺失交集 missingForRole——缺失则不自动跳走、不发「正在跳转」toast，step3 就地 warning alert + 「进入仪表盘」手动按钮（引导用户去仪表盘顶栏横幅下载/上传）；不缺失维持原自动跳转。binWarning 用 ref 定格快照；T-058 (C): step2 frpc 标题死分支清理（原 v-if='both'/v-else 两分支文案相同 → 合并单个无条件 n-text，外层 div v-if 已控可见性，零行为变化）；T-062: step3 全就绪分支（frpc/both）加「前往代理规则添加端口」按钮 push('/proxies') 引导（缺失分支不加，与 T-057 自动跳转并存不破坏）+ step2 both 模式 frps/frpc token 不一致非阻断 warning（computed tokenMismatch，不阻止 handleNext、不进 configError）
 ```
 
 ## 功能在哪里

@@ -97,6 +97,9 @@
           <!-- T-058 (B)：原文案"重置" + 直接 loadConfig 会静默丢弃未保存编辑。
                改文案"重新加载"让用户预期正确；dirty 时弹确认防误丢，不 dirty 直接重载不打扰。 -->
           <n-button @click="handleReloadClick">重新加载</n-button>
+          <!-- T-062 IS-5：跳服务端运行态监控页，与 ServerMonitor→Server（goServerConfig）形成双向连通。
+               仅在 loaded 态 card 内（加载失败 / 加载中 card 不含此按钮，BC-8）。SPA 内 router.push（insight L17）。 -->
+          <n-button text type="primary" @click="goToMonitor">查看运行态 →</n-button>
         </n-space>
       </template>
     </n-card>
@@ -116,6 +119,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   NPageHeader, NCard, NForm, NFormItem, NInputNumber, NInput, NSwitch,
   NSpace, NButton, NSkeleton, NResult, useMessage,
@@ -129,7 +133,13 @@ import AllowPortsEditor from '../components/AllowPortsEditor.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import type { AllowPortRange } from '../types'
 
+const router = useRouter()
 const message = useMessage()
+
+// T-062 IS-5：跳服务端运行态监控页（SPA 内 router.push，insight L17）
+function goToMonitor(): void {
+  void router.push('/server/monitor')
+}
 const formRef = ref<FormInst | null>(null)
 const saving = ref(false)
 const savedPorts = ref<number[]>([])
@@ -348,6 +358,8 @@ defineExpose({
     loadedAllowPortsSnapshot,
     normalizeAllowPorts,
     allowPortsEditorRef,
+    // T-062 IS-5
+    goToMonitor,
   },
 })
 </script>
