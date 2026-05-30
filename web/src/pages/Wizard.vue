@@ -82,10 +82,9 @@
 
           <!-- frpc config -->
           <div v-if="selectedRole === 'frpc' || selectedRole === 'both'" :style="selectedRole === 'both' ? 'margin-top: 24px' : ''">
-            <n-text v-if="selectedRole === 'both'" strong style="display: block; margin-bottom: 12px">
-              frpc 客户端配置
-            </n-text>
-            <n-text v-else strong style="display: block; margin-bottom: 12px">
+            <!-- T-058 (C)：原 v-if='both' / v-else 两分支文案完全相同，为冗余死分支。
+                 外层 div v-if='frpc||both' 已控可见性，合并为单个无条件标题，零行为变化。 -->
+            <n-text strong style="display: block; margin-bottom: 12px">
               frpc 客户端配置
             </n-text>
             <n-form

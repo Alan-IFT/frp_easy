@@ -261,6 +261,53 @@ describe('Wizard.vue — 保存失败不进二进制校验（T-057 BC-6）', () 
   })
 })
 
+// T-058 (C)：frpc 客户端配置标题死分支清理（原 v-if='both' / v-else 两分支文案相同）
+describe('Wizard.vue — frpc 客户端配置标题（C，死分支清理后无回归）', () => {
+  function countOccurrences(haystack: string, needle: string): number {
+    let n = 0
+    let i = haystack.indexOf(needle)
+    while (i !== -1) {
+      n++
+      i = haystack.indexOf(needle, i + needle.length)
+    }
+    return n
+  }
+
+  it("selectedRole='frpc' → step2 恰显示一次「frpc 客户端配置」标题", async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.selectedRole.value = 'frpc'
+    t.currentStep.value = 2
+    await settle()
+    expect(countOccurrences(w.text(), 'frpc 客户端配置')).toBe(1)
+    // frpc-only 时不应渲染 frps 段标题
+    expect(w.text()).not.toContain('frps 服务端配置')
+  })
+
+  it("selectedRole='both' → step2 恰显示一次「frpc 客户端配置」标题（且含 frps 服务端配置）", async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.selectedRole.value = 'both'
+    t.currentStep.value = 2
+    await settle()
+    expect(countOccurrences(w.text(), 'frpc 客户端配置')).toBe(1)
+    expect(w.text()).toContain('frps 服务端配置')
+  })
+
+  it("selectedRole='frps' → step2 不渲染「frpc 客户端配置」标题（外层 v-if 仍正确隐藏）", async () => {
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.selectedRole.value = 'frps'
+    t.currentStep.value = 2
+    await settle()
+    expect(countOccurrences(w.text(), 'frpc 客户端配置')).toBe(0)
+    expect(w.text()).toContain('frps 服务端配置')
+  })
+})
+
 // ## Adversarial tests
 describe('Wizard.vue — Adversarial（T-057）', () => {
   // 核心反向证伪：所选 both 但 frps 缺失 → 警告出现、未静默跳。

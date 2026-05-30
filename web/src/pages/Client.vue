@@ -66,10 +66,20 @@
       <template #action>
         <n-space>
           <n-button type="primary" :loading="saving" @click="handleSave">保存配置</n-button>
-          <n-button @click="loadConfig()">重置</n-button>
+          <!-- T-058 (B)：原文案"重置" + 直接 loadConfig 会静默丢弃未保存编辑。
+               改文案"重新加载"；dirty 时弹确认防误丢，不 dirty 直接重载不打扰。 -->
+          <n-button @click="handleReloadClick">重新加载</n-button>
         </n-space>
       </template>
     </n-card>
+
+    <!-- T-058 (B)：dirty 时确认放弃未保存编辑（复用 T-056 ConfirmDialog 范式） -->
+    <confirm-dialog
+      v-model:show="reloadConfirmShow"
+      title="重新加载配置"
+      content="将放弃当前未保存的修改并重新加载配置，确定？"
+      @confirm="confirmReload"
+    />
   </div>
 </template>
 
@@ -82,6 +92,7 @@ import {
 import type { FormInst, FormRules } from 'naive-ui'
 import { apiGetClient, apiPutClient } from '../api/frpclient'
 import { extractErrorMessage } from '../api/client'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const message = useMessage()
 const formRef = ref<FormInst | null>(null)
@@ -95,6 +106,35 @@ const form = ref({
   serverPort: 7000,
   authToken: '',
 })
+
+// T-058 (B)：dirty 检测用"加载时存一份标量字段快照 + 浅比较当前表单"。
+type ClientScalarForm = typeof form.value
+const loadedSnapshot = ref<ClientScalarForm | null>(null)
+const reloadConfirmShow = ref(false)
+
+function isDirty(): boolean {
+  const snap = loadedSnapshot.value
+  if (snap == null) return false
+  const f = form.value
+  return (
+    f.serverAddr !== snap.serverAddr ||
+    f.serverPort !== snap.serverPort ||
+    f.authToken !== snap.authToken
+  )
+}
+
+function handleReloadClick() {
+  // dirty 才打扰用户；不 dirty 直接重载（不弹确认）
+  if (isDirty()) {
+    reloadConfirmShow.value = true
+  } else {
+    void loadConfig()
+  }
+}
+
+function confirmReload() {
+  void loadConfig()
+}
 
 const rules: FormRules = {
   serverAddr: [
@@ -121,6 +161,8 @@ async function loadConfig(reveal = false) {
     form.value.serverAddr = cfg.serverAddr ?? ''
     form.value.serverPort = cfg.serverPort || 7000
     form.value.authToken = cfg.authToken ?? ''
+    // T-058 (B)：在 3 个标量字段赋值之后存快照，作为后续 dirty 比较基准
+    loadedSnapshot.value = { ...form.value }
   } catch (e) {
     loadError.value = extractErrorMessage(e, '加载配置失败')
   } finally {
@@ -169,6 +211,12 @@ defineExpose({
     loadConfig,
     handleSave,
     formRef,
+    // T-058 (B)
+    loadedSnapshot,
+    reloadConfirmShow,
+    isDirty,
+    handleReloadClick,
+    confirmReload,
   },
 })
 </script>

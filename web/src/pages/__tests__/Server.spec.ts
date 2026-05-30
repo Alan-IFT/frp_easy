@@ -78,6 +78,12 @@ interface TestingHandle {
   loadConfig: (reveal?: boolean) => Promise<void>
   handleSave: () => Promise<void>
   formRef: { value: FormInst | null }
+  // T-058 (B)
+  loadedSnapshot: { value: ServerForm | null }
+  reloadConfirmShow: { value: boolean }
+  isDirty: () => boolean
+  handleReloadClick: () => void
+  confirmReload: () => void
 }
 
 function mountPage() {
@@ -251,6 +257,101 @@ describe('Server.vue — Dashboard 字段校验（B1）', () => {
   })
 })
 
+// T-058 (B)：重置 → 重新加载，dirty 防误丢
+describe('Server.vue — 重新加载防误丢未保存编辑（B）', () => {
+  it('文案：渲染"重新加载"而非旧"重置"', async () => {
+    const w = mountPage()
+    await settle()
+    // 用渲染文本断言（不按 naive-ui 组件名查询 —— insight L45 / T-057 教训）
+    expect(w.text()).toContain('重新加载')
+    expect(w.text()).not.toContain('重置')
+  })
+
+  it('加载后未改 → isDirty()=false；handleReloadClick 直接重载（不弹确认）', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.isDirty()).toBe(false)
+    expect(t.reloadConfirmShow.value).toBe(false)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await settle()
+    // 不弹确认 + apiGetServer 再被调用一次（直接重载）
+    expect(t.reloadConfirmShow.value).toBe(false)
+    expect(getMock.mock.calls.length).toBe(callsBefore + 1)
+  })
+
+  it('改了字段使 dirty → handleReloadClick 弹确认，此刻 apiGetServer 未再调用', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.bindPort = 9999 // 与快照 7100 不同 → dirty
+    await nextTick()
+    expect(t.isDirty()).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await nextTick()
+    expect(t.reloadConfirmShow.value).toBe(true)
+    // 确认前绝不重载（防止"点了就丢"）
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('dirty + 确认（confirmReload）→ apiGetServer 再被调用并覆盖回真实值', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.bindPort = 9999
+    await nextTick()
+    t.handleReloadClick()
+    await nextTick()
+    const callsBefore = getMock.mock.calls.length
+    t.confirmReload()
+    await settle()
+    expect(getMock.mock.calls.length).toBe(callsBefore + 1)
+    expect(t.form.value.bindPort).toBe(7100) // 被重载覆盖回真实值
+    expect(t.isDirty()).toBe(false)
+  })
+
+  it('dirty + 取消（不调 confirmReload）→ apiGetServer 不再调用，编辑保留', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.bindPort = 9999
+    await nextTick()
+    t.handleReloadClick()
+    await nextTick()
+    const callsBefore = getMock.mock.calls.length
+    // 取消 = 关闭弹窗但不触发 confirmReload（模拟用户点"取消"）
+    t.reloadConfirmShow.value = false
+    await settle()
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+    expect(t.form.value.bindPort).toBe(9999) // 编辑未被丢弃
+  })
+
+  it('loadedSnapshot 在每次成功加载后刷新 → 重载后 isDirty 归零', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.loadedSnapshot.value?.bindPort).toBe(7100)
+    t.form.value.authToken = 'changed'
+    await nextTick()
+    expect(t.isDirty()).toBe(true)
+    await t.loadConfig()
+    await settle()
+    expect(t.isDirty()).toBe(false)
+  })
+})
+
 // ## Adversarial tests
 describe('Server.vue — Adversarial', () => {
   it('加载失败时绝不渲染默认表单值（不能让用户把默认值误当真实配置）', async () => {
@@ -275,6 +376,27 @@ describe('Server.vue — Adversarial', () => {
     const t = getTesting(w)
     expect(t.loadError.value).not.toBeNull()
     expect(t.loading.value).toBe(false)
+  })
+
+  // T-058 (B)：反向证伪 —— dirty 表单点"重新加载"绝不静默丢弃（必须经确认）
+  it('dirty 时 handleReloadClick 不得静默重载丢弃编辑（只置确认标志，不调 apiGetServer）', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    // 改多个字段
+    t.form.value.bindPort = 8001
+    t.form.value.authToken = 'half-typed-secret'
+    await nextTick()
+    expect(t.isDirty()).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await settle()
+    // 反向证伪：若实现退回"直接 loadConfig" → 此断言会 FAIL
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+    expect(t.form.value.authToken).toBe('half-typed-secret')
+    expect(t.reloadConfirmShow.value).toBe(true)
   })
 
   it('启用 dashboard 但空 pass 时 handleSave 不调用 apiPutServer', async () => {

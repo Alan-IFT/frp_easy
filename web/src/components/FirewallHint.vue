@@ -35,7 +35,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NAlert, NButton } from 'naive-ui'
+import { NAlert, NButton, useMessage } from 'naive-ui'
+
+const message = useMessage()
 
 const props = withDefaults(
   defineProps<{
@@ -72,27 +74,56 @@ function getAllCommands(): string {
   return props.ports.flatMap(port => getCommands(port)).join('\n')
 }
 
-async function copyCmd(cmd: string) {
+// T-058 (A)：剪贴板写入失败不再静默吞错（内网 http 非安全上下文 navigator.clipboard
+// 不可用命中率高）。1:1 搬运 LogViewer.vue onCopy 已验证范式：
+// try clipboard → message.success；catch → 临时 textarea + execCommand fallback →
+// 成功 message.success / 失败 message.error。返回是否成功，供调用方决定"已复制 ✓"短暂态。
+async function copyText(text: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(cmd)
+    await navigator.clipboard.writeText(text)
+    message.success('已复制到剪贴板')
+    return true
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('aria-hidden', 'true')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    let ok = false
+    try {
+      ok = document.execCommand('copy')
+    } catch {
+      ok = false
+    } finally {
+      document.body.removeChild(ta)
+    }
+    if (ok) {
+      message.success('已复制到剪贴板')
+    } else {
+      message.error('复制失败：请手动选择文本复制')
+    }
+    return ok
+  }
+}
+
+async function copyCmd(cmd: string) {
+  // 仅在复制成功时给"已复制 ✓"短暂态视觉反馈（失败已由 copyText 弹 message.error）
+  if (await copyText(cmd)) {
     copiedCmd.value = cmd
     setTimeout(() => {
       copiedCmd.value = null
     }, 2000)
-  } catch {
-    // clipboard not available
   }
 }
 
 async function copyAll() {
-  try {
-    await navigator.clipboard.writeText(getAllCommands())
+  if (await copyText(getAllCommands())) {
     copiedAll.value = true
     setTimeout(() => {
       copiedAll.value = false
     }, 2000)
-  } catch {
-    // clipboard not available
   }
 }
 </script>

@@ -94,13 +94,23 @@
       <template #action>
         <n-space>
           <n-button type="primary" :loading="saving" @click="handleSave">保存配置</n-button>
-          <n-button @click="() => void loadConfig()">重置</n-button>
+          <!-- T-058 (B)：原文案"重置" + 直接 loadConfig 会静默丢弃未保存编辑。
+               改文案"重新加载"让用户预期正确；dirty 时弹确认防误丢，不 dirty 直接重载不打扰。 -->
+          <n-button @click="handleReloadClick">重新加载</n-button>
         </n-space>
       </template>
     </n-card>
 
     <!-- 防火墙提示（保存成功后展示）；frps bindPort 和 dashboardPort 都是 TCP -->
     <firewall-hint :ports="savedPorts" proto="tcp" />
+
+    <!-- T-058 (B)：dirty 时确认放弃未保存编辑（复用 T-056 ConfirmDialog 范式） -->
+    <confirm-dialog
+      v-model:show="reloadConfirmShow"
+      title="重新加载配置"
+      content="将放弃当前未保存的修改并重新加载配置，确定？"
+      @confirm="confirmReload"
+    />
   </div>
 </template>
 
@@ -116,6 +126,7 @@ import { extractErrorMessage } from '../api/client'
 import PublicIpDetector from '../components/PublicIpDetector.vue'
 import FirewallHint from '../components/FirewallHint.vue'
 import AllowPortsEditor from '../components/AllowPortsEditor.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import type { AllowPortRange } from '../types'
 
 const message = useMessage()
@@ -141,6 +152,41 @@ const form = ref({
   dashboardUser: 'admin',
   dashboardPass: '',
 })
+
+// T-058 (B)：dirty 检测用"加载时存一份标量字段快照 + 浅比较当前表单"。
+// 不覆盖 AllowPortsEditor 子组件内部行编辑状态（单向数据流 insight L13，纳入会扩散，
+// 且其增删行有显式操作用户感知强）—— 仅 allowPorts 改动时退化为直接重载，已知局限见 06。
+type ServerScalarForm = typeof form.value
+const loadedSnapshot = ref<ServerScalarForm | null>(null)
+const reloadConfirmShow = ref(false)
+
+function isDirty(): boolean {
+  const snap = loadedSnapshot.value
+  if (snap == null) return false
+  const f = form.value
+  return (
+    f.bindPort !== snap.bindPort ||
+    f.authToken !== snap.authToken ||
+    f.dashboardEnabled !== snap.dashboardEnabled ||
+    f.dashboardPort !== snap.dashboardPort ||
+    f.dashboardUser !== snap.dashboardUser ||
+    f.dashboardPass !== snap.dashboardPass
+  )
+}
+
+function handleReloadClick() {
+  // dirty 才打扰用户；不 dirty 直接重载（不弹确认）
+  if (isDirty()) {
+    reloadConfirmShow.value = true
+  } else {
+    void loadConfig()
+  }
+}
+
+function confirmReload() {
+  // ConfirmDialog 自身 emit update:show false 关闭弹窗；这里只负责重载
+  void loadConfig()
+}
 
 const rules: FormRules = {
   bindPort: [
@@ -203,6 +249,8 @@ async function loadConfig(reveal = false) {
     form.value.dashboardPass = cfg.dashboardPass ?? ''
     // T-040 种子：AllowPortsEditor 在 setup 时读一次此 ref（不 watch）
     initialAllowPorts.value = cfg.allowPorts ?? []
+    // T-058 (B)：在 6 个标量字段赋值之后存快照，作为后续 dirty 比较基准
+    loadedSnapshot.value = { ...form.value }
   } catch (e) {
     loadError.value = extractErrorMessage(e, '加载配置失败')
   } finally {
@@ -271,6 +319,12 @@ defineExpose({
     loadConfig,
     handleSave,
     formRef,
+    // T-058 (B)
+    loadedSnapshot,
+    reloadConfirmShow,
+    isDirty,
+    handleReloadClick,
+    confirmReload,
   },
 })
 </script>

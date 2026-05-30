@@ -40,11 +40,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { NButton, NAlert } from 'naive-ui'
+import { NButton, NAlert, useMessage } from 'naive-ui'
 import { apiGetPublicIP } from '../api/system'
 import { extractErrorMessage } from '../api/client'
 import type { PublicIPResponse } from '../types'
 
+const message = useMessage()
 const loading = ref(false)
 const result = ref<PublicIPResponse | null>(null)
 const copied = ref(false)
@@ -62,16 +63,45 @@ async function detect() {
   }
 }
 
+// T-058 (A)：剪贴板写入失败不再静默吞错。1:1 搬运 LogViewer.vue onCopy 范式。
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success('已复制到剪贴板')
+    return true
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('aria-hidden', 'true')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.select()
+    let ok = false
+    try {
+      ok = document.execCommand('copy')
+    } catch {
+      ok = false
+    } finally {
+      document.body.removeChild(ta)
+    }
+    if (ok) {
+      message.success('已复制到剪贴板')
+    } else {
+      message.error('复制失败：请手动选择文本复制')
+    }
+    return ok
+  }
+}
+
 async function copyIp() {
   if (!result.value?.ip) return
-  try {
-    await navigator.clipboard.writeText(result.value.ip)
+  // 仅在复制成功时给"已复制 ✓"短暂态视觉反馈（失败已弹 message.error）
+  if (await copyText(result.value.ip)) {
     copied.value = true
     setTimeout(() => {
       copied.value = false
     }, 2000)
-  } catch {
-    // clipboard not available
   }
 }
 </script>

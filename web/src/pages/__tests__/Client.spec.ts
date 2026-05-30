@@ -69,6 +69,12 @@ interface TestingHandle {
   saving: { value: boolean }
   loadConfig: (reveal?: boolean) => Promise<void>
   handleSave: () => Promise<void>
+  // T-058 (B)
+  loadedSnapshot: { value: ClientForm | null }
+  reloadConfirmShow: { value: boolean }
+  isDirty: () => boolean
+  handleReloadClick: () => void
+  confirmReload: () => void
 }
 
 function mountPage() {
@@ -163,6 +169,81 @@ describe('Client.vue — 三态：error + 重试（A1）', () => {
   })
 })
 
+// T-058 (B)：重置 → 重新加载，dirty 防误丢
+describe('Client.vue — 重新加载防误丢未保存编辑（B）', () => {
+  it('文案：渲染"重新加载"而非旧"重置"', async () => {
+    const w = mountPage()
+    await settle()
+    expect(w.text()).toContain('重新加载')
+    expect(w.text()).not.toContain('重置')
+  })
+
+  it('加载后未改 → isDirty()=false；handleReloadClick 直接重载（不弹确认）', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    expect(t.isDirty()).toBe(false)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await settle()
+    expect(t.reloadConfirmShow.value).toBe(false)
+    expect(getMock.mock.calls.length).toBe(callsBefore + 1)
+  })
+
+  it('改了字段使 dirty → handleReloadClick 弹确认，apiGetClient 未再调用', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.serverAddr = 'half.typed.host'
+    await nextTick()
+    expect(t.isDirty()).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await nextTick()
+    expect(t.reloadConfirmShow.value).toBe(true)
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('dirty + 确认（confirmReload）→ apiGetClient 再调用并覆盖回真实值', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.serverAddr = 'half.typed.host'
+    await nextTick()
+    t.handleReloadClick()
+    await nextTick()
+    const callsBefore = getMock.mock.calls.length
+    t.confirmReload()
+    await settle()
+    expect(getMock.mock.calls.length).toBe(callsBefore + 1)
+    expect(t.form.value.serverAddr).toBe('frps.example.com')
+    expect(t.isDirty()).toBe(false)
+  })
+
+  it('dirty + 取消（不调 confirmReload）→ apiGetClient 不再调用，编辑保留', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.serverAddr = 'half.typed.host'
+    await nextTick()
+    t.handleReloadClick()
+    await nextTick()
+    const callsBefore = getMock.mock.calls.length
+    t.reloadConfirmShow.value = false // 模拟点"取消"
+    await settle()
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+    expect(t.form.value.serverAddr).toBe('half.typed.host')
+  })
+})
+
 // ## Adversarial tests
 describe('Client.vue — Adversarial', () => {
   it('加载失败时绝不渲染默认表单值（serverAddr 输入框不可见）', async () => {
@@ -185,5 +266,23 @@ describe('Client.vue — Adversarial', () => {
     const t = getTesting(w)
     expect(t.loadError.value).not.toBeNull()
     expect(t.loading.value).toBe(false)
+  })
+
+  // T-058 (B)：反向证伪 —— dirty 点"重新加载"绝不静默丢弃
+  it('dirty 时 handleReloadClick 不得静默重载（只置确认标志，apiGetClient 未调）', async () => {
+    getMock.mockReset()
+    getMock.mockResolvedValue({ ...HAPPY_CFG })
+    const w = mountPage()
+    await settle()
+    const t = getTesting(w)
+    t.form.value.authToken = 'half-typed'
+    await nextTick()
+    expect(t.isDirty()).toBe(true)
+    const callsBefore = getMock.mock.calls.length
+    t.handleReloadClick()
+    await settle()
+    expect(getMock.mock.calls.length).toBe(callsBefore)
+    expect(t.form.value.authToken).toBe('half-typed')
+    expect(t.reloadConfirmShow.value).toBe(true)
   })
 })
