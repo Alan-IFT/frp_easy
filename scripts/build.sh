@@ -6,7 +6,11 @@
 # 用法：./scripts/build.sh
 #       ./scripts/build.sh --all    # 同时交叉编译 Windows 版本
 
-set -uo pipefail
+# set -e（T-068）：构建任一步骤（前端 vue-tsc/vite、go build）失败必须立刻让脚本非零退出。
+# 此前缺 -e 让 vue-tsc 类型错误 → vite 未跑 → dist 缺失 → go embed all:dist 失败被逐级吞掉，
+# 脚本仍 echo "构建完成 ✓" 退 0；CI build 步骤假绿，真错延后到 package 步骤伪装成
+# "bin/frp-easy 不存在" —— 误导性极强。-e 让首个失败即原地炸、错误信息归位。
+set -euo pipefail
 
 ALL=false
 for arg in "$@"; do

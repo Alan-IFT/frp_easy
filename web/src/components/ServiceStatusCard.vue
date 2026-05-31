@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type CSSProperties } from 'vue'
 import {
   NCard, NDescriptions, NDescriptionsItem, NTag, NText,
   NCollapse, NCollapseItem, NButton, useThemeVars,
@@ -148,7 +148,7 @@ const cmdBlockStyle = computed(() => ({
 // T-066（C-3）：needsFix 高亮边框/inset 从 scoped css 硬编码 #f0a020 改 :style computed
 // 走 themeVars.warningColor（暗色自适应，复刻同文件 cmdBlockStyle 范式）。
 // 非 needsFix 时返回空对象 → n-card 用默认边框（等价原 --ok 分支）。
-const warnCardStyle = computed<Record<string, string>>(() => {
+const warnCardStyle = computed<CSSProperties>(() => {
   if (!needsFix.value) return {}
   const warn = themeVars.value.warningColor
   return {

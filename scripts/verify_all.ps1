@@ -114,11 +114,21 @@ Step "B.1" "Install / typecheck" {
     try {
         $pkgMgr = if (Test-Path "pnpm-lock.yaml") { "pnpm" } elseif (Test-Path "yarn.lock") { "yarn" } else { "npm" }
         & $pkgMgr install --frozen-lockfile 2>&1 | Out-Null
-        # `npm exec -- tsc --noEmit` 中 `--` 分隔符必需：缺它 npm 会把 --noEmit
-        # 当自身 flag 吞掉（"npm warn Unknown cli config"），tsc fallback 到 tsconfig
-        # 默认 emit，污染 web/src 写出 .js。T-010 同时给 tsconfig.json 加 noEmit:true
-        # 做第二层防御；这里也修正调用形式以让 typecheck 真的只 typecheck。
-        if (Test-Path "tsconfig.json") { & $pkgMgr exec -- tsc --noEmit }
+        if ($LASTEXITCODE -ne 0) { throw "npm install failed" }
+        # `npm exec -- <checker> --noEmit` 中 `--` 分隔符必需：缺它 npm 会把 --noEmit
+        # 当自身 flag 吞掉（"npm warn Unknown cli config"），checker fallback 到 tsconfig
+        # 默认 emit，污染 web/src 写出 .js（T-010 tsconfig noEmit:true 是第二层防御）。
+        #
+        # T-068：本项目含 .vue SFC，类型检查必须用 vue-tsc——plain tsc 不解析 .vue，会漏检
+        # 模板/computed 类型错（ServiceStatusCard CSSProperties union 类型错曾漏过本地 tsc
+        # 闸门、只在 CI 的 npm run build(vue-tsc) 炸）。vue-tsc 缺失回退 tsc。
+        # 另：native 命令非零退出在 PS 不抛异常（Step 不会判 FAIL），故显式查 $LASTEXITCODE
+        # 并 throw（对齐 T-044 给 B.3 加退出码闸门的同款修法），否则类型错会被假报 PASS。
+        if (Test-Path "tsconfig.json") {
+            $checker = if (Test-Path "node_modules/.bin/vue-tsc") { "vue-tsc" } else { "tsc" }
+            & $pkgMgr exec -- $checker --noEmit
+            if ($LASTEXITCODE -ne 0) { throw "$checker --noEmit reported errors" }
+        }
     } finally {
         Pop-Location
     }

@@ -128,17 +128,27 @@ else
     pushd "$ROOT/web" >/dev/null
     PM=$(pkgmgr)
 
-    # B.1
-    # 注意 `npm exec -- tsc --noEmit` 中 `--` 分隔符必需：
-    # 没有它，npm 会把 --noEmit 当作 npm 自身的 flag 吞掉（npm warn Unknown cli config），
-    # tsc 实际收不到 --noEmit。早期写成 `$PM exec tsc --noEmit` 让 tsc fallback 到
-    # tsconfig.json 默认 emit，污染 web/src 写出 .js（T-010 修 tsconfig 加 noEmit:true
-    # 是另一层防御，此处同步修正以让 typecheck 真的只 typecheck）。
-    if $PM install --frozen-lockfile &>/dev/null && \
-       { [[ ! -f tsconfig.json ]] || $PM exec -- tsc --noEmit &>/dev/null; }; then
+    # B.1 — install + typecheck。
+    # `$PM exec -- <checker> --noEmit` 中 `--` 分隔符必需：没有它 npm 把 --noEmit 当自身
+    # flag 吞掉（npm warn Unknown cli config），checker 收不到 → fallback 到 tsconfig 默认
+    # emit 污染 web/src 写出 .js（T-010 给 tsconfig 加 noEmit:true 是第二层防御）。
+    #
+    # T-068：本项目含 .vue SFC，类型检查**必须用 vue-tsc**——plain tsc 根本不解析 .vue，
+    # 会漏检模板/computed 类型错。ServiceStatusCard 的 CSSProperties union 类型错就这样
+    # 漏过本地 tsc 闸门、只在 CI 的 `npm run build`(vue-tsc) 炸，再被 build.sh 缺 set -e
+    # 连环吞成 package 阶段"bin/frp-easy 不存在"误导。故本闸门改用与 build 同款 vue-tsc；
+    # vue-tsc 缺失（非 .vue 项目）回退 tsc。
+    if ! $PM install --frozen-lockfile &>/dev/null; then
+        step "B.1" "Install / typecheck" "FAIL" "npm install failed"
+    elif [[ ! -f tsconfig.json ]]; then
         step "B.1" "Install / typecheck" "PASS"
     else
-        step "B.1" "Install / typecheck" "FAIL"
+        if [[ -x node_modules/.bin/vue-tsc ]]; then TYPECHECK="vue-tsc"; else TYPECHECK="tsc"; fi
+        if $PM exec -- "$TYPECHECK" --noEmit &>/dev/null; then
+            step "B.1" "Install / typecheck" "PASS"
+        else
+            step "B.1" "Install / typecheck" "FAIL" "$TYPECHECK --noEmit reported errors"
+        fi
     fi
 
     # B.2 — only if eslint config exists
